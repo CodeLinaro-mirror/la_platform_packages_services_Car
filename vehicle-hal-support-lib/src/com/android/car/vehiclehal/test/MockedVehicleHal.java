@@ -28,7 +28,8 @@ import android.hardware.vehicle.V2_0.SubscribeOptions;
 import android.hardware.vehicle.V2_0.VehiclePropConfig;
 import android.hardware.vehicle.V2_0.VehiclePropValue;
 import android.hardware.vehicle.V2_0.VehiclePropertyAccess;
-import android.os.IHwBinder;
+
+import android.os.RemoteException;
 
 import com.google.android.collect.Lists;
 
@@ -79,7 +80,26 @@ public class MockedVehicleHal extends IVehicle.Stub {
         assertNotNull("Injecting event failed for property: " + value.prop + ". No listeners found",
                 callbacks);
         for (IVehicleCallback callback : callbacks) {
-            callback.onPropertyEvent(Lists.newArrayList(value));
+            try {
+                callback.onPropertyEvent(Lists.newArrayList(value));
+            } catch (RemoteException e) {
+                e.printStackTrace();
+                fail("Remote exception while injecting events.");
+            }
+        }
+    }
+
+    public synchronized void injectError(int errorCode, int propertyId, int areaId) {
+        List<IVehicleCallback> callbacks = mSubscribers.get(propertyId);
+        assertNotNull("Injecting error failed for property: " + propertyId + ". No listeners found",
+                callbacks);
+        for (IVehicleCallback callback : callbacks) {
+            try {
+                callback.onPropertySetError(errorCode, propertyId, areaId);
+            } catch (RemoteException e) {
+                e.printStackTrace();
+                fail("Remote exception while injecting errors.");
+            }
         }
     }
 

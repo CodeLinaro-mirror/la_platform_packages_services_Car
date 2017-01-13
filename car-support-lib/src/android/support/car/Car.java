@@ -39,7 +39,19 @@ import java.util.Set;
 
 /**
  * Top-level car API that provides access to all car services and data available in the platform.
- * Developers may create their own instance of {@link Car} when using a CarActivity.
+ * <p/>
+ * Use one of the createCar methods to create a new instance of the Car api.  The
+ * {@link CarConnectionCallback} will respond with an {@link CarConnectionCallback#onConnected(Car)}
+ * or {@link CarConnectionCallback#onDisconnected(Car)} message.  Nothing can be done with the
+ * car until onConnected is called.  When the car disconnects then reconnects you may still use
+ * the Car object but any manages retried from it should be considered invalid and will need to
+ * be retrieved.
+ *
+ * <p/>
+ * Once connected, {@link #getCarManager(String)} or {@link #getCarManager(Class)} can be used to
+ * retrieve a manager.  This is patterned after how one would retrieve a service from
+ * {@link Context#getSystemService(String)} or {@link Context#getSystemService(Class)}.  Once
+ * again if the car is disconnected you'll want to get new versions of these managers.
  */
 public class Car {
 
@@ -61,6 +73,7 @@ public class Car {
 
     /**
      * Service name for {@link CarPackageManager}.
+     * @hide
      */
     public static final String PACKAGE_SERVICE = "package";
 
@@ -95,31 +108,38 @@ public class Car {
 
     /**
      * Type of car connection: car emulator, no physical connection.
+     * @hide
      */
     public static final int CONNECTION_TYPE_EMULATOR = 0;
     /**
      * Type of car connection: connected to a car via USB.
+     * @hide
      */
     public static final int CONNECTION_TYPE_USB = 1;
     /**
      * Type of car connection: connected to a car via Wi-Fi.
+     * @hide
      */
     public static final int CONNECTION_TYPE_WIFI = 2;
     /**
      * Type of car connection: on-device car emulator, for development (such as Local Head Unit).
+     * @hide
      */
     public static final int CONNECTION_TYPE_ON_DEVICE_EMULATOR = 3;
     /**
      * Type of car connection: car emulator, connected over ADB (such as Desktop Head Unit).
+     * @hide
      */
     public static final int CONNECTION_TYPE_ADB_EMULATOR = 4;
     /**
      * Type of car connection: platform runs directly in car.
+     * @hide
      */
     public static final int CONNECTION_TYPE_EMBEDDED = 5;
 
     /**
      * Unknown type (the support lib is likely out-of-date).
+     * @hide
      */
     public static final int CONNECTION_TYPE_UNKNOWN = -1;
 

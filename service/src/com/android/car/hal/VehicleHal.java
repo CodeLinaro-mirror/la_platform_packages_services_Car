@@ -27,9 +27,11 @@ import android.hardware.vehicle.V2_0.IVehicleCallback;
 import android.hardware.vehicle.V2_0.VehicleAreaConfig;
 import android.hardware.vehicle.V2_0.VehiclePropConfig;
 import android.hardware.vehicle.V2_0.VehiclePropValue;
+import android.hardware.vehicle.V2_0.VehicleProperty;
 import android.hardware.vehicle.V2_0.VehiclePropertyAccess;
 import android.hardware.vehicle.V2_0.VehiclePropertyChangeMode;
 import android.os.HandlerThread;
+import android.os.RemoteException;
 import android.os.SystemClock;
 import android.util.ArraySet;
 import android.util.Log;
@@ -128,7 +130,13 @@ public class VehicleHal extends IVehicleCallback.Stub {
     }
 
     public void init() {
-        Set<VehiclePropConfig> properties = new HashSet<>(mHalClient.getAllPropConfigs());
+        Set<VehiclePropConfig> properties;
+        try {
+            properties = new HashSet<>(mHalClient.getAllPropConfigs());
+        } catch (RemoteException e) {
+            // TODO(pavelm)
+            properties = new HashSet<>();
+        }
 
         synchronized (this) {
             // Create map of all properties
@@ -162,7 +170,11 @@ public class VehicleHal extends IVehicleCallback.Stub {
         }
         synchronized (this) {
             for (int p : mSubscribedProperties) {
-                mHalClient.unsubscribe(p);
+                try {
+                    mHalClient.unsubscribe(p);
+                } catch (RemoteException e) {
+                    // TODO(pavelm)
+                }
             }
             mSubscribedProperties.clear();
             mAllProperties.clear();
@@ -228,14 +240,18 @@ public class VehicleHal extends IVehicleCallback.Stub {
         }
 
         if (config == null) {
-            throw new IllegalArgumentException("subscribe error: config is null for property " +
-                    property);
+            throw new IllegalArgumentException("subscribe error: config is null for property 0x" +
+                    toHexString(property));
         } else if (isPropertySubscribable(config)) {
             synchronized (this) {
                 assertServiceOwnerLocked(service, property);
                 mSubscribedProperties.add(property);
             }
-            mHalClient.subscribe(property, samplingRateHz);
+            try {
+                mHalClient.subscribe(property, samplingRateHz);
+            } catch (RemoteException e) {
+                // TODO(pavelm)
+            }
         } else {
             Log.e(CarLog.TAG_HAL, "Cannot subscribe to property: " + property);
         }
@@ -258,7 +274,11 @@ public class VehicleHal extends IVehicleCallback.Stub {
                 assertServiceOwnerLocked(service, property);
                 mSubscribedProperties.remove(property);
             }
-            mHalClient.unsubscribe(property);
+            try {
+                mHalClient.unsubscribe(property);
+            } catch (RemoteException e) {
+                // TODO(pavelm)
+            }
         } else {
             Log.e(CarLog.TAG_HAL, "Cannot unsubscribe property: " + property);
         }
@@ -282,7 +302,12 @@ public class VehicleHal extends IVehicleCallback.Stub {
         VehiclePropValue propValue = new VehiclePropValue();
         propValue.prop = propertyId;
         propValue.areaId = areaId;
-        return mHalClient.getValue(propValue);
+        try {
+            return mHalClient.getValue(propValue);
+        } catch (RemoteException e) {
+            // TODO(pavelm)
+            return null;
+        }
     }
 
     public <T> T get(Class clazz, int propertyId) throws PropertyTimeoutException {
@@ -296,7 +321,13 @@ public class VehicleHal extends IVehicleCallback.Stub {
     @SuppressWarnings("unchecked")
     public <T> T get(Class clazz, VehiclePropValue requestedPropValue)
             throws PropertyTimeoutException {
-        VehiclePropValue propValue = mHalClient.getValue(requestedPropValue);
+        VehiclePropValue propValue;
+        try {
+            propValue = mHalClient.getValue(requestedPropValue);
+        } catch (RemoteException e) {
+            // TODO(pavelm)
+            return null;
+        }
         if (clazz == Integer.class || clazz == int.class) {
             return (T) propValue.value.int32Values.get(0);
         } else if (clazz == Boolean.class || clazz == boolean.class) {
@@ -324,11 +355,20 @@ public class VehicleHal extends IVehicleCallback.Stub {
 
     public VehiclePropValue get(VehiclePropValue requestedPropValue)
             throws PropertyTimeoutException {
-        return mHalClient.getValue(requestedPropValue);
+        try {
+            return mHalClient.getValue(requestedPropValue);
+        } catch (RemoteException e) {
+            // TODO(pavelm)
+            return null;
+        }
     }
 
     void set(VehiclePropValue propValue) throws PropertyTimeoutException {
-        mHalClient.setValue(propValue);
+        try {
+            mHalClient.setValue(propValue);
+        } catch (RemoteException e) {
+            // TODO(pavelm)
+        }
     }
 
     @CheckResult
@@ -389,7 +429,12 @@ public class VehicleHal extends IVehicleCallback.Stub {
     public void onPropertySetError(int errorCode, int propId, int areaId) {
         Log.e(CarLog.TAG_HAL, String.format("onPropertySetError, errorCode: %d, prop: 0x%x, "
                 + "area: 0x%x", errorCode, propId, areaId));
-        // TODO propagate per property error to HAL services and handle global error, bug:32068464
+        if (propId != VehicleProperty.INVALID) {
+            HalServiceBase service = mPropertyHandlers.get(propId);
+            if (service != null) {
+                service.handlePropertySetError(propId, areaId);
+            }
+        }
     }
 
     public void dump(PrintWriter writer) {
@@ -403,14 +448,12 @@ public class VehicleHal extends IVehicleCallback.Stub {
             configList = new ArrayList<>(mAllProperties.values());
         }
 
-
         writer.println("**All properties**");
         for (VehiclePropConfig config : configList) {
             StringBuilder builder = new StringBuilder()
                     .append("Property:0x").append(toHexString(config.prop))
                     .append(",access:0x").append(toHexString(config.access))
                     .append(",changeMode:0x").append(toHexString(config.changeMode))
-                    .append(",permission:0x").append(toHexString(config.permissionModel))
                     .append(",areas:0x").append(toHexString(config.supportedAreas))
                     .append(",config:0x").append(Arrays.toString(config.configArray.toArray()))
                     .append(",fs min:").append(config.minSampleRate)
@@ -493,7 +536,11 @@ public class VehicleHal extends IVehicleCallback.Stub {
             if (client != null) {
                 Log.i(CarLog.TAG_HAL, "set, property: 0x" + toHexString(mPropValue.prop)
                         + ", areaId: 0x" + toHexString(mPropValue.areaId));
-                client.setValue(mPropValue);
+                try {
+                    client.setValue(mPropValue);
+                } catch (RemoteException e) {
+                    // TODO(pavelm)
+                }
             }
         }
     }
