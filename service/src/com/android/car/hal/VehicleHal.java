@@ -48,6 +48,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map.Entry;
 import java.util.Set;
 
 /**
@@ -72,13 +73,16 @@ public class VehicleHal extends IVehicleCallback.Stub {
     private final HvacHalService mHvacHal;
     private final InputHalService mInputHal;
     private final VendorExtensionHalService mVendorExtensionHal;
-    private final HalClient mHalClient;
+    private final VmsHalService mVmsHal;
 
-    /** stores handler for each HAL property. Property events are sent to handler. */
+    /** Might be re-assigned if Vehicle HAL is reconnected. */
+    private volatile HalClient mHalClient;
+
+    /** Stores handler for each HAL property. Property events are sent to handler. */
     private final SparseArray<HalServiceBase> mPropertyHandlers = new SparseArray<>();
     /** This is for iterating all HalServices with fixed order. */
     private final HalServiceBase[] mAllServices;
-    private final ArraySet<Integer> mSubscribedProperties = new ArraySet<>();
+    private final HashMap<Integer, Float> mSubscribedProperties = new HashMap<>();
     private final HashMap<Integer, VehiclePropConfig> mAllProperties = new HashMap<>();
     private final HashMap<Integer, VehiclePropertyEventInfo> mEventLog = new HashMap<>();
 
@@ -95,6 +99,7 @@ public class VehicleHal extends IVehicleCallback.Stub {
         mHvacHal = new HvacHalService(this);
         mInputHal = new InputHalService(this);
         mVendorExtensionHal = new VendorExtensionHalService(this);
+        mVmsHal = new VmsHalService(this);
         mAllServices = new HalServiceBase[] {
                 mPowerHal,
                 mAudioHal,
@@ -104,7 +109,8 @@ public class VehicleHal extends IVehicleCallback.Stub {
                 mSensorHal,
                 mRadioHal,
                 mInputHal,
-                mVendorExtensionHal
+                mVendorExtensionHal,
+                mVmsHal
                 };
 
         mHalClient = new HalClient(vehicle, mHandlerThread.getLooper(), this /*IVehicleCallback*/);
@@ -125,8 +131,27 @@ public class VehicleHal extends IVehicleCallback.Stub {
         mHvacHal = hvacHal;
         mInputHal = null;
         mVendorExtensionHal = null;
+        // TODO(antoniocortes): do we need a test version of VmsHalService?
+        mVmsHal = null;
         mAllServices = null;
         mHalClient = halClient;
+    }
+
+    public void vehicleHalReconnected(IVehicle vehicle) {
+        synchronized (this) {
+            mHalClient = new HalClient(vehicle, mHandlerThread.getLooper(),
+                    this /*IVehicleCallback*/);
+
+            for (Entry<Integer, Float> subscription : mSubscribedProperties.entrySet()) {
+                try {
+                    mHalClient.subscribe(subscription.getKey(), subscription.getValue());
+                } catch (RemoteException e) {
+                    throw new RuntimeException("Unable to subscribe to property: 0x"
+                            + toHexString(subscription.getKey()) + " with "
+                            + subscription.getValue() + "Hz", e);
+                }
+            }
+        }
     }
 
     public void init() {
@@ -134,8 +159,7 @@ public class VehicleHal extends IVehicleCallback.Stub {
         try {
             properties = new HashSet<>(mHalClient.getAllPropConfigs());
         } catch (RemoteException e) {
-            // TODO(pavelm)
-            properties = new HashSet<>();
+            throw new RuntimeException("Unable to retrieve vehicle property configuration", e);
         }
 
         synchronized (this) {
@@ -169,11 +193,12 @@ public class VehicleHal extends IVehicleCallback.Stub {
             mAllServices[i].release();
         }
         synchronized (this) {
-            for (int p : mSubscribedProperties) {
+            for (int p : mSubscribedProperties.keySet()) {
                 try {
                     mHalClient.unsubscribe(p);
                 } catch (RemoteException e) {
-                    // TODO(pavelm)
+                    //  Ignore exceptions on shutdown path.
+                    Log.w(CarLog.TAG_HAL, "Failed to unsubscribe", e);
                 }
             }
             mSubscribedProperties.clear();
@@ -218,6 +243,8 @@ public class VehicleHal extends IVehicleCallback.Stub {
         return mVendorExtensionHal;
     }
 
+    public VmsHalService getVmsHal() { return mVmsHal; }
+
     private void assertServiceOwnerLocked(HalServiceBase service, int property) {
         if (service != mPropertyHandlers.get(property)) {
             throw new IllegalArgumentException("Property 0x" + toHexString(property)
@@ -245,12 +272,12 @@ public class VehicleHal extends IVehicleCallback.Stub {
         } else if (isPropertySubscribable(config)) {
             synchronized (this) {
                 assertServiceOwnerLocked(service, property);
-                mSubscribedProperties.add(property);
+                mSubscribedProperties.put(property, samplingRateHz);
             }
             try {
                 mHalClient.subscribe(property, samplingRateHz);
             } catch (RemoteException e) {
-                // TODO(pavelm)
+                Log.e(CarLog.TAG_HAL, "Failed to subscribe to property: 0x" + property, e);
             }
         } else {
             Log.e(CarLog.TAG_HAL, "Cannot subscribe to property: " + property);
@@ -277,7 +304,8 @@ public class VehicleHal extends IVehicleCallback.Stub {
             try {
                 mHalClient.unsubscribe(property);
             } catch (RemoteException e) {
-                // TODO(pavelm)
+                Log.e(CarLog.TAG_SERVICE, "Failed to unsubscribe from property: 0x"
+                        + toHexString(property), e);
             }
         } else {
             Log.e(CarLog.TAG_HAL, "Cannot unsubscribe property: " + property);
@@ -302,12 +330,7 @@ public class VehicleHal extends IVehicleCallback.Stub {
         VehiclePropValue propValue = new VehiclePropValue();
         propValue.prop = propertyId;
         propValue.areaId = areaId;
-        try {
-            return mHalClient.getValue(propValue);
-        } catch (RemoteException e) {
-            // TODO(pavelm)
-            return null;
-        }
+        return mHalClient.getValue(propValue);
     }
 
     public <T> T get(Class clazz, int propertyId) throws PropertyTimeoutException {
@@ -322,12 +345,8 @@ public class VehicleHal extends IVehicleCallback.Stub {
     public <T> T get(Class clazz, VehiclePropValue requestedPropValue)
             throws PropertyTimeoutException {
         VehiclePropValue propValue;
-        try {
-            propValue = mHalClient.getValue(requestedPropValue);
-        } catch (RemoteException e) {
-            // TODO(pavelm)
-            return null;
-        }
+        propValue = mHalClient.getValue(requestedPropValue);
+
         if (clazz == Integer.class || clazz == int.class) {
             return (T) propValue.value.int32Values.get(0);
         } else if (clazz == Boolean.class || clazz == boolean.class) {
@@ -355,20 +374,11 @@ public class VehicleHal extends IVehicleCallback.Stub {
 
     public VehiclePropValue get(VehiclePropValue requestedPropValue)
             throws PropertyTimeoutException {
-        try {
-            return mHalClient.getValue(requestedPropValue);
-        } catch (RemoteException e) {
-            // TODO(pavelm)
-            return null;
-        }
+        return mHalClient.getValue(requestedPropValue);
     }
 
     void set(VehiclePropValue propValue) throws PropertyTimeoutException {
-        try {
-            mHalClient.setValue(propValue);
-        } catch (RemoteException e) {
-            // TODO(pavelm)
-        }
+        mHalClient.setValue(propValue);
     }
 
     @CheckResult
@@ -534,13 +544,11 @@ public class VehicleHal extends IVehicleCallback.Stub {
         void submit() throws PropertyTimeoutException {
             HalClient client =  mClient.get();
             if (client != null) {
-                Log.i(CarLog.TAG_HAL, "set, property: 0x" + toHexString(mPropValue.prop)
-                        + ", areaId: 0x" + toHexString(mPropValue.areaId));
-                try {
-                    client.setValue(mPropValue);
-                } catch (RemoteException e) {
-                    // TODO(pavelm)
+                if (DBG) {
+                    Log.i(CarLog.TAG_HAL, "set, property: 0x" + toHexString(mPropValue.prop)
+                            + ", areaId: 0x" + toHexString(mPropValue.areaId));
                 }
+                client.setValue(mPropValue);
             }
         }
     }

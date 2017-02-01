@@ -50,7 +50,7 @@ public class ICarImpl extends ICar.Stub {
     }
 
     private final Context mContext;
-    private VehicleHal mHal;
+    private final VehicleHal mHal;
 
     private final SystemActivityMonitoringService mSystemActivityMonitoringService;
     private final CarPowerManagementService mCarPowerManagementService;
@@ -70,6 +70,7 @@ public class ICarImpl extends ICar.Stub {
     private final InstrumentClusterService mInstrumentClusterService;
     private final SystemStateControllerService mSystemStateControllerService;
     private final CarVendorExtensionService mCarVendorExtensionService;
+    private final CarBluetoothService mCarBluetoothService;
 
     private final CarServiceBase[] mAllServices;
 
@@ -77,7 +78,8 @@ public class ICarImpl extends ICar.Stub {
     @GuardedBy("this")
     private CarTestService mCarTestService;
 
-    public ICarImpl(Context serviceContext, IVehicle vehicle, SystemInterface systemInterface) {
+    public ICarImpl(Context serviceContext, IVehicle vehicle, SystemInterface systemInterface,
+            CanBusErrorNotifier errorNotifier) {
         mContext = serviceContext;
         mHal = new VehicleHal(vehicle);
         mSystemActivityMonitoringService = new SystemActivityMonitoringService(serviceContext);
@@ -92,7 +94,7 @@ public class ICarImpl extends ICar.Stub {
         mCarInfoService = new CarInfoService(serviceContext, mHal.getInfoHal());
         mAppFocusService = new AppFocusService(serviceContext, mSystemActivityMonitoringService);
         mCarAudioService = new CarAudioService(serviceContext, mHal.getAudioHal(),
-                mCarInputService);
+                mCarInputService, errorNotifier);
         mCarCabinService = new CarCabinService(serviceContext, mHal.getCabinHal());
         mCarHvacService = new CarHvacService(serviceContext, mHal.getHvacHal());
         mCarRadioService = new CarRadioService(serviceContext, mHal.getRadioHal());
@@ -104,6 +106,7 @@ public class ICarImpl extends ICar.Stub {
                 mCarPowerManagementService, mCarAudioService, this);
         mCarVendorExtensionService = new CarVendorExtensionService(serviceContext,
                 mHal.getVendorExtensionHal());
+        mCarBluetoothService = new CarBluetoothService(serviceContext, mCarCabinService);
 
         // Be careful with order. Service depending on other service should be inited later.
         mAllServices = new CarServiceBase[]{
@@ -124,7 +127,8 @@ public class ICarImpl extends ICar.Stub {
                 mInstrumentClusterService,
                 mCarProjectionService,
                 mSystemStateControllerService,
-                mCarVendorExtensionService
+                mCarVendorExtensionService,
+                mCarBluetoothService
         };
     }
 
@@ -141,6 +145,13 @@ public class ICarImpl extends ICar.Stub {
             mAllServices[i].release();
         }
         mHal.release();
+    }
+
+    public void vehicleHalReconnected(IVehicle vehicle) {
+        mHal.vehicleHalReconnected(vehicle);
+        for (CarServiceBase service : mAllServices) {
+            service.vehicleHalReconnected();
+        }
     }
 
     @Override
@@ -251,6 +262,8 @@ public class ICarImpl extends ICar.Stub {
     }
 
     void dump(PrintWriter writer) {
+        writer.println("*FutureConfig, DEFAULT:" + FeatureConfiguration.DEFAULT);
+        //TODO dump all feature flags by reflection
         writer.println("*Dump all services*");
         for (CarServiceBase service: mAllServices) {
             service.dump(writer);
