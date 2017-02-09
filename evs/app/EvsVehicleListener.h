@@ -22,7 +22,7 @@
 
 class EvsVehicleListener : public IVehicleCallback {
 public:
-    // Methods from ::android::hardware::vehicle::V2_0::IVehicleCallback follow.
+    // Methods from ::android::hardware::automotive::vehicle::V2_0::IVehicleCallback follow.
     Return<void> onPropertyEvent(const hidl_vec <VehiclePropValue> & /*values*/) override {
         {
             // Our use case is so simple, we don't actually need to update a variable,
@@ -40,7 +40,7 @@ public:
     }
 
     Return<void> onPropertySetError(StatusCode      /* errorCode */,
-                                    VehicleProperty /* propId */,
+                                    int32_t         /* propId */,
                                     int32_t         /* areaId */) override {
         // We don't set values, so we don't listen for set errors
         return Return<void>();
