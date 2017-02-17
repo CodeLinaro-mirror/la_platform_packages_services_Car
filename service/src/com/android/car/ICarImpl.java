@@ -21,7 +21,6 @@ import android.car.Car;
 import android.car.ICar;
 import android.car.annotation.FutureFeature;
 import android.car.cluster.renderer.IInstrumentClusterNavigation;
-import android.car.internal.FeatureUtil;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.hardware.automotive.vehicle.V2_0.IVehicle;
@@ -30,6 +29,8 @@ import android.util.Log;
 
 import com.android.car.cluster.InstrumentClusterService;
 import com.android.car.hal.VehicleHal;
+import com.android.car.internal.FeatureConfiguration;
+import com.android.car.internal.FeatureUtil;
 import com.android.car.pm.CarPackageManagerService;
 import com.android.internal.annotations.GuardedBy;
 
@@ -77,7 +78,11 @@ public class ICarImpl extends ICar.Stub {
     private final CarVendorExtensionService mCarVendorExtensionService;
     private final CarBluetoothService mCarBluetoothService;
     @FutureFeature
+    private CarDiagnosticService mCarDiagnosticService;
+    @FutureFeature
     private VmsSubscriberService mVmsSubscriberService;
+    @FutureFeature
+    private VmsPublisherService mVmsPublisherService;
 
     private final CarServiceBase[] mAllServices;
 
@@ -116,6 +121,11 @@ public class ICarImpl extends ICar.Stub {
         mCarBluetoothService = new CarBluetoothService(serviceContext, mCarCabinService);
         if (FeatureConfiguration.ENABLE_VEHICLE_MAP_SERVICE) {
             mVmsSubscriberService = new VmsSubscriberService(serviceContext, mHal.getVmsHal());
+            mVmsPublisherService = new VmsPublisherService(serviceContext, mHal.getVmsHal());
+        }
+        if (FeatureConfiguration.ENABLE_DIAGNOSTIC) {
+            mCarDiagnosticService = new CarDiagnosticService(serviceContext,
+                mHal.getDiagnosticHal());
         }
 
         // Be careful with order. Service depending on other service should be inited later.
@@ -142,6 +152,10 @@ public class ICarImpl extends ICar.Stub {
         ));
         if (FeatureConfiguration.ENABLE_VEHICLE_MAP_SERVICE) {
             allServices.add(mVmsSubscriberService);
+            allServices.add(mVmsPublisherService);
+        }
+        if (FeatureConfiguration.ENABLE_DIAGNOSTIC) {
+            allServices.add(mCarDiagnosticService);
         }
         mAllServices = allServices.toArray(new CarServiceBase[0]);
     }
@@ -187,6 +201,9 @@ public class ICarImpl extends ICar.Stub {
             case Car.CAMERA_SERVICE:
                 assertCameraPermission(mContext);
                 return mCarCameraService;
+            case Car.DIAGNOSTIC_SERVICE:
+                //TODO(egranata): handle permissions
+                return mCarDiagnosticService;
             case Car.HVAC_SERVICE:
                 assertHvacPermission(mContext);
                 return mCarHvacService;
@@ -273,6 +290,11 @@ public class ICarImpl extends ICar.Stub {
 
     public static void assertVendorExtensionPermission(Context context) {
         assertPermission(context, Car.PERMISSION_VENDOR_EXTENSION);
+    }
+
+    @FutureFeature
+    public static void assertVmsPublisherPermission(Context context) {
+        assertPermission(context, Car.PERMISSION_VMS_PUBLISHER);
     }
 
     @FutureFeature

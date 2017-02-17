@@ -13,17 +13,26 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package android.car.internal;
+
+package android.car.vms;
+
+import android.car.vms.VmsProperty;
 
 /**
- * Internal utility for checking feature
+ * Exposes publisher services to VMS clients.
+ *
  * @hide
  */
-public class FeatureUtil {
+interface IVmsPublisherService {
+    /**
+     * Client call to publish a message.
+     *
+     * TODO(antoniocortes): change VmsProperty to String or byte[] once b/35313272 is submitted.
+     */
+    oneway void publish(int layer, int version, in VmsProperty message) = 0;
 
-    public static void assertFeature(boolean featureFlag) {
-        if (!featureFlag) {
-            throw new IllegalStateException("Feature not enabled");
-        }
-    }
+    /**
+     * Returns whether the layer/version has any clients subscribed to it.
+     */
+    boolean hasSubscribers(int layer, int version) = 1;
 }

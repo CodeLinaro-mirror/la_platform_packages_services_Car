@@ -14,6 +14,7 @@ package android.car {
     field public static final java.lang.String CABIN_SERVICE = "cabin";
     field public static final java.lang.String CAMERA_SERVICE = "camera";
     field public static final int CONNECTION_TYPE_EMBEDDED = 5; // 0x5
+    field public static final java.lang.String DIAGNOSTIC_SERVICE = "diagnostic";
     field public static final java.lang.String HVAC_SERVICE = "hvac";
     field public static final java.lang.String INFO_SERVICE = "info";
     field public static final java.lang.String PACKAGE_SERVICE = "package";
@@ -30,6 +31,7 @@ package android.car {
     field public static final deprecated java.lang.String PERMISSION_MOCK_VEHICLE_HAL = "android.car.permission.CAR_MOCK_VEHICLE_HAL";
     field public static final java.lang.String PERMISSION_SPEED = "android.car.permission.CAR_SPEED";
     field public static final java.lang.String PERMISSION_VENDOR_EXTENSION = "android.car.permission.CAR_VENDOR_EXTENSION";
+    field public static final java.lang.String PERMISSION_VMS_PUBLISHER = "android.car.permission.VMS_PUBLISHER";
     field public static final java.lang.String PERMISSION_VMS_SUBSCRIBER = "android.car.permission.VMS_SUBSCRIBER";
     field public static final java.lang.String PROJECTION_SERVICE = "projection";
     field public static final java.lang.String RADIO_SERVICE = "radio";
@@ -796,6 +798,31 @@ package android.car.test {
     ctor public CarTestManagerBinderWrapper(android.os.IBinder);
     method public void onCarDisconnected();
     field public final android.os.IBinder binder;
+  }
+
+}
+
+package android.car.vms {
+
+  public class VmsProperty implements android.os.Parcelable {
+    ctor public VmsProperty(java.lang.String);
+    ctor public VmsProperty(android.os.Parcel);
+    method public int describeContents();
+    method public java.lang.String getValue();
+    method public void writeToParcel(android.os.Parcel, int);
+    field public static final android.os.Parcelable.Creator<android.car.vms.VmsProperty> CREATOR;
+  }
+
+  public final class VmsSubscriberManager {
+    ctor public VmsSubscriberManager(android.os.IBinder, android.os.Handler);
+    method public void clearListener();
+    method public void setListener(android.car.vms.VmsSubscriberManager.OnVmsMessageReceivedListener);
+    method public void subscribe(int, int, boolean) throws android.car.CarNotConnectedException;
+    method public void unsubscribe(int, int);
+  }
+
+  public static abstract interface VmsSubscriberManager.OnVmsMessageReceivedListener {
+    method public abstract void onVmsMessageReceived(android.car.vms.VmsProperty);
   }
 
 }

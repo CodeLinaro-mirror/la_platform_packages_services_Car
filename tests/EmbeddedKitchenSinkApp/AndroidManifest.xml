@@ -16,7 +16,8 @@
 
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
         xmlns:androidprv="http://schemas.android.com/apk/prv/res/android"
-        package="com.google.android.car.kitchensink" >
+        package="com.google.android.car.kitchensink"
+        android:sharedUserId="android.uid.system">
     <uses-sdk
         android:minSdkVersion="22"
         android:targetSdkVersion='23'/>
@@ -38,6 +39,7 @@
     <uses-permission android:name="android.permission.SEND_SMS" />
     <uses-permission android:name="android.permission.READ_SMS"/>
     <uses-permission android:name="android.permission.BLUETOOTH" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
     <application android:label="@string/app_title"
         android:icon="@drawable/ic_launcher">
 
@@ -87,7 +89,6 @@
                   android:launchMode="singleTop">
         </activity>
 
-        <!--
         <receiver android:name=".bluetooth.MapReceiver"
             android:permission="android.permission.READ_SMS">
             <intent-filter>
@@ -95,6 +96,5 @@
                 <action android:name="android.provider.action.VOICE_SEND_MESSAGE_TO_CONTACTS"/>
             </intent-filter>
         </receiver>
-        -->
     </application>
 </manifest>

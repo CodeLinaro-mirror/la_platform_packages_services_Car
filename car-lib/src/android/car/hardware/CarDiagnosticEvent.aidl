@@ -13,15 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package com.android.car;
 
-/**
- * Class to hold static boolean flag for enabling / disabling features.
- */
-public class FeatureConfiguration {
-    /** Enable future feature by default. */
-    public static final boolean DEFAULT = true;
-    /** product configuration in CarInfoManager */
-    public static final boolean ENABLE_PRODUCT_CONFIGURATION_INFO = DEFAULT;
-    public static final boolean ENABLE_VEHICLE_MAP_SERVICE = DEFAULT;
-}
+package android.car.hardware;
+
+parcelable CarDiagnosticEvent;

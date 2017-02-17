@@ -21,6 +21,7 @@ import android.annotation.Nullable;
 import android.annotation.SystemApi;
 import android.car.annotation.FutureFeature;
 import android.car.content.pm.CarPackageManager;
+import android.car.hardware.CarDiagnosticManager;
 import android.car.hardware.CarSensorManager;
 import android.car.hardware.CarVendorExtensionManager;
 import android.car.hardware.cabin.CarCabinManager;
@@ -30,6 +31,7 @@ import android.car.hardware.radio.CarRadioManager;
 import android.car.media.CarAudioManager;
 import android.car.navigation.CarNavigationStatusManager;
 import android.car.test.CarTestManagerBinderWrapper;
+import android.car.vms.VmsSubscriberManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -42,6 +44,8 @@ import android.os.RemoteException;
 import android.os.UserHandle;
 import android.util.Log;
 
+import com.android.car.internal.FeatureConfiguration;
+import com.android.car.internal.FeatureUtil;
 import com.android.internal.annotations.GuardedBy;
 
 import java.lang.annotation.Retention;
@@ -85,6 +89,12 @@ public final class Car {
      */
     @SystemApi
     public static final String CABIN_SERVICE = "cabin";
+
+    /**
+     * @hide
+     */
+    @SystemApi
+    public static final String DIAGNOSTIC_SERVICE = "diagnostic";
 
     /**
      * @hide
@@ -229,7 +239,17 @@ public final class Car {
             "android.car.permission.CAR_TEST_SERVICE";
 
     /**
-     * Permission necessary to access VMS APIs.
+     * Permissions necessary to access VMS publisher APIs.
+     *
+     * @hide
+     */
+    @FutureFeature
+    @SystemApi
+    public static final String PERMISSION_VMS_PUBLISHER = "android.car.permission.VMS_PUBLISHER";
+
+    /**
+     * Permissions necessary to access VMS subscriber APIs.
+     *
      * @hide
      */
     @FutureFeature
@@ -558,6 +578,10 @@ public final class Car {
             case CABIN_SERVICE:
                 manager = new CarCabinManager(binder, mContext, mEventHandler);
                 break;
+            case DIAGNOSTIC_SERVICE:
+                //TODO(egranata): only enable this if FeatureConfiguration is turned on
+                manager = new CarDiagnosticManager(binder, mContext, mEventHandler);
+                break;
             case CAMERA_SERVICE:
                 manager = new CarCameraManager(binder, mContext);
                 break;
@@ -577,6 +601,11 @@ public final class Car {
                 /* CarTestManager exist in static library. So instead of constructing it here,
                  * only pass binder wrapper so that CarTestManager can be constructed outside. */
                 manager = new CarTestManagerBinderWrapper(binder);
+                break;
+            case VMS_SUBSCRIBER_SERVICE:
+                if (FeatureConfiguration.ENABLE_VEHICLE_MAP_SERVICE) {
+                    manager = new VmsSubscriberManager(binder, mEventHandler);
+                }
                 break;
         }
         return manager;
