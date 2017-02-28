@@ -19,7 +19,6 @@ package com.android.car;
 import android.car.annotation.FutureFeature;
 import android.car.vms.IVmsPublisherClient;
 import android.car.vms.IVmsPublisherService;
-import android.car.vms.VmsProperty;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -46,7 +45,7 @@ import java.util.Map;
  */
 @FutureFeature
 public class VmsPublisherService extends IVmsPublisherService.Stub
-        implements CarServiceBase, VmsHalService.VmsHalListener {
+        implements CarServiceBase, VmsHalService.VmsHalPublisherListener {
     private static final boolean DBG = true;
     private static final String TAG = "VmsPublisherService";
 
@@ -63,7 +62,7 @@ public class VmsPublisherService extends IVmsPublisherService.Stub
     // Implements CarServiceBase interface.
     @Override
     public void init() {
-        mHal.addListener(this);
+        mHal.addPublisherListener(this);
         // Launch publishers.
         String[] publisherNames = mContext.getResources().getStringArray(
                 R.array.vmsPublisherClients);
@@ -83,7 +82,7 @@ public class VmsPublisherService extends IVmsPublisherService.Stub
     @Override
     public void release() {
         mPublisherManager.release();
-        mHal.removeListener(this);
+        mHal.removePublisherListener(this);
     }
 
     @Override
@@ -92,10 +91,9 @@ public class VmsPublisherService extends IVmsPublisherService.Stub
 
     // Implements IVmsPublisherService interface.
     @Override
-    public void publish(int layer, int version, VmsProperty value) {
+    public void publish(int layerId, int layerVersion, byte[] payload) {
         ICarImpl.assertVmsPublisherPermission(mContext);
-        // TODO(antoniocortes): update to latest VmsProperty structure.
-        mHal.setProperty(value);
+        mHal.setDataMessage(layerId, layerVersion, payload);
     }
 
     @Override
@@ -107,7 +105,7 @@ public class VmsPublisherService extends IVmsPublisherService.Stub
 
     // Implements VmsHalListener interface
     @Override
-    public void onChange(VmsProperty message) {
+    public void onChange(int layerId, int layerVersion, boolean hasSubscribers) {
         // TODO(antoniocortes): notify publishers if this message causes a subscription change.
     }
 
@@ -148,11 +146,9 @@ public class VmsPublisherService extends IVmsPublisherService.Stub
                 }
                 Intent intent = new Intent();
                 intent.setComponent(name);
-                // Explicitly start service as we do not use BIND_AUTO_CREATE flag to handle crash.
-                publisherService.mContext.startService(intent);
                 PublisherConnection connection = new PublisherConnection();
                 if (publisherService.mContext.bindService(intent, connection,
-                        Context.BIND_IMPORTANT)) {
+                        Context.BIND_AUTO_CREATE)) {
                     mPublisherConnectionMap.put(publisherName, connection);
                 } else {
                     Log.e(TAG, "unable to bind to: " + publisherName);
