@@ -13,26 +13,18 @@ LOCAL_C_INCLUDES += \
     packages/services/Car/evs/test \
 
 LOCAL_SHARED_LIBRARIES := \
-    android.hardware.evs@1.0 \
-    android.hardware.automotive.vehicle@2.0 \
-    libcutils \
+    android.hardware.automotive.evs@1.0 \
     liblog \
     libutils \
     libui \
-    libhwbinder \
     libhidlbase \
     libhidltransport \
-    libGLESv1_CM \
-    libOpenSLES \
-    libtinyalsa \
-    libhardware \
 
 LOCAL_STRIP_MODULE := keep_symbols
 
 LOCAL_MODULE:= evs_test
 LOCAL_MODULE_TAGS := optional
 
-LOCAL_CFLAGS += -DGL_GLEXT_PROTOTYPES -DEGL_EGLEXT_PROTOTYPES
 LOCAL_CFLAGS += -Wall -Werror -Wunused -Wunreachable-code
 LOCAL_CFLAGS += -O0 -ggdb
 

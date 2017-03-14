@@ -18,23 +18,18 @@ package com.android.car;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.car.Car;
 import android.car.annotation.FutureFeature;
 import android.car.hardware.CarDiagnosticEvent;
 import android.car.hardware.CarDiagnosticManager;
 import android.car.hardware.ICarDiagnostic;
 import android.car.hardware.ICarDiagnosticEventListener;
 import android.content.Context;
-import android.content.pm.PackageManager;
-import android.os.Binder;
-import android.os.Handler;
 import android.os.IBinder;
-import android.os.Looper;
-import android.os.Message;
-import android.os.Process;
 import android.os.RemoteException;
-import android.os.SystemClock;
 import android.util.ArrayMap;
 import android.util.Log;
+import com.android.car.internal.CarPermission;
 import com.android.car.Listeners.ClientWithRate;
 import com.android.car.hal.DiagnosticHalService;
 import com.android.internal.annotations.GuardedBy;
@@ -54,9 +49,6 @@ import java.util.concurrent.locks.ReentrantLock;
 /** @hide */
 public class CarDiagnosticService extends ICarDiagnostic.Stub
         implements CarServiceBase, DiagnosticHalService.DiagnosticListener {
-    /** {@link #mDiagnosticLock} is not waited forever for handling disconnection */
-    private static final long MAX_DIAGNOSTIC_LOCK_WAIT_MS = 1000;
-
     /** lock to access diagnostic structures */
     private final ReentrantLock mDiagnosticLock = new ReentrantLock();
     /** hold clients callback */
@@ -81,9 +73,16 @@ public class CarDiagnosticService extends ICarDiagnostic.Stub
 
     private final Context mContext;
 
+    private final CarPermission mDiagnosticReadPermission;
+
+    private final CarPermission mDiagnosticClearPermission;
+
     public CarDiagnosticService(Context context, DiagnosticHalService diagnosticHal) {
         mContext = context;
         mDiagnosticHal = diagnosticHal;
+        mDiagnosticReadPermission = new CarPermission(mContext, Car.PERMISSION_CAR_DIAGNOSTIC_READ);
+        mDiagnosticClearPermission = new CarPermission(mContext,
+                Car.PERMISSION_CAR_DIAGNOSTIC_CLEAR);
     }
 
     @Override
@@ -217,23 +216,6 @@ public class CarDiagnosticService extends ICarDiagnostic.Stub
         return events;
     }
 
-    private void assertPermission(int frameType) {
-        if (Binder.getCallingUid() != Process.myUid()) {
-            switch (getDiagnosticPermission(frameType)) {
-                case PackageManager.PERMISSION_GRANTED:
-                    break;
-                default:
-                    throw new SecurityException(
-                        "client does not have permission:"
-                            + getPermissionName(frameType)
-                            + " pid:"
-                            + Binder.getCallingPid()
-                            + " uid:"
-                            + Binder.getCallingUid());
-            }
-        }
-    }
-
     @Override
     public boolean registerOrUpdateDiagnosticListener(int frameType, int rate,
                 ICarDiagnosticEventListener listener) {
@@ -243,7 +225,7 @@ public class CarDiagnosticService extends ICarDiagnostic.Stub
         Listeners<DiagnosticClient> diagnosticListeners = null;
         mDiagnosticLock.lock();
         try {
-            assertPermission(frameType);
+            mDiagnosticReadPermission.assertGranted();
             diagnosticClient = findDiagnosticClientLocked(listener);
             Listeners.ClientWithRate<DiagnosticClient> diagnosticClientWithRate = null;
             if (diagnosticClient == null) {
@@ -312,21 +294,6 @@ public class CarDiagnosticService extends ICarDiagnostic.Stub
             }
         }
         return true;
-    }
-
-    //TODO(egranata): handle permissions correctly
-    private int getDiagnosticPermission(int frameType) {
-        String permission = getPermissionName(frameType);
-        int result = PackageManager.PERMISSION_GRANTED;
-        if (permission != null) {
-            return mContext.checkCallingOrSelfPermission(permission);
-        }
-        // If no permission is required, return granted.
-        return result;
-    }
-
-    private String getPermissionName(int frameType) {
-        return null;
     }
 
     private boolean startDiagnostic(int frameType, int rate) {
@@ -471,7 +438,7 @@ public class CarDiagnosticService extends ICarDiagnostic.Stub
 
     @Override
     public boolean clearFreezeFrames(long... timestamps) {
-        //TODO(egranata): verify permissions before executing operation
+        mDiagnosticClearPermission.assertGranted();
         if (mDiagnosticHal.getDiagnosticCapabilities().isFreezeFrameClearSupported()) {
             mFreezeFrameDiagnosticRecords.lock();
             mDiagnosticHal.clearFreezeFrames(timestamps);
@@ -510,82 +477,6 @@ public class CarDiagnosticService extends ICarDiagnostic.Stub
             mClients.remove(diagnosticClient);
         } finally {
             mDiagnosticLock.unlock();
-        }
-    }
-
-    private class DiagnosticDispatchHandler extends Handler {
-        private static final long DIAGNOSTIC_DISPATCH_MIN_INTERVAL_MS = 16; // over 60Hz
-
-        private static final int MSG_DIAGNOSTIC_DATA = 0;
-
-        private long mLastDiagnosticDispatchTime = -1;
-        private int mFreeListIndex = 0;
-        private final LinkedList<CarDiagnosticEvent>[] mDiagnosticDataList = new LinkedList[2];
-
-        private DiagnosticDispatchHandler(Looper looper) {
-            super(looper);
-            for (int i = 0; i < mDiagnosticDataList.length; i++) {
-                mDiagnosticDataList[i] = new LinkedList<CarDiagnosticEvent>();
-            }
-        }
-
-        private synchronized void handleDiagnosticEvents(List<CarDiagnosticEvent> data) {
-            LinkedList<CarDiagnosticEvent> list = mDiagnosticDataList[mFreeListIndex];
-            list.addAll(data);
-            requestDispatchLocked();
-        }
-
-        private synchronized void handleDiagnosticEvent(CarDiagnosticEvent event) {
-            LinkedList<CarDiagnosticEvent> list = mDiagnosticDataList[mFreeListIndex];
-            list.add(event);
-            requestDispatchLocked();
-        }
-
-        private void requestDispatchLocked() {
-            Message msg = obtainMessage(MSG_DIAGNOSTIC_DATA);
-            long now = SystemClock.uptimeMillis();
-            long delta = now - mLastDiagnosticDispatchTime;
-            if (delta > DIAGNOSTIC_DISPATCH_MIN_INTERVAL_MS) {
-                sendMessage(msg);
-            } else {
-                sendMessageDelayed(msg, DIAGNOSTIC_DISPATCH_MIN_INTERVAL_MS - delta);
-            }
-        }
-
-        @Override
-        public void handleMessage(Message msg) {
-            switch (msg.what) {
-                case MSG_DIAGNOSTIC_DATA:
-                    doHandleDiagnosticData();
-                    break;
-                default:
-                    break;
-            }
-        }
-
-        private void doHandleDiagnosticData() {
-            List<CarDiagnosticEvent> listToDispatch = null;
-            synchronized (this) {
-                mLastDiagnosticDispatchTime = SystemClock.uptimeMillis();
-                int nonFreeListIndex = mFreeListIndex ^ 0x1;
-                List<CarDiagnosticEvent> nonFreeList = mDiagnosticDataList[nonFreeListIndex];
-                List<CarDiagnosticEvent> freeList = mDiagnosticDataList[mFreeListIndex];
-                if (nonFreeList.size() > 0) {
-                    // copy again, but this should not be normal case
-                    nonFreeList.addAll(freeList);
-                    listToDispatch = nonFreeList;
-                    freeList.clear();
-                } else if (freeList.size() > 0) {
-                    listToDispatch = freeList;
-                    mFreeListIndex = nonFreeListIndex;
-                }
-            }
-            // leave this part outside lock so that time-taking dispatching can be done without
-            // blocking diagnostic event notification.
-            if (listToDispatch != null) {
-                processDiagnosticData(listToDispatch);
-                listToDispatch.clear();
-            }
         }
     }
 

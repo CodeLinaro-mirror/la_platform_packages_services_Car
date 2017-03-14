@@ -23,10 +23,10 @@ import static com.android.car.vehiclehal.test.Utils.tryWithDeadline;
 import static org.junit.Assert.*;
 
 import android.annotation.Nullable;
-import android.hardware.automotive.vehicle.V2_0.IVehicle;
 import android.hardware.automotive.vehicle.V2_0.StatusCode;
 import android.hardware.automotive.vehicle.V2_0.VehiclePropValue;
-import android.hardware.automotive.vehicle.V2_0.VehicleProperty;
+import android.hardware.automotive.vehicle.V2_1.IVehicle;
+import android.hardware.automotive.vehicle.V2_1.VehicleProperty;
 import android.os.RemoteException;
 import android.util.Log;
 import java.util.Objects;
@@ -78,28 +78,7 @@ public class Obd2LiveFrameTest {
                 });
     }
 
-    @Test
-    public void testFreezeFrame() throws RemoteException {
-        if (!isFreezeFrameAvailable()) {
-            Log.i(TAG, "freeze frame not available; returning - our job here is done");
-            return;
-        }
-        readVhalProperty(
-                mVehicle,
-                VehicleProperty.OBD2_FREEZE_FRAME,
-                (Integer status, VehiclePropValue value) -> {
-                    assertEquals(StatusCode.OK, status.intValue());
-                    assertNotNull("OBD2_FREEZE_FRAME is supported; should not be null", value);
-                    Log.i(TAG, "dump of OBD2_FREEZE_FRAME:\n" + dumpVehiclePropValue(value));
-                    return true;
-                });
-    }
-
     private boolean isLiveFrameAvailable() throws RemoteException {
         return isVhalPropertyAvailable(mVehicle, VehicleProperty.OBD2_LIVE_FRAME);
-    }
-
-    private boolean isFreezeFrameAvailable() throws RemoteException {
-        return isVhalPropertyAvailable(mVehicle, VehicleProperty.OBD2_FREEZE_FRAME);
     }
 }

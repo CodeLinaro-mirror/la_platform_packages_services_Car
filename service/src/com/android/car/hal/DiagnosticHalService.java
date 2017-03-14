@@ -21,19 +21,22 @@ import android.car.annotation.FutureFeature;
 import android.car.hardware.CarDiagnosticEvent;
 import android.car.hardware.CarDiagnosticManager;
 import android.car.hardware.CarSensorManager;
-import android.hardware.automotive.vehicle.V2_0.Obd2FloatSensorIndex;
-import android.hardware.automotive.vehicle.V2_0.Obd2IntegerSensorIndex;
 import android.hardware.automotive.vehicle.V2_0.VehiclePropConfig;
 import android.hardware.automotive.vehicle.V2_0.VehiclePropValue;
-import android.hardware.automotive.vehicle.V2_0.VehicleProperty;
 import android.hardware.automotive.vehicle.V2_0.VehiclePropertyChangeMode;
+import android.hardware.automotive.vehicle.V2_1.Obd2FloatSensorIndex;
+import android.hardware.automotive.vehicle.V2_1.Obd2IntegerSensorIndex;
+import android.hardware.automotive.vehicle.V2_1.VehicleProperty;
 import android.util.Log;
 import android.util.SparseArray;
 import com.android.car.CarLog;
 import com.android.car.CarServiceUtils;
 import com.android.car.vehiclehal.VehiclePropValueBuilder;
 import java.io.PrintWriter;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.BitSet;
+import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArraySet;
@@ -120,15 +123,36 @@ public class DiagnosticHalService extends SensorHalServiceBase {
         return mVehiclePropertyToConfig.get(halPropId, null);
     }
 
+    private List<Integer> getPropConfigArray(int halPropId) {
+        VehiclePropConfig propConfig = getPropConfig(halPropId);
+        return propConfig.configArray;
+    }
+
     private int getNumIntegerSensors(int halPropId) {
         int count = Obd2IntegerSensorIndex.LAST_SYSTEM_INDEX + 1;
-        count = count + getPropConfig(halPropId).configArray.get(0);
+        List<Integer> configArray = getPropConfigArray(halPropId);
+        if(configArray.size() < 2) {
+            Log.e(CarLog.TAG_DIAGNOSTIC, String.format(
+                    "property 0x%x does not specify the number of vendor-specific properties." +
+                            "assuming 0.", halPropId));
+        }
+        else {
+            count += configArray.get(0);
+        }
         return count;
     }
 
     private int getNumFloatSensors(int halPropId) {
         int count = Obd2FloatSensorIndex.LAST_SYSTEM_INDEX + 1;
-        count = count + getPropConfig(halPropId).configArray.get(1);
+        List<Integer> configArray = getPropConfigArray(halPropId);
+        if(configArray.size() < 2) {
+            Log.e(CarLog.TAG_DIAGNOSTIC, String.format(
+                "property 0x%x does not specify the number of vendor-specific properties." +
+                    "assuming 0.", halPropId));
+        }
+        else {
+            count += configArray.get(1);
+        }
         return count;
     }
 

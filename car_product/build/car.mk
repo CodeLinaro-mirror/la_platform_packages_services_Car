@@ -18,7 +18,6 @@
 
 PRODUCT_PACKAGES += \
     Bluetooth \
-    bt-map-service \
     OneTimeInitializer \
     Provision \
     SystemUI \
@@ -32,7 +31,9 @@ PRODUCT_PACKAGES += \
 
 # This is for testing
 PRODUCT_PACKAGES += \
-    EmbeddedKitchenSinkApp
+    EmbeddedKitchenSinkApp \
+    VmsPublisherClientSample \
+    VmsSubscriberClientSample
 
 PRODUCT_COPY_FILES := \
     frameworks/av/media/libeffects/data/audio_effects.conf:system/etc/audio_effects.conf \
@@ -66,12 +67,6 @@ PRODUCT_PROPERTY_OVERRIDES := \
     ro.config.alarm_alert=Oxygen.ogg \
     $(PRODUCT_PROPERTY_OVERRIDES) \
 
-# SetupWizard requires internet access before continuing
-# (hot sim or wifi not blocked by captive portal)
-PRODUCT_PROPERTY_OVERRIDES += \
-    ro.setupwizard.require_network=any
-
-
 PRODUCT_PROPERTY_OVERRIDES += \
     keyguard.no_require_sim=true
 
@@ -90,6 +85,7 @@ PRODUCT_PACKAGES += \
     Stream \
     CarHvacApp \
     CarMapsPlaceholder \
+    CarLatinIME \
     CarUsbHandler \
     android.car \
     libvehiclemonitor-native \
