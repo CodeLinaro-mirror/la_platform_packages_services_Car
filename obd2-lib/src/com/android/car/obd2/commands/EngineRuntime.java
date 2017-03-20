@@ -14,6 +14,23 @@
  * limitations under the License.
  */
 
-package android.car.vms;
+package com.android.car.obd2.commands;
 
-parcelable VmsProperty;
+import com.android.car.obd2.IntegerArrayStream;
+import com.android.car.obd2.Obd2Command;
+import java.util.Optional;
+
+public class EngineRuntime implements Obd2Command.OutputSemanticHandler<Integer> {
+    @Override
+    public int getPid() {
+        return 0x1F;
+    }
+
+    @Override
+    public Optional<Integer> consume(IntegerArrayStream data) {
+        return data.hasAtLeast(
+                2,
+                theData -> Optional.of(theData.consume() * 256 + theData.consume()),
+                theData -> Optional.empty());
+    }
+}

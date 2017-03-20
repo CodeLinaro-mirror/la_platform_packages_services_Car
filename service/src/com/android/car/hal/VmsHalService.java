@@ -21,14 +21,15 @@ import static java.lang.Integer.toHexString;
 import android.car.VehicleAreaType;
 import android.car.annotation.FutureFeature;
 import android.car.vms.IOnVmsMessageReceivedListener;
+import android.car.vms.VmsLayer;
 import android.hardware.automotive.vehicle.V2_0.VehiclePropConfig;
 import android.hardware.automotive.vehicle.V2_0.VehiclePropValue;
 import android.hardware.automotive.vehicle.V2_1.VehicleProperty;
 import android.hardware.automotive.vehicle.V2_1.VmsMessageIntegerValuesIndex;
 import android.hardware.automotive.vehicle.V2_1.VmsMessageType;
+import android.os.SystemClock;
 import android.util.Log;
 import com.android.car.CarLog;
-import com.android.car.VmsLayer;
 import com.android.car.VmsRouting;
 import com.android.internal.annotations.GuardedBy;
 import java.io.PrintWriter;
@@ -71,7 +72,7 @@ public class VmsHalService extends HalServiceBase {
      * The VmsPublisherService implements this interface to receive data from the HAL.
      */
     public interface VmsHalPublisherListener {
-        void onChange(int layerId, int layerVersion, boolean hasSubscribers);
+        void onChange(List<VmsLayer> layers, long sequence);
     }
 
     /**
@@ -161,15 +162,21 @@ public class VmsHalService extends HalServiceBase {
     }
 
     public Set<IOnVmsMessageReceivedListener> getListeners(VmsLayer layer) {
-        return mRouting.getListeners(layer);
+        synchronized (mLock) {
+            return mRouting.getListeners(layer);
+        }
     }
 
     public boolean isHalSubscribed(VmsLayer layer) {
-        return mRouting.isHalSubscribed(layer);
+        synchronized (mLock) {
+            return mRouting.isHalSubscribed(layer);
+        }
     }
 
-    public boolean hasLayerSubscriptions(VmsLayer layer) {
-        return mRouting.hasLayerSubscriptions(layer);
+    public List<VmsLayer> getSubscribedLayers() {
+        synchronized (mLock) {
+            return new ArrayList<>(mRouting.getSubscribedLayers());
+        }
     }
 
     public void addHalSubscription(VmsLayer layer) {
@@ -207,15 +214,17 @@ public class VmsHalService extends HalServiceBase {
     }
 
     public boolean containsListener(IOnVmsMessageReceivedListener listener) {
-        return mRouting.containsListener(listener);
+        synchronized (mLock) {
+            return mRouting.containsListener(listener);
+        }
     }
 
     /**
      * Notify all the publishers and the HAL on subscription changes regardless of who triggered
      * the change.
      *
-     * @param layer which is being subscribed to or unsubscribed from.
-     * @param hasListeners indicates if the notification is for subscription or unsubscription.
+     * @param layer          layer which is being subscribed to or unsubscribed from.
+     * @param hasSubscribers indicates if the notification is for subscription or unsubscription.
      */
     public void notifyPublishers(VmsLayer layer, boolean hasSubscribers) {
         synchronized (mLock) {
@@ -224,7 +233,10 @@ public class VmsHalService extends HalServiceBase {
 
             // Notify the App publishers
             for (VmsHalPublisherListener listener : mPublisherListeners) {
-                listener.onChange(layer.getId(), layer.getVersion(), hasSubscribers);
+                // Besides the list of layers, also a timestamp is provided to the clients.
+                // They should ignore any notification with a timestamp that is older than the most
+                // recent timestamp they have seen.
+                listener.onChange(getSubscribedLayers(), SystemClock.elapsedRealtimeNanos());
             }
         }
     }
@@ -303,14 +315,10 @@ public class VmsHalService extends HalServiceBase {
                     listener.onChange(layerId, layerVersion, payload);
                 }
             } else if (messageType == VmsMessageType.SUBSCRIBE) {
-                for (VmsHalPublisherListener listener : mPublisherListeners) {
-                    listener.onChange(layerId, layerVersion, true);
-                }
+                addHalSubscription(new VmsLayer(layerId, layerVersion));
             } else {
                 // messageType == VmsMessageType.UNSUBSCRIBE
-                for (VmsHalPublisherListener listener : mPublisherListeners) {
-                    listener.onChange(layerId, layerVersion, false);
-                }
+                removeHalSubscription(new VmsLayer(layerId, layerVersion));
             }
         }
     }

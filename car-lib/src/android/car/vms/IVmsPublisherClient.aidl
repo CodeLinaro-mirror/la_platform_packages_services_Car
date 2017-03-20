@@ -17,6 +17,7 @@
 package android.car.vms;
 
 import android.car.vms.IVmsPublisherService;
+import android.car.vms.VmsLayer;
 
 /**
  * @hide
@@ -24,12 +25,17 @@ import android.car.vms.IVmsPublisherService;
 interface IVmsPublisherClient {
     /**
     * Once the VmsPublisherService is bound to the client, this callback is used to set the
-    * binder that the client can use to invoke publisher services.
+    * binder that the client can use to invoke publisher services. This also gives the client
+    * the token it should use when calling the service.
     */
-    oneway void setVmsPublisherService(IVmsPublisherService service) = 0;
+    oneway void setVmsPublisherService(in IBinder token, IVmsPublisherService service) = 0;
 
     /**
      * The VmsPublisherService uses this callback to notify about subscription changes.
+     * @param layers   all the layers that have subscribers.
+     * @param sequence a monotonicallly increasing number, clients should ignore any packet with a
+     *                 sequence number that is less than the highest sequence number they have seen
+     *                 thus far.
      */
-    oneway void onVmsSubscriptionChange(int layer, int version, boolean hasSubscribers) = 1;
+    oneway void onVmsSubscriptionChange(in List<VmsLayer> layers, long sequence) = 1;
 }
