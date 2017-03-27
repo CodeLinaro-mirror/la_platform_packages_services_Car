@@ -1,13 +1,11 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!--
-/**
- * Copyright (c) 2015, The Android Open Source Project
+/*
+ * Copyright (C) 2017 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *      http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,8 +13,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
--->
-<resources>
-    <bool name="def_device_provisioned">false</bool>
-    <integer name="add_users_when_locked">1</integer>
-</resources>
+
+package android.car.vms;
+
+import android.car.vms.VmsLayer;
+
+/**
+ * @hide
+ */
+oneway interface IVmsSubscriberClient {
+    /**
+     * A VmsService uses this callback to pass messages to subscribers.
+     */
+    void onVmsMessageReceived(in int layerId, in int layerVersion, in byte[] payload) = 0;
+
+    void onLayersAvailabilityChange(in List<VmsLayer> availableLayers) = 1;
+}
