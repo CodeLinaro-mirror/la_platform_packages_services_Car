@@ -18,6 +18,7 @@ package android.car.vms;
 
 import android.car.vms.VmsLayer;
 import android.car.vms.VmsLayersOffering;
+import android.car.vms.VmsSubscriptionState;
 
 /**
  * Exposes publisher services to VMS clients.
@@ -28,12 +29,12 @@ interface IVmsPublisherService {
     /**
      * Client call to publish a message.
      */
-    oneway void publish(in IBinder token, int layer, int version, in byte[] message) = 0;
+    oneway void publish(in IBinder token, in VmsLayer layer, in byte[] message) = 0;
 
     /**
      * Returns the list of VmsLayers that has any clients subscribed to it.
      */
-    List<VmsLayer> getSubscriptions() = 1;
+    VmsSubscriptionState getSubscriptions() = 1;
 
     /**
      * Sets which layers the publisher can publish under which dependencties.

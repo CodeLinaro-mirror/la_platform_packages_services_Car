@@ -22,6 +22,7 @@ import android.car.VehicleAreaType;
 import android.car.annotation.FutureFeature;
 import android.car.vms.IVmsSubscriberClient;
 import android.car.vms.VmsLayer;
+import android.car.vms.VmsSubscriptionState;
 import android.hardware.automotive.vehicle.V2_0.VehiclePropConfig;
 import android.hardware.automotive.vehicle.V2_0.VehiclePropValue;
 import android.hardware.automotive.vehicle.V2_1.VehicleProperty;
@@ -72,14 +73,14 @@ public class VmsHalService extends HalServiceBase {
      * The VmsPublisherService implements this interface to receive data from the HAL.
      */
     public interface VmsHalPublisherListener {
-        void onChange(List<VmsLayer> layers, long sequence);
+        void onChange(VmsSubscriptionState subscriptionState);
     }
 
     /**
      * The VmsSubscriberService implements this interface to receive data from the HAL.
      */
     public interface VmsHalSubscriberListener {
-        void onChange(int layerId, int layerVersion, byte[] payload);
+        void onChange(VmsLayer layer, byte[] payload);
     }
 
     /**
@@ -111,7 +112,7 @@ public class VmsHalService extends HalServiceBase {
     public void addSubscription(IVmsSubscriberClient listener, VmsLayer layer) {
         synchronized (mLock) {
             // Check if publishers need to be notified about this change in subscriptions.
-            boolean firstSubscriptionForLayer = !mRouting.getSubscribedLayers().contains(layer);
+            boolean firstSubscriptionForLayer = !mRouting.hasLayerSubscriptions(layer);
 
             // Add the listeners subscription to the layer
             mRouting.addSubscription(listener, layer);
@@ -134,7 +135,7 @@ public class VmsHalService extends HalServiceBase {
             mRouting.removeSubscription(listener, layer);
 
             // Check if publishers need to be notified about this change in subscriptions.
-            boolean layerHasSubscribers = mRouting.getSubscribedLayers().contains(layer);
+            boolean layerHasSubscribers = mRouting.hasLayerSubscriptions(layer);
 
             // Notify the publishers
             if (!layerHasSubscribers) {
@@ -173,16 +174,16 @@ public class VmsHalService extends HalServiceBase {
         }
     }
 
-    public List<VmsLayer> getSubscribedLayers() {
+    public VmsSubscriptionState getSubscriptionState() {
         synchronized (mLock) {
-            return new ArrayList<>(mRouting.getSubscribedLayers());
+            return mRouting.getSubscriptionState();
         }
     }
 
     public void addHalSubscription(VmsLayer layer) {
         synchronized (mLock) {
             // Check if publishers need to be notified about this change in subscriptions.
-            boolean firstSubscriptionForLayer = !mRouting.getSubscribedLayers().contains(layer);
+            boolean firstSubscriptionForLayer = !mRouting.hasLayerSubscriptions(layer);
 
             // Add the listeners subscription to the layer
             mRouting.addHalSubscription(layer);
@@ -204,7 +205,7 @@ public class VmsHalService extends HalServiceBase {
             mRouting.removeHalSubscription(layer);
 
             // Check if publishers need to be notified about this change in subscriptions.
-            boolean layerHasSubscribers = mRouting.getSubscribedLayers().contains(layer);
+            boolean layerHasSubscribers = mRouting.hasLayerSubscriptions(layer);
 
             // Notify the publishers
             if (!layerHasSubscribers) {
@@ -229,14 +230,14 @@ public class VmsHalService extends HalServiceBase {
     public void notifyPublishers(VmsLayer layer, boolean hasSubscribers) {
         synchronized (mLock) {
             // notify the HAL
-            setSubscriptionRequest(layer.getId(), layer.getVersion(), hasSubscribers);
+            setSubscriptionRequest(layer, hasSubscribers);
 
             // Notify the App publishers
             for (VmsHalPublisherListener listener : mPublisherListeners) {
                 // Besides the list of layers, also a timestamp is provided to the clients.
                 // They should ignore any notification with a timestamp that is older than the most
                 // recent timestamp they have seen.
-                listener.onChange(getSubscribedLayers(), SystemClock.elapsedRealtimeNanos());
+                listener.onChange(getSubscriptionState());
             }
         }
     }
@@ -312,7 +313,7 @@ public class VmsHalService extends HalServiceBase {
 
                 // Send the message.
                 for (VmsHalSubscriberListener listener : mSubscriberListeners) {
-                    listener.onChange(layerId, layerVersion, payload);
+                    listener.onChange(new VmsLayer(layerId, layerVersion), payload);
                 }
             } else if (messageType == VmsMessageType.SUBSCRIBE) {
                 addHalSubscription(new VmsLayer(layerId, layerVersion));
@@ -332,22 +333,20 @@ public class VmsHalService extends HalServiceBase {
     /**
      * Updates the VMS HAL property with the given value.
      *
-     * @param property the value used to update the HAL property.
-     * @return         true if the call to the HAL to update the property was successful.
+     * @param layer          layer data to update the hal property.
+     * @param hasSubscribers if it is a subscribe or unsubscribe message.
+     * @return true if the call to the HAL to update the property was successful.
      */
-    public boolean setSubscriptionRequest(int layerId, int layerVersion, boolean hasSubscribers) {
+    public boolean setSubscriptionRequest(VmsLayer layer, boolean hasSubscribers) {
         VehiclePropValue vehiclePropertyValue = toVehiclePropValue(
-            hasSubscribers ? VmsMessageType.SUBSCRIBE : VmsMessageType.UNSUBSCRIBE,
-            layerId,
-            layerVersion);
+                hasSubscribers ? VmsMessageType.SUBSCRIBE : VmsMessageType.UNSUBSCRIBE, layer);
         return setPropertyValue(vehiclePropertyValue);
     }
 
-    public boolean setDataMessage(int layerId, int layerVersion, byte[] payload) {
+    public boolean setDataMessage(VmsLayer layer, byte[] payload) {
         VehiclePropValue vehiclePropertyValue = toVehiclePropValue(VmsMessageType.DATA,
-            layerId,
-            layerVersion,
-            payload);
+                layer,
+                payload);
         return setPropertyValue(vehiclePropertyValue);
     }
 
@@ -362,26 +361,23 @@ public class VmsHalService extends HalServiceBase {
     }
 
     /** Creates a {@link VehiclePropValue} */
-    static VehiclePropValue toVehiclePropValue(int messageType,
-                                               int layerId,
-                                               int layerVersion) {
+    private static VehiclePropValue toVehiclePropValue(int messageType, VmsLayer layer) {
         VehiclePropValue vehicleProp = new VehiclePropValue();
         vehicleProp.prop = HAL_PROPERTY_ID;
         vehicleProp.areaId = VehicleAreaType.VEHICLE_AREA_TYPE_NONE;
         VehiclePropValue.RawValue v = vehicleProp.value;
 
         v.int32Values.add(messageType);
-        v.int32Values.add(layerId);
-        v.int32Values.add(layerVersion);
+        v.int32Values.add(layer.getId());
+        v.int32Values.add(layer.getVersion());
         return vehicleProp;
     }
 
-    /** Creates a {@link VehiclePropValue} with payload*/
-    static VehiclePropValue toVehiclePropValue(int messageType,
-                                               int layerId,
-                                               int layerVersion,
-                                               byte[] payload) {
-        VehiclePropValue vehicleProp = toVehiclePropValue(messageType, layerId, layerVersion);
+    /** Creates a {@link VehiclePropValue} with payload */
+    private static VehiclePropValue toVehiclePropValue(int messageType,
+            VmsLayer layer,
+            byte[] payload) {
+        VehiclePropValue vehicleProp = toVehiclePropValue(messageType, layer);
         VehiclePropValue.RawValue v = vehicleProp.value;
         v.bytes.ensureCapacity(payload.length);
         for (byte b : payload) {

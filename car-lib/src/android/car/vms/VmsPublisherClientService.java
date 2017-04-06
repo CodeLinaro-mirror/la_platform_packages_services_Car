@@ -90,25 +90,21 @@ public abstract class VmsPublisherClientService extends Service {
 
     /**
      * Publishers need to implement this method to receive notifications of subscription changes.
-     * TODO(antoniocortes): evaluate adding subscriber id to the list of parameters. This should be
-     * implemented together with the routing in VmsPublisherService.
      *
-     * @param layers          layers with subscribers.
-     * @param sequence        monotonically increasing sequence.
+     * @param subscriptionState  layers with subscribers and a sequence number.
      */
-    public abstract void onVmsSubscriptionChange(List<VmsLayer> layers, long sequence);
+    public abstract void onVmsSubscriptionChange(VmsSubscriptionState subscriptionState);
 
     /**
      * Uses the VmsPublisherService binder to publish messages.
      *
-     * @param layerId   the layer to publish to.
-     * @param layerVersion the layer's version to publish to.
+     * @param layer   the layer to publish to.
      * @param payload the message to be sent.
      * @return if the call to the method VmsPublisherService.publish was successful.
      */
-    public final boolean publish(int layerId, int layerVersion, byte[] payload) {
+    public final boolean publish(VmsLayer layer, byte[] payload) {
         if (DBG) {
-            Log.d(TAG, "Publishing for layer ID: " + layerId + " Version: " + layerVersion);
+            Log.d(TAG, "Publishing for layer : " + layer);
         }
         if (mVmsPublisherService == null) {
             throw new IllegalStateException("VmsPublisherService not set.");
@@ -122,7 +118,7 @@ public abstract class VmsPublisherClientService extends Service {
             throw new IllegalStateException("VmsPublisherService does not have a valid token.");
         }
         try {
-            mVmsPublisherService.publish(token, layerId, layerVersion, payload);
+            mVmsPublisherService.publish(token, layer, payload);
             return true;
         } catch (RemoteException e) {
             Log.e(TAG, "unable to publish message: " + payload, e);
@@ -136,7 +132,7 @@ public abstract class VmsPublisherClientService extends Service {
      *
      * @return list of layer/version or null in case of error.
      */
-    public final @Nullable List<VmsLayer> getSubscriptions() {
+    public final @Nullable VmsSubscriptionState getSubscriptions() {
         if (mVmsPublisherService == null) {
             throw new IllegalStateException("VmsPublisherService not set.");
         }
@@ -181,28 +177,27 @@ public abstract class VmsPublisherClientService extends Service {
         }
 
         @Override
-        public void onVmsSubscriptionChange(List<VmsLayer> layers, long sequence)
+        public void onVmsSubscriptionChange(VmsSubscriptionState subscriptionState)
                 throws RemoteException {
             VmsPublisherClientService vmsPublisherClientService = mVmsPublisherClientService.get();
             if (vmsPublisherClientService == null) return;
             if (DBG) {
-                Log.d(TAG, "subscription event, # layers: " + layers.size()
-                        + ", sequence: " + sequence);
+                Log.d(TAG, "subscription event: " + subscriptionState);
             }
             synchronized (mSequenceLock) {
-                if (sequence <= mSequence) {
+                if (subscriptionState.getSequenceNumber() <= mSequence) {
                     Log.w(TAG, "Sequence out of order. Current sequence = " + mSequence
-                            + "; expected new sequence = " + sequence);
+                            + "; expected new sequence = " + subscriptionState.getSequenceNumber());
                     // Do not propagate old notifications.
                     return;
                 } else {
-                    mSequence = sequence;
+                    mSequence = subscriptionState.getSequenceNumber();
                 }
             }
             Handler handler = vmsPublisherClientService.mHandler;
             handler.sendMessage(
                     handler.obtainMessage(VmsEventHandler.ON_SUBSCRIPTION_CHANGE_EVENT,
-                            new OnVmsSubscriptionChangeData(layers, sequence)));
+                            subscriptionState));
         }
     }
 
@@ -227,8 +222,8 @@ public abstract class VmsPublisherClientService extends Service {
             if (service == null) return;
             switch (msg.what) {
                 case ON_SUBSCRIPTION_CHANGE_EVENT:
-                    OnVmsSubscriptionChangeData data = (OnVmsSubscriptionChangeData) msg.obj;
-                    service.onVmsSubscriptionChange(data.getLayers(), data.getSequence());
+                    VmsSubscriptionState subscriptionState = (VmsSubscriptionState) msg.obj;
+                    service.onVmsSubscriptionChange(subscriptionState);
                     break;
                 case SET_SERVICE_CALLBACK:
                     service.setVmsPublisherService((IVmsPublisherService) msg.obj);
@@ -237,27 +232,6 @@ public abstract class VmsPublisherClientService extends Service {
                     Log.e(TAG, "Event type not handled:  " + msg.what);
                     break;
             }
-        }
-    }
-
-    /**
-     * Used to forward data from the binder thread to the main thread.
-     */
-    private static final class OnVmsSubscriptionChangeData {
-        private final List<VmsLayer> mLayers;
-        private final long mSequence;
-
-        public OnVmsSubscriptionChangeData(List<VmsLayer> layers, long sequence) {
-            mLayers = layers;
-            mSequence = sequence;
-        }
-
-        public List<VmsLayer> getLayers() {
-            return mLayers;
-        }
-
-        public long getSequence() {
-            return mSequence;
         }
     }
 }

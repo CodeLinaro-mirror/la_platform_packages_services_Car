@@ -22,6 +22,7 @@ import android.car.vms.IVmsPublisherClient;
 import android.car.vms.IVmsPublisherService;
 import android.car.vms.VmsLayer;
 import android.car.vms.VmsLayersOffering;
+import android.car.vms.VmsSubscriptionState;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -105,12 +106,11 @@ public class VmsPublisherService extends IVmsPublisherService.Stub
 
     // Implements IVmsPublisherService interface.
     @Override
-    public void publish(IBinder token, int layerId, int layerVersion, byte[] payload) {
+    public void publish(IBinder token, VmsLayer layer, byte[] payload) {
         if (DBG) {
-            Log.d(TAG, "Publishing for layer ID: " + layerId + " Version: " + layerVersion);
+            Log.d(TAG, "Publishing for layer: " + layer);
         }
         ICarImpl.assertVmsPublisherPermission(mContext);
-        VmsLayer layer = new VmsLayer(layerId, layerVersion);
 
         // Send the message to application listeners.
         Set<IVmsSubscriberClient> listeners = mHal.getListeners(layer);
@@ -120,7 +120,7 @@ public class VmsPublisherService extends IVmsPublisherService.Stub
         }
         for (IVmsSubscriberClient listener : listeners) {
             try {
-                listener.onVmsMessageReceived(layerId, layerVersion, payload);
+                listener.onVmsMessageReceived(layer, payload);
             } catch (RemoteException ex) {
                 Log.e(TAG, "unable to publish to listener: " + listener);
             }
@@ -129,16 +129,16 @@ public class VmsPublisherService extends IVmsPublisherService.Stub
         // Send the message to HAL
         if (mHal.isHalSubscribed(layer)) {
             Log.d(TAG, "HAL is subscribed");
-            mHal.setDataMessage(layerId, layerVersion, payload);
+            mHal.setDataMessage(layer, payload);
         } else {
             Log.d(TAG, "HAL is NOT subscribed");
         }
     }
 
     @Override
-    public List<VmsLayer> getSubscriptions() {
+    public VmsSubscriptionState getSubscriptions() {
         ICarImpl.assertVmsPublisherPermission(mContext);
-        return mHal.getSubscribedLayers();
+        return mHal.getSubscriptionState();
     }
 
     // Implements VmsHalListener interface
@@ -147,11 +147,11 @@ public class VmsPublisherService extends IVmsPublisherService.Stub
      * Therefore this method only sees a non-decreasing sequence.
      */
     @Override
-    public void onChange(List<VmsLayer> layers, long sequence) {
+    public void onChange(VmsSubscriptionState subscriptionState) {
         // Send the message to application listeners.
         for (IVmsPublisherClient client : mPublisherManager.getClients()) {
             try {
-                client.onVmsSubscriptionChange(layers, sequence);
+                client.onVmsSubscriptionChange(subscriptionState);
             } catch (RemoteException ex) {
                 Log.e(TAG, "unable to send notification to: " + client, ex);
             }

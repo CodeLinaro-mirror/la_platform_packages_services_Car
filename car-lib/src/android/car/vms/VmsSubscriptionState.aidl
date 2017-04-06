@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2015 The Android Open Source Project
+ * Copyright (C) 2017 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,13 +14,6 @@
  * limitations under the License.
  */
 
-package com.google.android.car.kitchensink;
+package android.car.vms;
 
-import android.support.car.app.CarProxyActivity;
-
-public class KitchenSinkProxyActivity extends CarProxyActivity {
-
-    public KitchenSinkProxyActivity() {
-        super(KitchenSinkActivity.class, true);
-    }
-}
+parcelable VmsSubscriptionState;

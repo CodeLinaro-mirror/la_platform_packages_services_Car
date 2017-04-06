@@ -18,6 +18,7 @@ package com.google.android.car.vms.publisher;
 
 import android.car.vms.VmsLayer;
 import android.car.vms.VmsPublisherClientService;
+import android.car.vms.VmsSubscriptionState;
 import android.os.Handler;
 import android.os.Message;
 
@@ -30,8 +31,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public class VmsPublisherClientSampleService extends VmsPublisherClientService {
     public static final int PUBLISH_EVENT = 0;
-    public static final int TEST_LAYER_ID = 0;
-    public static final int TEST_LAYER_VERSION = 0;
+    public static final VmsLayer TEST_LAYER = new VmsLayer(0,0);
 
     private byte mCounter = 0;
     private AtomicBoolean mInitialized = new AtomicBoolean(false);
@@ -46,18 +46,18 @@ public class VmsPublisherClientSampleService extends VmsPublisherClientService {
     };
 
     /**
-     * Notifies that the publisher services are ready to be used: {@link #publish(int, int, byte[])}
-     * and {@link #getSubscribers()}.
+     * Notifies that the publisher services are ready to be used: {@link #publish(VmsLayer, byte[])}
+     * and {@link #getSubscriptions()}.
      */
     @Override
     public void onVmsPublisherServiceReady() {
     }
 
     @Override
-    public void onVmsSubscriptionChange(List<VmsLayer> layers, long sequence) {
+    public void onVmsSubscriptionChange(VmsSubscriptionState subscriptionState) {
         if (mInitialized.compareAndSet(false, true)) {
-            for (VmsLayer layer : layers) {
-                if (layer.getId() == TEST_LAYER_ID && layer.getVersion() == TEST_LAYER_VERSION) {
+            for (VmsLayer layer : subscriptionState.getLayers()) {
+                if (layer.equals(TEST_LAYER)) {
                     mHandler.sendEmptyMessage(PUBLISH_EVENT);
                 }
             }
@@ -65,7 +65,7 @@ public class VmsPublisherClientSampleService extends VmsPublisherClientService {
     }
 
     private void periodicPublish() {
-        publish(TEST_LAYER_ID, TEST_LAYER_VERSION, new byte[]{mCounter});
+        publish(TEST_LAYER, new byte[]{mCounter});
         ++mCounter;
         mHandler.sendEmptyMessageDelayed(PUBLISH_EVENT, 1000);
     }
