@@ -47,16 +47,6 @@ public class ICarImpl extends ICar.Stub {
     public static final String INTERNAL_SYSTEM_ACTIVITY_MONITORING_SERVICE =
             "system_activity_monitoring";
 
-    // load jni for all services here
-    static {
-        try {
-            System.loadLibrary("jni_car_service");
-        } catch (UnsatisfiedLinkError ex) {
-            // Unable to load native library when loaded from the testing framework.
-            Log.e(CarLog.TAG_SERVICE, "Failed to load jni_car_service library: " + ex.getMessage());
-        }
-    }
-
     private final Context mContext;
     private final VehicleHal mHal;
 
@@ -69,7 +59,6 @@ public class ICarImpl extends ICar.Stub {
     private final CarAudioService mCarAudioService;
     private final CarProjectionService mCarProjectionService;
     private final CarCabinService mCarCabinService;
-    private final CarCameraService mCarCameraService;
     private final CarHvacService mCarHvacService;
     private final CarRadioService mCarRadioService;
     private final CarNightService mCarNightService;
@@ -112,7 +101,6 @@ public class ICarImpl extends ICar.Stub {
         mCarCabinService = new CarCabinService(serviceContext, mHal.getCabinHal());
         mCarHvacService = new CarHvacService(serviceContext, mHal.getHvacHal());
         mCarRadioService = new CarRadioService(serviceContext, mHal.getRadioHal());
-        mCarCameraService = new CarCameraService(serviceContext);
         mCarNightService = new CarNightService(serviceContext, mCarSensorService);
         mInstrumentClusterService = new InstrumentClusterService(serviceContext,
                 mAppFocusService, mCarInputService);
@@ -145,7 +133,6 @@ public class ICarImpl extends ICar.Stub {
                 mCarCabinService,
                 mCarHvacService,
                 mCarRadioService,
-                mCarCameraService,
                 mCarNightService,
                 mInstrumentClusterService,
                 mCarProjectionService,
@@ -201,9 +188,6 @@ public class ICarImpl extends ICar.Stub {
             case Car.CABIN_SERVICE:
                 assertCabinPermission(mContext);
                 return mCarCabinService;
-            case Car.CAMERA_SERVICE:
-                assertCameraPermission(mContext);
-                return mCarCameraService;
             case Car.DIAGNOSTIC_SERVICE:
                 FeatureUtil.assertFeature(FeatureConfiguration.ENABLE_DIAGNOSTIC);
                 if (FeatureConfiguration.ENABLE_DIAGNOSTIC) {
@@ -272,10 +256,6 @@ public class ICarImpl extends ICar.Stub {
 
     public static void assertCabinPermission(Context context) {
         assertPermission(context, Car.PERMISSION_CAR_CABIN);
-    }
-
-    public static void assertCameraPermission(Context context) {
-        assertPermission(context, Car.PERMISSION_CAR_CAMERA);
     }
 
     public static void assertNavigationManagerPermission(Context context) {
