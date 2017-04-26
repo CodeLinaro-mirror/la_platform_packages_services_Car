@@ -26,10 +26,11 @@ import android.car.CarManagerBase;
 import android.car.CarNotConnectedException;
 import android.content.Context;
 import android.os.Handler;
-import android.os.Handler.Callback;
 import android.os.IBinder;
 import android.os.RemoteException;
 import android.util.Log;
+import android.util.SparseArray;
+import android.util.SparseIntArray;
 
 import com.android.car.internal.CarRatedListeners;
 import com.android.car.internal.SingleMessageHandler;
@@ -37,7 +38,7 @@ import com.android.car.internal.SingleMessageHandler;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.ref.WeakReference;
-import java.util.HashMap;
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.function.Consumer;
@@ -192,8 +193,7 @@ public final class CarSensorManager implements CarManagerBase {
      * To keep record of locally active sensors. Key is sensor type. This is used as a basic lock
      * for all client accesses.
      */
-    private final HashMap<Integer, CarSensorListeners> mActiveSensorListeners =
-            new HashMap<Integer, CarSensorListeners>();
+    private final SparseArray<CarSensorListeners> mActiveSensorListeners = new SparseArray<>();
 
     /** Handles call back into clients. */
     private final SingleMessageHandler<CarSensorEvent> mHandlerCallback;
@@ -206,8 +206,10 @@ public final class CarSensorManager implements CarManagerBase {
                 MSG_SENSOR_EVENTS) {
             @Override
             protected void handleEvent(CarSensorEvent event) {
-                CarSensorListeners listeners =
-                    mActiveSensorListeners.get(event.sensorType);
+                CarSensorListeners listeners;
+                synchronized (mActiveSensorListeners) {
+                    listeners = mActiveSensorListeners.get(event.sensorType);
+                }
                 if (listeners != null) {
                     listeners.onSensorChanged(event);
                 }
@@ -296,9 +298,12 @@ public final class CarSensorManager implements CarManagerBase {
      * @param listener
      * @param sensorType sensor type to subscribe.
      * @param rate how fast the sensor events are delivered. It should be one of
-     *        {@link #SENSOR_RATE_FASTEST} or {@link #SENSOR_RATE_NORMAL}. Rate may not be respected
-     *        especially when the same sensor is registered with different listener with different
-     *        rates.
+     *        {@link #SENSOR_RATE_FASTEST}, {@link #SENSOR_RATE_FAST}, {@link #SENSOR_RATE_UI},
+     *        {@link #SENSOR_RATE_NORMAL}. Rate may not be respected especially when the same sensor
+     *        is registered with different listener with different rates. Also, rate might be
+     *        ignored when vehicle property raises events only when the value is actually changed,
+     *        for example {@link #SENSOR_TYPE_PARKING_BRAKE} will raise an event only when parking
+     *        brake was engaged or disengaged.
      * @return if the sensor was successfully enabled.
      * @throws CarNotConnectedException if the connection to the car service has been lost.
      * @throws IllegalArgumentException for wrong argument like wrong rate
@@ -309,7 +314,8 @@ public final class CarSensorManager implements CarManagerBase {
     public boolean registerListener(OnSensorChangedListener listener, @SensorType int sensorType,
             @SensorRate int rate) throws CarNotConnectedException, IllegalArgumentException {
         assertSensorType(sensorType);
-        if (rate != SENSOR_RATE_FASTEST && rate != SENSOR_RATE_NORMAL) {
+        if (rate != SENSOR_RATE_FASTEST && rate != SENSOR_RATE_NORMAL
+                && rate != SENSOR_RATE_UI && rate != SENSOR_RATE_FAST) {
             throw new IllegalArgumentException("wrong rate " + rate);
         }
         synchronized(mActiveSensorListeners) {
@@ -344,10 +350,8 @@ public final class CarSensorManager implements CarManagerBase {
     public void unregisterListener(OnSensorChangedListener listener) {
         //TODO: removing listener should reset update rate, bug: 32060307
         synchronized(mActiveSensorListeners) {
-            Iterator<Integer> sensorIterator = mActiveSensorListeners.keySet().iterator();
-            while (sensorIterator.hasNext()) {
-                Integer sensor = sensorIterator.next();
-                doUnregisterListenerLocked(listener, sensor, sensorIterator);
+            for (int i = 0; i < mActiveSensorListeners.size(); i++) {
+                doUnregisterListenerLocked(listener, mActiveSensorListeners.keyAt(i));
             }
         }
     }
@@ -360,12 +364,11 @@ public final class CarSensorManager implements CarManagerBase {
      */
     public void unregisterListener(OnSensorChangedListener listener, @SensorType int sensorType) {
         synchronized(mActiveSensorListeners) {
-            doUnregisterListenerLocked(listener, sensorType, null);
+            doUnregisterListenerLocked(listener, sensorType);
         }
     }
 
-    private void doUnregisterListenerLocked(OnSensorChangedListener listener, Integer sensor,
-            Iterator<Integer> sensorIterator) {
+    private void doUnregisterListenerLocked(OnSensorChangedListener listener, Integer sensor) {
         CarSensorListeners listeners = mActiveSensorListeners.get(sensor);
         if (listeners != null) {
             boolean needsServerUpdate = false;
@@ -379,11 +382,7 @@ public final class CarSensorManager implements CarManagerBase {
                 } catch (RemoteException e) {
                     //ignore
                 }
-                if (sensorIterator == null) {
-                    mActiveSensorListeners.remove(sensor);
-                } else {
-                    sensorIterator.remove();
-                }
+                mActiveSensorListeners.remove(sensor);
             } else if (needsServerUpdate) {
                 try {
                     registerOrUpdateSensorListener(sensor, listeners.getRate());
@@ -479,7 +478,11 @@ public final class CarSensorManager implements CarManagerBase {
                 return;
             }
             mLastUpdateTime = updateTime;
-            getListeners().forEach(new Consumer<OnSensorChangedListener>() {
+            List<OnSensorChangedListener> listeners;
+            synchronized (mActiveSensorListeners) {
+                listeners = new ArrayList<>(getListeners());
+            }
+            listeners.forEach(new Consumer<OnSensorChangedListener>() {
                 @Override
                 public void accept(OnSensorChangedListener listener) {
                     listener.onSensorChanged(event);

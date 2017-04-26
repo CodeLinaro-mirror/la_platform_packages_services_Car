@@ -21,8 +21,6 @@ import static com.android.car.CarServiceUtils.toFloatArray;
 import static com.android.car.CarServiceUtils.toIntArray;
 import static java.lang.Integer.toHexString;
 
-import com.google.android.collect.Lists;
-
 import android.annotation.CheckResult;
 import android.car.annotation.FutureFeature;
 import android.hardware.automotive.vehicle.V2_0.IVehicle;
@@ -41,6 +39,8 @@ import android.os.SystemClock;
 import android.util.ArraySet;
 import android.util.Log;
 import android.util.SparseArray;
+
+import com.google.android.collect.Lists;
 
 import com.android.car.CarLog;
 import com.android.car.internal.FeatureConfiguration;
@@ -404,8 +404,10 @@ public class VehicleHal extends IVehicleCallback.Stub {
     }
 
     public VehiclePropValue get(int propertyId, int areaId) throws PropertyTimeoutException {
-        Log.i(CarLog.TAG_HAL, "get, property: 0x" + toHexString(propertyId)
-                + ", areaId: 0x" + toHexString(areaId));
+        if (DBG) {
+            Log.i(CarLog.TAG_HAL, "get, property: 0x" + toHexString(propertyId)
+                    + ", areaId: 0x" + toHexString(areaId));
+        }
         VehiclePropValue propValue = new VehiclePropValue();
         propValue.prop = propertyId;
         propValue.areaId = areaId;
@@ -492,10 +494,9 @@ public class VehicleHal extends IVehicleCallback.Stub {
             for (VehiclePropValue v : propValues) {
                 HalServiceBase service = mPropertyHandlers.get(v.prop);
                 if(service == null) {
-                    if (DBG) {
-                        Log.d(CarLog.TAG_HAL, "HalService is null for " + v.prop);
-                    }
-                    return;
+                    Log.e(CarLog.TAG_HAL, "HalService not found for prop: 0x"
+                        + toHexString(v.prop));
+                    continue;
                 }
                 service.getDispatchList().add(v);
                 mServicesToDispatch.add(service);

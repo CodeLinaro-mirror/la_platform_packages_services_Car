@@ -59,9 +59,11 @@ import java.util.HashMap;
 public final class Car {
 
     /**
-     * Represent the version of Car API.
+     * Represent the version of Car API. This is only updated when there is API change.
+     * 1 : N
+     * 2 : O
      */
-    public static final int VERSION = 1;
+    public static final int VERSION = 2;
 
     /** Service name for {@link CarSensorManager}, to be used in {@link #getCarManager(String)}. */
     public static final String SENSOR_SERVICE = "sensor";
@@ -92,7 +94,6 @@ public final class Car {
     /**
      * @hide
      */
-    @SystemApi
     public static final String DIAGNOSTIC_SERVICE = "diagnostic";
 
     /**
@@ -248,7 +249,6 @@ public final class Car {
      * @hide
      */
     @FutureFeature
-    @SystemApi
     public static final String PERMISSION_CAR_DIAGNOSTIC_READ = "android.car.permission.DIAGNOSTIC_READ";
 
     /**
@@ -257,7 +257,6 @@ public final class Car {
      * @hide
      */
     @FutureFeature
-    @SystemApi
     public static final String PERMISSION_CAR_DIAGNOSTIC_CLEAR = "android.car.permission.DIAGNOSTIC_CLEAR";
 
     /** Type of car connection: platform runs directly in car. */
