@@ -14,6 +14,9 @@
 #
 #
 
+#disble build in PDK, missing ui-lib breaks build
+ifneq ($(TARGET_BUILD_PDK),true)
+
 LOCAL_PATH:= $(call my-dir)
 
 include $(CLEAR_VARS)
@@ -37,7 +40,7 @@ LOCAL_PROGUARD_ENABLED := disabled
 LOCAL_DEX_PREOPT := false
 
 LOCAL_STATIC_JAVA_LIBRARIES += \
-        android.hardware.automotive.vehicle@2.0-java-static \
+        android.hardware.automotive.vehicle-V2.0-java-static \
         vehicle-hal-support-lib \
         car-service-lib-for-test \
 
@@ -47,3 +50,5 @@ include packages/apps/Car/libs/car-stream-ui-lib/car-stream-ui-lib.mk
 include packages/services/Car/car-support-lib/car-support.mk
 
 include $(BUILD_PACKAGE)
+
+endif #TARGET_BUILD_PDK

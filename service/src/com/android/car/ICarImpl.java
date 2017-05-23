@@ -68,6 +68,7 @@ public class ICarImpl extends ICar.Stub {
     private final SystemStateControllerService mSystemStateControllerService;
     private final CarVendorExtensionService mCarVendorExtensionService;
     private final CarBluetoothService mCarBluetoothService;
+    private final PerUserCarServiceHelper mPerUserCarServiceHelper;
     @FutureFeature
     private CarDiagnosticService mCarDiagnosticService;
     @FutureFeature
@@ -108,8 +109,9 @@ public class ICarImpl extends ICar.Stub {
                 mCarPowerManagementService, mCarAudioService, this);
         mCarVendorExtensionService = new CarVendorExtensionService(serviceContext,
                 mHal.getVendorExtensionHal());
+        mPerUserCarServiceHelper = new PerUserCarServiceHelper(serviceContext);
         mCarBluetoothService = new CarBluetoothService(serviceContext, mCarCabinService,
-                mCarSensorService);
+                mCarSensorService, mPerUserCarServiceHelper);
         if (FeatureConfiguration.ENABLE_VEHICLE_MAP_SERVICE) {
             mVmsSubscriberService = new VmsSubscriberService(serviceContext, mHal.getVmsHal());
             mVmsPublisherService = new VmsPublisherService(serviceContext, mHal.getVmsHal());
@@ -138,7 +140,8 @@ public class ICarImpl extends ICar.Stub {
                 mCarProjectionService,
                 mSystemStateControllerService,
                 mCarVendorExtensionService,
-                mCarBluetoothService
+                mCarBluetoothService,
+                mPerUserCarServiceHelper
         ));
         if (FeatureConfiguration.ENABLE_VEHICLE_MAP_SERVICE) {
             allServices.add(mVmsSubscriberService);
