@@ -26,7 +26,9 @@ import android.content.pm.PackageManager;
 import android.hardware.automotive.vehicle.V2_0.IVehicle;
 import android.hardware.automotive.vehicle.V2_0.VehicleAreaDoor;
 import android.hardware.automotive.vehicle.V2_0.VehicleProperty;
+import android.os.Binder;
 import android.os.IBinder;
+import android.os.Process;
 import android.util.Log;
 
 import com.android.car.cluster.InstrumentClusterService;
@@ -35,6 +37,7 @@ import com.android.car.internal.FeatureConfiguration;
 import com.android.car.internal.FeatureUtil;
 import com.android.car.pm.CarPackageManagerService;
 import com.android.internal.annotations.GuardedBy;
+import com.android.internal.car.ICarServiceHelper;
 
 import java.io.PrintWriter;
 import java.util.ArrayList;
@@ -82,6 +85,9 @@ public class ICarImpl extends ICar.Stub {
     @GuardedBy("this")
     private CarTestService mCarTestService;
 
+    @GuardedBy("this")
+    private ICarServiceHelper mICarServiceHelper;
+
     public ICarImpl(Context serviceContext, IVehicle vehicle, SystemInterface systemInterface,
             CanBusErrorNotifier errorNotifier) {
         mContext = serviceContext;
@@ -116,10 +122,7 @@ public class ICarImpl extends ICar.Stub {
             mVmsSubscriberService = new VmsSubscriberService(serviceContext, mHal.getVmsHal());
             mVmsPublisherService = new VmsPublisherService(serviceContext, mHal.getVmsHal());
         }
-        if (FeatureConfiguration.ENABLE_DIAGNOSTIC) {
-            mCarDiagnosticService = new CarDiagnosticService(serviceContext,
-                    mHal.getDiagnosticHal());
-        }
+        mCarDiagnosticService = new CarDiagnosticService(serviceContext, mHal.getDiagnosticHal());
 
         // Be careful with order. Service depending on other service should be inited later.
         List<CarServiceBase> allServices = new ArrayList<>(Arrays.asList(
@@ -141,14 +144,12 @@ public class ICarImpl extends ICar.Stub {
                 mSystemStateControllerService,
                 mCarVendorExtensionService,
                 mCarBluetoothService,
+                mCarDiagnosticService,
                 mPerUserCarServiceHelper
         ));
         if (FeatureConfiguration.ENABLE_VEHICLE_MAP_SERVICE) {
             allServices.add(mVmsSubscriberService);
             allServices.add(mVmsPublisherService);
-        }
-        if (FeatureConfiguration.ENABLE_DIAGNOSTIC) {
-            allServices.add(mCarDiagnosticService);
         }
         mAllServices = allServices.toArray(new CarServiceBase[0]);
     }
@@ -176,6 +177,17 @@ public class ICarImpl extends ICar.Stub {
     }
 
     @Override
+    public void setCarServiceHelper(IBinder helper) {
+        int uid = Binder.getCallingUid();
+        if (uid != Process.SYSTEM_UID) {
+            throw new SecurityException("Only allowed from system");
+        }
+        synchronized (this) {
+            mICarServiceHelper = ICarServiceHelper.Stub.asInterface(helper);
+        }
+    }
+
+    @Override
     public IBinder getCarService(String serviceName) {
         switch (serviceName) {
             case Car.AUDIO_SERVICE:
@@ -192,11 +204,8 @@ public class ICarImpl extends ICar.Stub {
                 assertCabinPermission(mContext);
                 return mCarCabinService;
             case Car.DIAGNOSTIC_SERVICE:
-                FeatureUtil.assertFeature(FeatureConfiguration.ENABLE_DIAGNOSTIC);
-                if (FeatureConfiguration.ENABLE_DIAGNOSTIC) {
-                    assertAnyDiagnosticPermission(mContext);
-                    return mCarDiagnosticService;
-                }
+                assertAnyDiagnosticPermission(mContext);
+                return mCarDiagnosticService;
             case Car.HVAC_SERVICE:
                 assertHvacPermission(mContext);
                 return mCarHvacService;
@@ -284,7 +293,7 @@ public class ICarImpl extends ICar.Stub {
     @FutureFeature
     public static void assertAnyDiagnosticPermission(Context context) {
         assertAnyPermission(context,
-                Car.PERMISSION_CAR_DIAGNOSTIC_READ,
+                Car.PERMISSION_CAR_DIAGNOSTIC_READ_ALL,
                 Car.PERMISSION_CAR_DIAGNOSTIC_CLEAR);
     }
 

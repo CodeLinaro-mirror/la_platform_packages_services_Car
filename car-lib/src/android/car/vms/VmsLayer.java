@@ -24,8 +24,10 @@ import java.util.Objects;
 
 /**
  * A VMS Layer which can be subscribed to by VMS clients.
- * Consists of the layer ID and the layer version.
+ * Consists of the layer ID and the layer major version.
  *
+ * This class does not contain the minor version since all minor version are backward and forward
+ * compatible and should not be used for routing messages.
  * @hide
  */
 @FutureFeature
@@ -37,9 +39,13 @@ public final class VmsLayer implements Parcelable {
     // The layer version.
     private int mVersion;
 
-    public VmsLayer(int id, int version) {
+    // The layer type.
+    private int mSubType;
+
+    public VmsLayer(int id, int version, int subType) {
         mId = id;
         mVersion = version;
+        mSubType = subType;
     }
 
     public int getId() {
@@ -48,6 +54,10 @@ public final class VmsLayer implements Parcelable {
 
     public int getVersion() {
         return mVersion;
+    }
+
+    public int getSubType() {
+        return mSubType;
     }
 
     /**
@@ -62,7 +72,9 @@ public final class VmsLayer implements Parcelable {
             return false;
         }
         VmsLayer p = (VmsLayer) o;
-        return Objects.equals(p.mId, mId) && Objects.equals(p.mVersion, mVersion);
+        return Objects.equals(p.mId, mId) &&
+            Objects.equals(p.mVersion, mVersion) &&
+            Objects.equals(p.mSubType, mSubType);
     }
 
     /**
@@ -72,12 +84,12 @@ public final class VmsLayer implements Parcelable {
      */
     @Override
     public int hashCode() {
-        return Objects.hash(mId, mVersion);
+        return Objects.hash(mId, mVersion, mSubType);
     }
 
     @Override
     public String toString() {
-        return "VmsLayer{" + mId + " " + mVersion + "}";
+        return "VmsLayer{ ID: " + mId + ", Version: " + mVersion + ", Sub type: " + mSubType + "}";
     }
 
 
@@ -97,6 +109,7 @@ public final class VmsLayer implements Parcelable {
     public void writeToParcel(Parcel out, int flags) {
         out.writeInt(mId);
         out.writeInt(mVersion);
+        out.writeInt(mSubType);
     }
 
     @Override
@@ -111,5 +124,6 @@ public final class VmsLayer implements Parcelable {
     private void readFromParcel(Parcel in) {
         mId = in.readInt();
         mVersion = in.readInt();
+        mSubType = in.readInt();
     }
 }

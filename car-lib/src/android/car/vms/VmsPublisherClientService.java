@@ -31,7 +31,6 @@ import android.util.Log;
 import com.android.internal.annotations.GuardedBy;
 
 import java.lang.ref.WeakReference;
-import java.util.List;
 
 /**
  * Services that need VMS publisher services need to inherit from this class and also need to be
@@ -106,6 +105,42 @@ public abstract class VmsPublisherClientService extends Service {
         if (DBG) {
             Log.d(TAG, "Publishing for layer : " + layer);
         }
+
+        IBinder token = getTokenForPublisherServiceThreadSafe();
+
+        try {
+            mVmsPublisherService.publish(token, layer, payload);
+            return true;
+        } catch (RemoteException e) {
+            Log.e(TAG, "unable to publish message: " + payload, e);
+        }
+        return false;
+    }
+
+    /**
+     * Uses the VmsPublisherService binder to set the layers offering.
+     *
+     * @param offering the layers that the publisher may publish.
+     * @return if the call to VmsPublisherService.setLayersOffering was successful.
+     */
+    public final boolean setLayersOffering(VmsLayersOffering offering) {
+        if (DBG) {
+            Log.d(TAG, "Setting layers offering : " + offering);
+        }
+
+        IBinder token = getTokenForPublisherServiceThreadSafe();
+
+        try {
+            mVmsPublisherService.setLayersOffering(token, offering);
+            VmsOperationRecorder.get().setLayersOffering(offering);
+            return true;
+        } catch (RemoteException e) {
+            Log.e(TAG, "unable to set layers offering: " + offering, e);
+        }
+        return false;
+    }
+
+    private IBinder getTokenForPublisherServiceThreadSafe() {
         if (mVmsPublisherService == null) {
             throw new IllegalStateException("VmsPublisherService not set.");
         }
@@ -117,13 +152,26 @@ public abstract class VmsPublisherClientService extends Service {
         if (token == null) {
             throw new IllegalStateException("VmsPublisherService does not have a valid token.");
         }
-        try {
-            mVmsPublisherService.publish(token, layer, payload);
-            return true;
-        } catch (RemoteException e) {
-            Log.e(TAG, "unable to publish message: " + payload, e);
+        return token;
+    }
+
+    public final int getPublisherStaticId(byte[] publisherInfo) {
+        if (mVmsPublisherService == null) {
+            throw new IllegalStateException("VmsPublisherService not set.");
         }
-        return false;
+        Integer publisherStaticId = null;
+        try {
+            Log.i(TAG, "Getting publisher static ID");
+            publisherStaticId = mVmsPublisherService.getPublisherStaticId(publisherInfo);
+        } catch (RemoteException e) {
+            Log.e(TAG, "unable to invoke binder method.", e);
+        }
+        if (publisherStaticId == null) {
+            throw new IllegalStateException("VmsPublisherService cannot get a publisher static ID.");
+        } else {
+            VmsOperationRecorder.get().getPublisherStaticId(publisherStaticId);
+        }
+        return publisherStaticId;
     }
 
     /**

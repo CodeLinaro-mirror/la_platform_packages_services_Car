@@ -94,6 +94,7 @@ public final class Car {
     /**
      * @hide
      */
+    @SystemApi
     public static final String DIAGNOSTIC_SERVICE = "diagnostic";
 
     /**
@@ -124,7 +125,6 @@ public final class Car {
      * @FutureFeature Cannot drop due to usage in non-flag protected place.
      * @hide
      */
-    @SystemApi
     public static final String VMS_SUBSCRIBER_SERVICE = "vehicle_map_subscriber_service";
 
     /**
@@ -231,7 +231,6 @@ public final class Car {
      * @hide
      */
     @FutureFeature
-    @SystemApi
     public static final String PERMISSION_VMS_PUBLISHER = "android.car.permission.VMS_PUBLISHER";
 
     /**
@@ -240,23 +239,23 @@ public final class Car {
      * @hide
      */
     @FutureFeature
-    @SystemApi
     public static final String PERMISSION_VMS_SUBSCRIBER = "android.car.permission.VMS_SUBSCRIBER";
 
     /**
-     * Permissions necessary to read diagnostic information.
+     * Permissions necessary to read diagnostic information, including vendor-specific bits.
      *
      * @hide
      */
-    @FutureFeature
-    public static final String PERMISSION_CAR_DIAGNOSTIC_READ = "android.car.permission.DIAGNOSTIC_READ";
+    @SystemApi
+    public static final String PERMISSION_CAR_DIAGNOSTIC_READ_ALL =
+        "android.car.permission.DIAGNOSTIC_READ_ALL";
 
     /**
      * Permissions necessary to clear diagnostic information.
      *
      * @hide
      */
-    @FutureFeature
+    @SystemApi
     public static final String PERMISSION_CAR_DIAGNOSTIC_CLEAR = "android.car.permission.DIAGNOSTIC_CLEAR";
 
     /** Type of car connection: platform runs directly in car. */
@@ -582,9 +581,7 @@ public final class Car {
                 manager = new CarCabinManager(binder, mContext, mEventHandler);
                 break;
             case DIAGNOSTIC_SERVICE:
-                if (FeatureConfiguration.ENABLE_DIAGNOSTIC) {
-                    manager = new CarDiagnosticManager(binder, mContext, mEventHandler);
-                }
+                manager = new CarDiagnosticManager(binder, mContext, mEventHandler);
                 break;
             case HVAC_SERVICE:
                 manager = new CarHvacManager(binder, mContext, mEventHandler);

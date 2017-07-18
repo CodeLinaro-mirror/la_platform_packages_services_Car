@@ -111,9 +111,7 @@ public class VehicleHal extends IVehicleCallback.Stub {
         if (FeatureConfiguration.ENABLE_VEHICLE_MAP_SERVICE) {
             mVmsHal = new VmsHalService(this);
         }
-        if(FeatureConfiguration.ENABLE_DIAGNOSTIC) {
-            mDiagnosticHal = new DiagnosticHalService(this);
-        }
+        mDiagnosticHal = new DiagnosticHalService(this);
         mAllServices.addAll(Arrays.asList(mPowerHal,
                 mSensorHal,
                 mInfoHal,
@@ -122,12 +120,10 @@ public class VehicleHal extends IVehicleCallback.Stub {
                 mRadioHal,
                 mHvacHal,
                 mInputHal,
-                mVendorExtensionHal));
+                mVendorExtensionHal,
+                mDiagnosticHal));
         if (FeatureConfiguration.ENABLE_VEHICLE_MAP_SERVICE) {
             mAllServices.add(mVmsHal);
-        }
-        if(FeatureConfiguration.ENABLE_DIAGNOSTIC) {
-            mAllServices.add(mDiagnosticHal);
         }
 
         mHalClient = new HalClient(vehicle, mHandlerThread.getLooper(), this /*IVehicleCallback*/);
@@ -148,13 +144,10 @@ public class VehicleHal extends IVehicleCallback.Stub {
         mHvacHal = hvacHal;
         mInputHal = null;
         mVendorExtensionHal = null;
+        mDiagnosticHal = null;
 
         if (FeatureConfiguration.ENABLE_VEHICLE_MAP_SERVICE) {
-            // TODO(antoniocortes): do we need a test version of VmsHalService?
             mVmsHal = null;
-        }
-        if(FeatureConfiguration.ENABLE_DIAGNOSTIC) {
-            mDiagnosticHal = null;
         }
 
         mHalClient = halClient;
@@ -177,7 +170,6 @@ public class VehicleHal extends IVehicleCallback.Stub {
             mHvacHal = hvacHal;
             mInputHal = null;
             mVendorExtensionHal = null;
-            // TODO(antoniocortes): do we need a test version of VmsHalService?
             mVmsHal = null;
             mHalClient = halClient;
             mDiagnosticHal = diagnosticHal;

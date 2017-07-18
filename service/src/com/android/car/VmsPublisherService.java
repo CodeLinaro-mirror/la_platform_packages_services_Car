@@ -27,9 +27,12 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
 import android.os.Binder;
 import android.os.IBinder;
 import android.os.RemoteException;
+import android.os.UserHandle;
 import android.text.TextUtils;
 import android.util.Log;
 import com.android.car.hal.VmsHalService;
@@ -37,7 +40,9 @@ import com.android.internal.annotations.GuardedBy;
 import java.io.PrintWriter;
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -56,7 +61,7 @@ public class VmsPublisherService extends IVmsPublisherService.Stub
     private final Context mContext;
     private final VmsHalService mHal;
     private final VmsPublisherManager mPublisherManager;
-    private final Map<IBinder, VmsLayersOffering> mRawOffering = new HashMap<>();
+    private Set<String> mSafePermissions;
 
     public VmsPublisherService(Context context, VmsHalService hal) {
         mContext = context;
@@ -68,6 +73,9 @@ public class VmsPublisherService extends IVmsPublisherService.Stub
     @Override
     public void init() {
         mHal.addPublisherListener(this);
+        // Load permissions that can be granted to publishers.
+        mSafePermissions = new HashSet<>(
+                Arrays.asList(mContext.getResources().getStringArray(R.array.vmsSafePermissions)));
         // Launch publishers.
         String[] publisherNames = mContext.getResources().getStringArray(
                 R.array.vmsPublisherClients);
@@ -96,12 +104,7 @@ public class VmsPublisherService extends IVmsPublisherService.Stub
 
     @Override
     public void setLayersOffering(IBinder token, VmsLayersOffering offering) {
-        // Store the raw dependencies
-        mRawOffering.put(token, offering);
-
-        //TODO(asafro): Calculate the new available layers
-
-        //TODO(asafro): Notify the subscribers that there is a change in availability
+        mHal.setPublisherLayersOffering(token, offering);
     }
 
     // Implements IVmsPublisherService interface.
@@ -139,6 +142,12 @@ public class VmsPublisherService extends IVmsPublisherService.Stub
     public VmsSubscriptionState getSubscriptions() {
         ICarImpl.assertVmsPublisherPermission(mContext);
         return mHal.getSubscriptionState();
+    }
+
+    @Override
+    public int getPublisherStaticId(byte[] publisherInfo) {
+        ICarImpl.assertVmsPublisherPermission(mContext);
+        return mHal.getPublisherStaticId(publisherInfo);
     }
 
     // Implements VmsHalListener interface
@@ -193,11 +202,12 @@ public class VmsPublisherService extends IVmsPublisherService.Stub
                     // Already registered, nothing to do.
                     return;
                 }
+                grantPermissions(name);
                 Intent intent = new Intent();
                 intent.setComponent(name);
                 PublisherConnection connection = new PublisherConnection();
-                if (publisherService.mContext.bindService(intent, connection,
-                        Context.BIND_AUTO_CREATE)) {
+                if (publisherService.mContext.bindServiceAsUser(intent, connection,
+                        Context.BIND_AUTO_CREATE, UserHandle.SYSTEM)) {
                     mPublisherConnectionMap.put(publisherName, connection);
                 } else {
                     Log.e(TAG, "unable to bind to: " + publisherName);
@@ -248,6 +258,39 @@ public class VmsPublisherService extends IVmsPublisherService.Stub
             }
             mPublisherConnectionMap.clear();
             mPublisherMap.clear();
+        }
+
+        private void grantPermissions(ComponentName component) {
+            VmsPublisherService publisherService = mPublisherService.get();
+            if (publisherService == null) return;
+            final PackageManager packageManager = publisherService.mContext.getPackageManager();
+            final String packageName = component.getPackageName();
+            PackageInfo packageInfo;
+            try {
+                packageInfo = packageManager.getPackageInfo(packageName,
+                        PackageManager.GET_PERMISSIONS);
+            } catch (PackageManager.NameNotFoundException e) {
+                Log.e(TAG, "Error getting package info for " + packageName, e);
+                return;
+            }
+            if (packageInfo.requestedPermissions == null) return;
+            for (String permission : packageInfo.requestedPermissions) {
+                if (!publisherService.mSafePermissions.contains(permission)) {
+                    continue;
+                }
+                if (packageManager.checkPermission(permission, packageName)
+                        == PackageManager.PERMISSION_GRANTED) {
+                    continue;
+                }
+                try {
+                    packageManager.grantRuntimePermission(packageName, permission,
+                            UserHandle.SYSTEM);
+                    Log.d(TAG, "Permission " + permission + " granted to " + packageName);
+                } catch (SecurityException | IllegalArgumentException e) {
+                    Log.e(TAG, "Error while trying to grant " + permission + " to " + packageName,
+                            e);
+                }
+            }
         }
 
         class PublisherConnection implements ServiceConnection {

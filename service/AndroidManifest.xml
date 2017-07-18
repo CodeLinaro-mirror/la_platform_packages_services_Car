@@ -92,7 +92,7 @@
       android:description="@string/car_permission_desc_diag_read" />
     <permission
       android:name="android.car.permission.DIAGNOSTIC_CLEAR"
-      android:protectionLevel="dangerous"
+      android:protectionLevel="system|signature"
       android:label="@string/car_permission_label_diag_clear"
       android:description="@string/car_permission_desc_diag_clear" />
     <permission
@@ -139,6 +139,7 @@
 
     <uses-permission android:name="android.permission.CALL_PHONE" />
     <uses-permission android:name="android.permission.DEVICE_POWER" />
+    <uses-permission android:name="android.permission.GRANT_RUNTIME_PERMISSIONS" />
     <uses-permission android:name="android.permission.INTERACT_ACROSS_USERS_FULL" />
     <uses-permission android:name="android.permission.MANAGE_ACTIVITY_STACKS" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_ROUTING" />
@@ -167,12 +168,6 @@
             </intent-filter>
         </service>
         <service android:name=".PerUserCarService" android:exported="false" />
-        <receiver android:name=".BootReceiver">
-            <intent-filter android:priority="1000">
-                <action android:name="android.intent.action.PRE_BOOT_COMPLETED"/>
-                <action android:name="android.intent.action.BOOT_COMPLETED"/>
-            </intent-filter>
-        </receiver>
         <activity android:name="com.android.car.pm.ActivityBlockingActivity"
                   android:excludeFromRecents="true"
                   android:exported="false">
