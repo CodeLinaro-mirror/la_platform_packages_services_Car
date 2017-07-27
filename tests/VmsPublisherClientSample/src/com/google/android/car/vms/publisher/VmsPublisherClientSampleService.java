@@ -22,7 +22,6 @@ import android.car.vms.VmsSubscriptionState;
 import android.os.Handler;
 import android.os.Message;
 
-import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -31,7 +30,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public class VmsPublisherClientSampleService extends VmsPublisherClientService {
     public static final int PUBLISH_EVENT = 0;
-    public static final VmsLayer TEST_LAYER = new VmsLayer(0,0);
+    public static final VmsLayer TEST_LAYER = new VmsLayer(0, 0, 0);
 
     private byte mCounter = 0;
     private AtomicBoolean mInitialized = new AtomicBoolean(false);
@@ -39,7 +38,7 @@ public class VmsPublisherClientSampleService extends VmsPublisherClientService {
     private final Handler mHandler = new Handler() {
         @Override
         public void handleMessage(Message msg) {
-            if (msg.what == PUBLISH_EVENT) {
+            if (msg.what == PUBLISH_EVENT && mInitialized.get()) {
                 periodicPublish();
             }
         }
@@ -51,17 +50,26 @@ public class VmsPublisherClientSampleService extends VmsPublisherClientService {
      */
     @Override
     public void onVmsPublisherServiceReady() {
+        VmsSubscriptionState subscriptionState = getSubscriptions();
+        onVmsSubscriptionChange(subscriptionState);
     }
 
     @Override
     public void onVmsSubscriptionChange(VmsSubscriptionState subscriptionState) {
         if (mInitialized.compareAndSet(false, true)) {
-            for (VmsLayer layer : subscriptionState.getLayers()) {
+            for (VmsLayer layer : subscriptionState.getSubscribedLayersFromAll()) {
                 if (layer.equals(TEST_LAYER)) {
                     mHandler.sendEmptyMessage(PUBLISH_EVENT);
                 }
             }
         }
+    }
+
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+        mInitialized.set(false);
+        mHandler.removeMessages(PUBLISH_EVENT);
     }
 
     private void periodicPublish() {

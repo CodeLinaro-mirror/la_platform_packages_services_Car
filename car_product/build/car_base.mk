@@ -83,15 +83,18 @@ PRODUCT_PACKAGES += \
     A2dpSinkService \
 
 # EVS resources
-PRODUCT_PACKAGES += android.hardware.automotive.evs@1.0-service
 PRODUCT_PACKAGES += android.automotive.evs.manager@1.0
 PRODUCT_PACKAGES += evs_app
+# The following packages, or their vendor specific equivalents should be include in the device.mk
+#PRODUCT_PACKAGES += evs_app_default_resources
+#PRODUCT_PACKAGES += android.hardware.automotive.evs@1.0-service
+#PRODUCT_PACKAGES += android.hardware.automotive.evs@1.0-sample
 
-ifeq ($(TARGET_USES_CAR_FUTURE_FEATURES),true)
+# Device running Android is a car
+PRODUCT_COPY_FILES += \
+    frameworks/native/data/etc/android.hardware.type.automotive.xml:system/etc/permissions/android.hardware.type.automotive.xml
+
 PRODUCT_PACKAGES += android.hardware.automotive.vehicle@2.1-service
-else
-PRODUCT_PACKAGES += android.hardware.automotive.vehicle@2.0-service
-endif
 
 $(call inherit-product, $(SRC_TARGET_DIR)/product/core_minimal.mk)
 

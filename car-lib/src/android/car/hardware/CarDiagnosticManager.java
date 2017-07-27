@@ -16,6 +16,8 @@
 
 package android.car.hardware;
 
+import android.annotation.IntDef;
+import android.annotation.SystemApi;
 import android.car.Car;
 import android.car.CarApiUtil;
 import android.car.CarLibLog;
@@ -32,16 +34,31 @@ import com.android.car.internal.CarPermission;
 import com.android.car.internal.CarRatedListeners;
 import com.android.car.internal.SingleMessageHandler;
 
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 
-/** API for monitoring car diagnostic data. */
-/** @hide */
+/**
+ * API for monitoring car diagnostic data.
+ *
+ * @hide
+ */
+@SystemApi
 public final class CarDiagnosticManager implements CarManagerBase {
-    public static final int FRAME_TYPE_FLAG_LIVE = 0;
-    public static final int FRAME_TYPE_FLAG_FREEZE = 1;
+    public static final int FRAME_TYPE_LIVE = 0;
+    public static final int FRAME_TYPE_FREEZE = 1;
+
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef({FRAME_TYPE_LIVE, FRAME_TYPE_FREEZE})
+    public @interface FrameType {}
+
+    public static final @FrameType int FRAME_TYPES[] = {
+        FRAME_TYPE_LIVE,
+        FRAME_TYPE_FREEZE
+    };
 
     private static final int MSG_DIAGNOSTIC_EVENTS = 0;
 
@@ -93,10 +110,10 @@ public final class CarDiagnosticManager implements CarManagerBase {
 
     // OnDiagnosticEventListener registration
 
-    private void assertFrameType(int frameType) {
+    private void assertFrameType(@FrameType int frameType) {
         switch(frameType) {
-            case FRAME_TYPE_FLAG_FREEZE:
-            case FRAME_TYPE_FLAG_LIVE:
+            case FRAME_TYPE_FREEZE:
+            case FRAME_TYPE_LIVE:
                 return;
             default:
                 throw new IllegalArgumentException(String.format(
@@ -113,7 +130,9 @@ public final class CarDiagnosticManager implements CarManagerBase {
      * @throws CarNotConnectedException
      * @throws IllegalArgumentException
      */
-    public boolean registerListener(OnDiagnosticEventListener listener, int frameType, int rate)
+    public boolean registerListener(OnDiagnosticEventListener listener,
+            @FrameType int frameType,
+            int rate)
                 throws CarNotConnectedException, IllegalArgumentException {
         assertFrameType(frameType);
         synchronized(mActiveListeners) {
@@ -145,14 +164,15 @@ public final class CarDiagnosticManager implements CarManagerBase {
      */
     public void unregisterListener(OnDiagnosticEventListener listener) {
         synchronized(mActiveListeners) {
-            for(int i = 0; i < mActiveListeners.size(); i++) {
-                doUnregisterListenerLocked(listener, mActiveListeners.keyAt(i));
+            for(@FrameType int frameType : FRAME_TYPES) {
+                doUnregisterListenerLocked(listener, frameType);
             }
         }
     }
 
-    private void doUnregisterListenerLocked(OnDiagnosticEventListener listener, int sensor) {
-        CarDiagnosticListeners listeners = mActiveListeners.get(sensor);
+    private void doUnregisterListenerLocked(OnDiagnosticEventListener listener,
+            @FrameType int frameType) {
+        CarDiagnosticListeners listeners = mActiveListeners.get(frameType);
         if (listeners != null) {
             boolean needsServerUpdate = false;
             if (listeners.contains(listener)) {
@@ -160,15 +180,15 @@ public final class CarDiagnosticManager implements CarManagerBase {
             }
             if (listeners.isEmpty()) {
                 try {
-                    mService.unregisterDiagnosticListener(sensor,
+                    mService.unregisterDiagnosticListener(frameType,
                         mListenerToService);
                 } catch (RemoteException e) {
                     //ignore
                 }
-                mActiveListeners.remove(sensor);
+                mActiveListeners.remove(frameType);
             } else if (needsServerUpdate) {
                 try {
-                    registerOrUpdateDiagnosticListener(sensor, listeners.getRate());
+                    registerOrUpdateDiagnosticListener(frameType, listeners.getRate());
                 } catch (CarNotConnectedException e) {
                     // ignore
                 }
@@ -176,7 +196,7 @@ public final class CarDiagnosticManager implements CarManagerBase {
         }
     }
 
-    private boolean registerOrUpdateDiagnosticListener(int frameType, int rate)
+    private boolean registerOrUpdateDiagnosticListener(@FrameType int frameType, int rate)
         throws CarNotConnectedException {
         try {
             return mService.registerOrUpdateDiagnosticListener(frameType, rate, mListenerToService);
@@ -256,6 +276,72 @@ public final class CarDiagnosticManager implements CarManagerBase {
         return false;
     }
 
+    /**
+     * Returns true if this vehicle supports sending live frame information.
+     * @return
+     * @throws CarNotConnectedException
+     */
+    public boolean isLiveFrameSupported() throws CarNotConnectedException {
+        try {
+            return mService.isLiveFrameSupported();
+        } catch (IllegalStateException e) {
+            CarApiUtil.checkCarNotConnectedExceptionFromCarService(e);
+        } catch (RemoteException e) {
+            throw new CarNotConnectedException();
+        }
+        return false;
+    }
+
+    /**
+     * Returns true if this vehicle supports sending freeze frame information.
+     * @return
+     * @throws CarNotConnectedException
+     */
+    public boolean isFreezeFrameSupported() throws CarNotConnectedException {
+        try {
+            return mService.isFreezeFrameSupported();
+        } catch (IllegalStateException e) {
+            CarApiUtil.checkCarNotConnectedExceptionFromCarService(e);
+        } catch (RemoteException e) {
+            throw new CarNotConnectedException();
+        }
+        return false;
+    }
+
+    /**
+     * Returns true if this vehicle supports retrieving freeze frame timestamps.
+     * This is only meaningful if freeze frame data is also supported.
+     * @return
+     * @throws CarNotConnectedException
+     */
+    public boolean isFreezeFrameTimestampSupported() throws CarNotConnectedException {
+        try {
+            return mService.isFreezeFrameTimestampSupported();
+        } catch (IllegalStateException e) {
+            CarApiUtil.checkCarNotConnectedExceptionFromCarService(e);
+        } catch (RemoteException e) {
+            throw new CarNotConnectedException();
+        }
+        return false;
+    }
+
+    /**
+     * Returns true if this vehicle supports clearing freeze frame timestamps.
+     * This is only meaningful if freeze frame data is also supported.
+     * @return
+     * @throws CarNotConnectedException
+     */
+    public boolean isFreezeFrameClearSupported() throws CarNotConnectedException {
+        try {
+            return mService.isFreezeFrameClearSupported();
+        } catch (IllegalStateException e) {
+            CarApiUtil.checkCarNotConnectedExceptionFromCarService(e);
+        } catch (RemoteException e) {
+            throw new CarNotConnectedException();
+        }
+        return false;
+    }
+
     private static class CarDiagnosticEventListenerToService
             extends ICarDiagnosticEventListener.Stub {
         private final WeakReference<CarDiagnosticManager> mManager;
@@ -284,10 +370,10 @@ public final class CarDiagnosticManager implements CarManagerBase {
         }
 
         void onDiagnosticEvent(final CarDiagnosticEvent event) {
-            // throw away old sensor data as oneway binder call can change order.
+            // throw away old data as oneway binder call can change order.
             long updateTime = event.timestamp;
             if (updateTime < mLastUpdateTime) {
-                Log.w(CarLibLog.TAG_DIAGNOSTIC, "dropping old sensor data");
+                Log.w(CarLibLog.TAG_DIAGNOSTIC, "dropping old data");
                 return;
             }
             mLastUpdateTime = updateTime;
