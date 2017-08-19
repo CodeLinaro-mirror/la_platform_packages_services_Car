@@ -62,6 +62,7 @@ PRODUCT_PACKAGES += \
     libstagefright_soft_amrwbenc \
     libstagefright_soft_avcdec \
     libstagefright_soft_avcenc \
+    libstagefright_soft_flacdec \
     libstagefright_soft_flacenc \
     libstagefright_soft_g711dec \
     libstagefright_soft_gsmdec \
@@ -93,8 +94,6 @@ PRODUCT_PACKAGES += evs_app
 # Device running Android is a car
 PRODUCT_COPY_FILES += \
     frameworks/native/data/etc/android.hardware.type.automotive.xml:system/etc/permissions/android.hardware.type.automotive.xml
-
-PRODUCT_PACKAGES += android.hardware.automotive.vehicle@2.1-service
 
 $(call inherit-product, $(SRC_TARGET_DIR)/product/core_minimal.mk)
 

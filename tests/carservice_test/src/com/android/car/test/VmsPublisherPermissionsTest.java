@@ -29,6 +29,7 @@ import android.hardware.automotive.vehicle.V2_0.VehiclePropertyChangeMode;
 import android.hardware.automotive.vehicle.V2_1.VehicleProperty;
 import android.hardware.automotive.vehicle.V2_1.VmsBaseMessageIntegerValuesIndex;
 import android.hardware.automotive.vehicle.V2_1.VmsMessageType;
+import android.test.suitebuilder.annotation.MediumTest;
 
 import com.android.car.R;
 import com.android.car.vehiclehal.VehiclePropValueBuilder;
@@ -40,6 +41,7 @@ import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
 @FutureFeature
+@MediumTest
 public class VmsPublisherPermissionsTest extends MockedCarTestBase {
     private static final String TAG = "VmsPublisherTest";
     private static final int MOCK_PUBLISHER_LAYER_ID = 0;
@@ -149,7 +151,7 @@ public class VmsPublisherPermissionsTest extends MockedCarTestBase {
         public synchronized void onPropertySet(VehiclePropValue value) {
             // If this is the data message release the semaphore so the test can continue.
             ArrayList<Integer> int32Values = value.value.int32Values;
-            if (int32Values.get(VmsBaseMessageIntegerValuesIndex.VMS_MESSAGE_TYPE) ==
+            if (int32Values.get(VmsBaseMessageIntegerValuesIndex.MESSAGE_TYPE) ==
                     VmsMessageType.DATA) {
                 mHalHandlerSemaphore.release();
             }
