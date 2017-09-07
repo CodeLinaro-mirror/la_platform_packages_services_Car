@@ -14,19 +14,14 @@
  * limitations under the License.
  */
 
-package android.car.vms;
+package android.car;
+import android.bluetooth.BluetoothDevice;
 
-import android.car.vms.VmsAssociatedLayer;
-import android.car.vms.VmsLayer;
-
-/**
- * @hide
- */
-oneway interface IVmsSubscriberClient {
-    /**
-     * A VmsService uses this callback to pass messages to subscribers.
-     */
-    void onVmsMessageReceived(in VmsLayer layer, in byte[] payload) = 0;
-
-    void onLayersAvailabilityChanged(in List<VmsAssociatedLayer> availableLayers) = 1;
+/** @hide */
+interface ICarBluetooth {
+    void setBluetoothDeviceConnectionPriority(in BluetoothDevice deviceToSet, in int profileToSet,
+                in int priorityToSet);
+    void clearBluetoothDeviceConnectionPriority(in int profileToClear,in int priorityToClear);
+    boolean isPriorityDevicePresent(in int profile, in int priorityToCheck);
+    String getDeviceNameWithPriority(in int profile, in int priorityToCheck);
 }
