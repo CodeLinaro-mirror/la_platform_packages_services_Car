@@ -41,6 +41,9 @@
         <item>"0:call,media,radio,nav_guidance,voice_command,alarm,notification,system,safety,unknown"</item>
         <!--  call and media to physical stream 0 while all others go to physical stream 1 -->
         <item>"0:call,media,radio,unknown#1:nav_guidance,voice_command,alarm,notification,system,safety"</item>
+        <!--  call and media to physical stream 0; alarm, notification, system and safety go
+              to physical stream 1; nav_guidance and voice_command go to physical stream 2 -->
+        <item>"0:call,media,radio,unknown#1:alarm,notification,system,safety#2:nav_guidance,voice_command"</item>
     </string-array>
     <!-- Timeout value in Ms for audio focus wait. Audio focus request not responsed within
          this value will be treated as timeout and audio focus will be reset to LOSS state. -->
