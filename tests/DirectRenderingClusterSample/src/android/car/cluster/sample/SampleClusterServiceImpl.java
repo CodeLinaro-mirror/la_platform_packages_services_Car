@@ -251,7 +251,7 @@ public class SampleClusterServiceImpl extends InstrumentClusterRenderingService 
 
         if (displays.length > 1) {
             // TODO: assuming that secondary display is instrument cluster. Put this into settings?
-            return displays[1];
+            return displays[0];
         }
         return null;
     }
