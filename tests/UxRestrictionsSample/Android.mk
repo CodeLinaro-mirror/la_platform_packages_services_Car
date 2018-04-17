@@ -35,17 +35,16 @@ LOCAL_DEX_PREOPT := false
 
 LOCAL_USE_AAPT2 := true
 
-LOCAL_PRIVILEGED_MODULE := false
+LOCAL_PRIVILEGED_MODULE := true
+
+LOCAL_CERTIFICATE := platform
 
 LOCAL_STATIC_JAVA_LIBRARIES += vehicle-hal-support-lib
 
 LOCAL_STATIC_ANDROID_LIBRARIES += \
     android-support-car \
-    android-support-design \
-    android-support-v4 \
-    android-support-v7-appcompat \
-    android-support-v7-cardview \
-    android-support-v7-recyclerview
+    androidx.legacy_legacy-support-v4 \
+    androidx.appcompat_appcompat
 
 LOCAL_JAVA_LIBRARIES += android.car
 
