@@ -28,7 +28,6 @@ import android.car.hardware.property.CarPropertyManagerBase.CarPropertyEventCall
 import android.content.Context;
 import android.os.Handler;
 import android.os.IBinder;
-import android.os.Looper;
 import android.util.ArraySet;
 
 import java.lang.annotation.Retention;
@@ -62,7 +61,7 @@ public final class CarCabinManager implements CarManagerBase {
     private final ArraySet<CarCabinEventCallback> mCallbacks = new ArraySet<>();
     private CarPropertyEventListenerToBase mListenerToBase = null;
 
-    /** Door properties are zoned by VehicleDoor */
+    /** Door properties are zoned by VehicleAreaDoor */
     /**
      * door position, int type
      * Max value indicates fully open, min value (0) indicates fully closed.
@@ -80,7 +79,7 @@ public final class CarCabinManager implements CarManagerBase {
      */
     public static final int ID_DOOR_LOCK = 0x0003;
 
-    /** Mirror properties are zoned by VehicleMirror */
+    /** Mirror properties are zoned by VehicleAreaMirror */
     /**
      * mirror z position, int type
      * Positive value indicates tilt upwards, negative value tilt downwards.
@@ -110,7 +109,7 @@ public final class CarCabinManager implements CarManagerBase {
      */
     public static final int ID_MIRROR_FOLD = 0x1006;
 
-    /** Seat properties are zoned by VehicleSeat */
+    /** Seat properties are zoned by VehicleAreaSeat */
     /**
      * seat memory select, int type
      * This parameter selects the memory preset to use to select the seat position.
@@ -289,7 +288,7 @@ public final class CarCabinManager implements CarManagerBase {
      */
     public static final int ID_SEAT_HEADREST_FORE_AFT_MOVE = 0x201B;
 
-    /** Window properties are zoned by VehicleWindow */
+    /** Window properties are zoned by VehicleAreaWindow */
     /**
      * window position, int type
      * Max = window up / closed.
@@ -302,23 +301,10 @@ public final class CarCabinManager implements CarManagerBase {
      */
     public static final int ID_WINDOW_MOVE = 0x3002;
     /**
-     * window vent position, int type
-     * This feature is used to control the vent feature on a sunroof.
-     * Max = vent open.
-     * Min = vent closed.
-     */
-    public static final int ID_WINDOW_VENT_POS = 0x3003;
-    /** window vent move, int type
-     * This feature is used to control the vent feature on a sunroof.
-     * Positive value opens the vent.
-     * Negative value closes the vent.
-     */
-    public static final int ID_WINDOW_VENT_MOVE = 0x3004;
-    /**
      * window lock, bool type
      * True indicates windows are locked and can't be moved.
      */
-    public static final int ID_WINDOW_LOCK = 0x3005;
+    public static final int ID_WINDOW_LOCK = 0x3003;
 
     /** @hide */
     @IntDef({
@@ -360,8 +346,6 @@ public final class CarCabinManager implements CarManagerBase {
         ID_SEAT_HEADREST_FORE_AFT_MOVE,
         ID_WINDOW_POS,
         ID_WINDOW_MOVE,
-        ID_WINDOW_VENT_POS,
-        ID_WINDOW_VENT_MOVE,
         ID_WINDOW_LOCK
     })
     @Retention(RetentionPolicy.SOURCE)
