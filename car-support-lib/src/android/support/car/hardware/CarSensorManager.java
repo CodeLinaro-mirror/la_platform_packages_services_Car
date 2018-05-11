@@ -17,11 +17,12 @@
 package android.support.car.hardware;
 
 import android.Manifest;
-import android.support.annotation.IntDef;
-import android.support.annotation.RequiresPermission;
 import android.support.car.Car;
 import android.support.car.CarManagerBase;
 import android.support.car.CarNotConnectedException;
+
+import androidx.annotation.IntDef;
+import androidx.annotation.RequiresPermission;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -58,7 +59,7 @@ public abstract class CarSensorManager implements CarManagerBase {
     public static final int SENSOR_TYPE_ODOMETER = 4;
     /**
      * Represent the fuel level of the car. In {@link CarSensorEvent},  represents fuel level in
-     * milliliters.  Requires {@link Car#PERMISSION_FUEL} permission.
+     * milliliters.  Requires {@link Car#PERMISSION_ENERGY} permission.
      * @hide
      */
     public static final int SENSOR_TYPE_FUEL_LEVEL = 5;
@@ -137,10 +138,8 @@ public abstract class CarSensorManager implements CarManagerBase {
      * Requires {@link Car#PERMISSION_VEHICLE_DYNAMICS_STATE} permission.
      */
     public static final int SENSOR_TYPE_TRACTION_CONTROL_ACTIVE     = 25;
-    /**
-     * Set to true if the engine is on.
-     */
-    public static final int SENSOR_TYPE_ENGINE_ON                   = 26;
+    /** @hide */
+    public static final int SENSOR_TYPE_RESERVED26                  = 26;
     /**
      * Set to true if the fuel door is open.
      */
@@ -149,7 +148,7 @@ public abstract class CarSensorManager implements CarManagerBase {
     /**
      * Indicates battery level of the car.
      * In {@link CarSensorEvent}, represents battery level in WH.
-     * This requires {@link Car#PERMISSION_FUEL} permission.
+     * This requires {@link Car#PERMISSION_ENERGY} permission.
      */
     public static final int SENSOR_TYPE_EV_BATTERY_LEVEL            = 28;
     /**
@@ -162,7 +161,7 @@ public abstract class CarSensorManager implements CarManagerBase {
     public static final int SENSOR_TYPE_EV_CHARGE_PORT_CONNECTED    = 30;
     /**
      *  Indicates the instantaneous battery charging rate in mW.
-     *  This requires {@link Car#PERMISSION_FUEL} permission.
+     *  This requires {@link Car#PERMISSION_ENERGY} permission.
      */
     public static final int SENSOR_TYPE_EV_BATTERY_CHARGE_RATE      = 31;
     /**
@@ -205,7 +204,6 @@ public abstract class CarSensorManager implements CarManagerBase {
         SENSOR_TYPE_WHEEL_TICK_DISTANCE,
         SENSOR_TYPE_ABS_ACTIVE,
         SENSOR_TYPE_TRACTION_CONTROL_ACTIVE,
-        SENSOR_TYPE_ENGINE_ON,
         SENSOR_TYPE_FUEL_DOOR_OPEN,
         SENSOR_TYPE_EV_BATTERY_LEVEL,
         SENSOR_TYPE_EV_CHARGE_PORT_OPEN,
@@ -286,7 +284,7 @@ public abstract class CarSensorManager implements CarManagerBase {
      * @throws SecurityException if missing the appropriate permission.
      */
     @RequiresPermission(anyOf={Manifest.permission.ACCESS_FINE_LOCATION, Car.PERMISSION_SPEED,
-            Car.PERMISSION_MILEAGE, Car.PERMISSION_FUEL, Car.PERMISSION_VEHICLE_DYNAMICS_STATE},
+            Car.PERMISSION_MILEAGE, Car.PERMISSION_ENERGY, Car.PERMISSION_VEHICLE_DYNAMICS_STATE},
             conditional=true)
     public abstract boolean addListener(OnSensorChangedListener listener,
             @SensorType int sensorType, @SensorRate int rate)
