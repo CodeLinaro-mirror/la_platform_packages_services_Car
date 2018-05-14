@@ -21,6 +21,8 @@ import android.annotation.DrawableRes;
 import android.app.Activity;
 import android.car.Car;
 import android.car.CarNotConnectedException;
+import android.car.drivingstate.CarDrivingStateEvent;
+import android.car.drivingstate.CarDrivingStateManager;
 import android.car.drivingstate.CarUxRestrictions;
 import android.car.drivingstate.CarUxRestrictionsManager;
 import android.content.ComponentName;
@@ -31,23 +33,27 @@ import android.util.Log;
 import android.widget.Button;
 import android.widget.TextView;
 
-import java.util.ArrayList;
-import java.util.List;
-
 import androidx.car.widget.ListItem;
 import androidx.car.widget.ListItemAdapter;
 import androidx.car.widget.ListItemProvider;
 import androidx.car.widget.PagedListView;
 import androidx.car.widget.TextListItem;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
- * Sample app that uses components in car support library to demonstrate Car drivingstate UXR status.
+ * Sample app that uses components in car support library to demonstrate Car drivingstate UXR
+ * status.
  */
 public class MainActivity extends Activity {
     public static final String TAG = "drivingstate";
 
     private Car mCar;
+    private CarDrivingStateManager mCarDrivingStateManager;
     private CarUxRestrictionsManager mCarUxRestrictionsManager;
+    private TextView mDrvStatus;
+    private TextView mDistractionOptStatus;
     private TextView mUxrStatus;
     private Button mToggleButton;
     private PagedListView mPagedListView;
@@ -57,10 +63,12 @@ public class MainActivity extends Activity {
                 @Override
                 public void onServiceConnected(ComponentName name, IBinder iBinder) {
                     Log.d(TAG, "Connected to " + name.flattenToString());
-                    // Get a UXR manager
+                    // Get Driving State & UXR manager
                     try {
+                        mCarDrivingStateManager = (CarDrivingStateManager) mCar.getCarManager(
+                                Car.CAR_DRIVING_STATE_SERVICE);
                         mCarUxRestrictionsManager = (CarUxRestrictionsManager) mCar.getCarManager(
-                                        Car.CAR_UX_RESTRICTION_SERVICE);
+                                Car.CAR_UX_RESTRICTION_SERVICE);
 
                     } catch (CarNotConnectedException e) {
                         Log.e(TAG, "Failed to get a connection", e);
@@ -68,14 +76,16 @@ public class MainActivity extends Activity {
 
                     // Register listener
                     try {
-                        mCarUxRestrictionsManager.registerListener(uxrChangeListener);
+                        mCarDrivingStateManager.registerListener(mDrvStateChangeListener);
+                        mCarUxRestrictionsManager.registerListener(mUxRChangeListener);
                     } catch (CarNotConnectedException e) {
                         e.printStackTrace();
                     }
 
                     // Show current status
                     try {
-                        updateWidgetText(mCarUxRestrictionsManager.getCurrentCarUxRestrictions());
+                        updateDrivingStateText(mCarDrivingStateManager.getCurrentCarDrivingState());
+                        updateUxRText(mCarUxRestrictionsManager.getCurrentCarUxRestrictions());
                     } catch (CarNotConnectedException e) {
                         e.printStackTrace();
                     }
@@ -87,6 +97,7 @@ public class MainActivity extends Activity {
                     Log.d(TAG, "Disconnected from " + name.flattenToString());
                     try {
                         mCarUxRestrictionsManager.unregisterListener();
+                        mCarDrivingStateManager.unregisterListener();
                     } catch (CarNotConnectedException e) {
                         e.printStackTrace();
                     }
@@ -96,27 +107,56 @@ public class MainActivity extends Activity {
                 }
             };
 
-    private void updateWidgetText(CarUxRestrictions restrictions) {
+    private void updateUxRText(CarUxRestrictions restrictions) {
         mToggleButton.setText(
                 restrictions.isRequiresDistractionOptimization()
                         ? "Switch to Park" : "Switch to Drive");
-        mUxrStatus.setText(
+        mDistractionOptStatus.setText(
                 restrictions.isRequiresDistractionOptimization()
-                        ? "Requires Distraction Optimization" : "No restriction");
+                        ? "Requires Distraction Optimization"
+                        : "No Distraction Optimization required");
+
+        mUxrStatus.setText("Active Restrictions : 0x"
+                + Integer.toHexString(restrictions.getActiveRestrictions()));
 
         mToggleButton.requestLayout();
+        mDistractionOptStatus.requestLayout();
         mUxrStatus.requestLayout();
     }
 
-    private CarUxRestrictionsManager.onUxRestrictionsChangedListener uxrChangeListener = restrictions -> {
-        updateWidgetText(restrictions);
-    };
+    private void updateDrivingStateText(CarDrivingStateEvent state) {
+        String displayText;
+        switch (state.eventValue) {
+            case CarDrivingStateEvent.DRIVING_STATE_PARKED:
+                displayText = "Parked";
+                break;
+            case CarDrivingStateEvent.DRIVING_STATE_IDLING:
+                displayText = "Idling";
+                break;
+            case CarDrivingStateEvent.DRIVING_STATE_MOVING:
+                displayText = "Moving";
+                break;
+            default:
+                displayText = "Unknown";
+        }
+        mDrvStatus.setText("Driving State: " + displayText);
+        mDrvStatus.requestLayout();
+    }
+
+    private CarUxRestrictionsManager.onUxRestrictionsChangedListener mUxRChangeListener =
+            this::updateUxRText;
+
+
+    private CarDrivingStateManager.CarDrivingStateEventListener mDrvStateChangeListener =
+            this::updateDrivingStateText;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.main_activity);
 
+        mDrvStatus = findViewById(R.id.driving_state);
+        mDistractionOptStatus = findViewById(R.id.do_status);
         mUxrStatus = findViewById(R.id.uxr_status);
         mToggleButton = findViewById(R.id.toggle_status);
         mPagedListView = findViewById(R.id.paged_list_view);
@@ -127,13 +167,13 @@ public class MainActivity extends Activity {
         mToggleButton.setOnClickListener(v -> {
             // Create a mock UXR change.
             requiresDO[0] = !requiresDO[0];
-            CarUxRestrictions restrictions = new CarUxRestrictions(
+            CarUxRestrictions restrictions = new CarUxRestrictions.Builder(
                     requiresDO[0],
                     requiresDO[0]
                             ? CarUxRestrictions.UX_RESTRICTIONS_FULLY_RESTRICTED
                             : CarUxRestrictions.UX_RESTRICTIONS_BASELINE,
-                    elapsedRealtimeNanos());
-            updateWidgetText(restrictions);
+                    elapsedRealtimeNanos()).build();
+            updateUxRText(restrictions);
         });
 
         // Connect to car service
@@ -153,13 +193,22 @@ public class MainActivity extends Activity {
 
         items.add(createMessage(android.R.drawable.ic_menu_myplaces, "bob",
                 "hey this is a really long message that i have always wanted to say. but before " +
-                        "saying it i feel it's only appropriate if i lay some groundwork for it. "));
+                        "saying it i feel it's only appropriate if i lay some groundwork for it. "
+                        + ""));
         items.add(createMessage(android.R.drawable.ic_menu_myplaces, "mom",
                 "i think you are the best. i think you are the best. i think you are the best. " +
-                        "i think you are the best. i think you are the best. i think you are the best. " +
-                        "i think you are the best. i think you are the best. i think you are the best. " +
-                        "i think you are the best. i think you are the best. i think you are the best. " +
-                        "i think you are the best. i think you are the best. i think you are the best. " +
+                        "i think you are the best. i think you are the best. i think you are the "
+                        + "best. "
+                        +
+                        "i think you are the best. i think you are the best. i think you are the "
+                        + "best. "
+                        +
+                        "i think you are the best. i think you are the best. i think you are the "
+                        + "best. "
+                        +
+                        "i think you are the best. i think you are the best. i think you are the "
+                        + "best. "
+                        +
                         "i think you are the best. i think you are the best. "));
         items.add(createMessage(android.R.drawable.ic_menu_myplaces, "john", "hello world"));
         items.add(createMessage(android.R.drawable.ic_menu_myplaces, "jeremy",

@@ -16,6 +16,7 @@
 package com.android.car.hal;
 
 import static com.android.car.CarServiceUtils.toByteArray;
+
 import static java.lang.Integer.toHexString;
 
 import android.car.VehicleAreaType;
@@ -113,10 +114,24 @@ import java.util.List;
             return CarPropertyConfig
                     .newBuilder(clazz, propertyId, areaType, /* capacity */ 1)
                     .addAreas(areas)
+                    .setAccess(p.access)
+                    .setChangeMode(p.changeMode)
+                    .setConfigArray(p.configArray)
+                    .setConfigFlags(p.configFlags)
+                    .setConfigString(p.configString)
+                    .setMaxSampleRate(p.maxSampleRate)
+                    .setMinSampleRate(p.minSampleRate)
                     .build();
         } else {
             CarPropertyConfig.Builder builder = CarPropertyConfig
-                    .newBuilder(clazz, propertyId, areaType, /* capacity */  p.areaConfigs.size());
+                    .newBuilder(clazz, propertyId, areaType, /* capacity */ p.areaConfigs.size())
+                    .setAccess(p.access)
+                    .setChangeMode(p.changeMode)
+                    .setConfigArray(p.configArray)
+                    .setConfigFlags(p.configFlags)
+                    .setConfigString(p.configString)
+                    .setMaxSampleRate(p.maxSampleRate)
+                    .setMinSampleRate(p.minSampleRate);
 
             for (VehicleAreaConfig area : p.areaConfigs) {
                 if (classMatched(Integer.class, clazz)) {
@@ -147,8 +162,6 @@ import java.util.List;
         switch (halArea) {
             case VehicleArea.GLOBAL:
                 return VehicleAreaType.VEHICLE_AREA_TYPE_NONE;
-            case VehicleArea.ZONE:
-                return VehicleAreaType.VEHICLE_AREA_TYPE_ZONE;
             case VehicleArea.SEAT:
                 return VehicleAreaType.VEHICLE_AREA_TYPE_SEAT;
             case VehicleArea.DOOR:
@@ -157,6 +170,8 @@ import java.util.List;
                 return VehicleAreaType.VEHICLE_AREA_TYPE_WINDOW;
             case VehicleArea.MIRROR:
                 return VehicleAreaType.VEHICLE_AREA_TYPE_MIRROR;
+            case VehicleArea.WHEEL:
+                return VehicleAreaType.VEHICLE_AREA_TYPE_WHEEL;
             default:
                 throw new RuntimeException("Unsupported area type " + halArea);
         }

@@ -7,15 +7,17 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
+import android.app.Person;
 import android.app.RemoteInput;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
-import android.support.v4.app.Fragment;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
+
+import androidx.fragment.app.Fragment;
 
 import com.google.android.car.kitchensink.KitchenSinkActivity;
 import com.google.android.car.kitchensink.R;
@@ -152,8 +154,8 @@ public class NotificationFragment extends Fragment {
                     intent,
                     PendingIntent.FLAG_UPDATE_CURRENT);
 
-            Notification.Person personJohn = new Notification.Person().setName("John Doe");
-            Notification.Person personJane = new Notification.Person().setName("Jane Roe");
+            Person personJohn = new Person.Builder().setName("John Doe").build();
+            Person personJane = new Person.Builder().setName("Jane Roe").build();
             Notification.MessagingStyle messagingStyle =
                     new Notification.MessagingStyle(personJohn)
                             .setConversationTitle("Whassup")

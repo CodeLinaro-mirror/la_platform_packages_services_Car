@@ -26,6 +26,7 @@ import android.content.pm.PackageManager;
 import android.hardware.automotive.vehicle.V2_0.IVehicle;
 import android.hardware.automotive.vehicle.V2_0.VehicleArea;
 import android.os.Binder;
+import android.os.Build;
 import android.os.IBinder;
 import android.os.Process;
 import android.os.Trace;
@@ -41,6 +42,7 @@ import com.android.car.systeminterface.SystemInterface;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.car.ICarServiceHelper;
 
+import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -55,6 +57,8 @@ public class ICarImpl extends ICar.Stub {
     private final Context mContext;
     private final VehicleHal mHal;
 
+    private final SystemInterface mSystemInterface;
+
     private final SystemActivityMonitoringService mSystemActivityMonitoringService;
     private final CarPowerManagementService mCarPowerManagementService;
     private final CarPackageManagerService mCarPackageManagerService;
@@ -67,7 +71,6 @@ public class ICarImpl extends ICar.Stub {
     private final CarProjectionService mCarProjectionService;
     private final CarCabinService mCarCabinService;
     private final CarHvacService mCarHvacService;
-    private final CarRadioService mCarRadioService;
     private final CarNightService mCarNightService;
     private final AppFocusService mAppFocusService;
     private final GarageModeService mGarageModeService;
@@ -79,7 +82,8 @@ public class ICarImpl extends ICar.Stub {
     private final PerUserCarServiceHelper mPerUserCarServiceHelper;
     private final CarDiagnosticService mCarDiagnosticService;
     private final CarStorageMonitoringService mCarStorageMonitoringService;
-    private final SystemInterface mSystemInterface;
+    private final CarConfigurationService mCarConfigurationService;
+
     private VmsSubscriberService mVmsSubscriberService;
     private VmsPublisherService mVmsPublisherService;
 
@@ -97,11 +101,14 @@ public class ICarImpl extends ICar.Stub {
     @GuardedBy("this")
     private ICarServiceHelper mICarServiceHelper;
 
+    private final String mVehicleInterfaceName;
+
     public ICarImpl(Context serviceContext, IVehicle vehicle, SystemInterface systemInterface,
-            CanBusErrorNotifier errorNotifier) {
+            CanBusErrorNotifier errorNotifier, String vehicleInterfaceName) {
         mContext = serviceContext;
         mSystemInterface = systemInterface;
         mHal = new VehicleHal(vehicle);
+        mVehicleInterfaceName = vehicleInterfaceName;
         mSystemActivityMonitoringService = new SystemActivityMonitoringService(serviceContext);
         mCarPowerManagementService = new CarPowerManagementService(mContext, mHal.getPowerHal(),
                 systemInterface);
@@ -122,7 +129,6 @@ public class ICarImpl extends ICar.Stub {
         mCarAudioService = new CarAudioService(serviceContext);
         mCarCabinService = new CarCabinService(serviceContext, mHal.getCabinHal());
         mCarHvacService = new CarHvacService(serviceContext, mHal.getHvacHal());
-        mCarRadioService = new CarRadioService(serviceContext, mHal.getRadioHal());
         mCarNightService = new CarNightService(serviceContext, mCarSensorService);
         mInstrumentClusterService = new InstrumentClusterService(serviceContext,
                 mAppFocusService, mCarInputService);
@@ -138,6 +144,8 @@ public class ICarImpl extends ICar.Stub {
         mCarDiagnosticService = new CarDiagnosticService(serviceContext, mHal.getDiagnosticHal());
         mCarStorageMonitoringService = new CarStorageMonitoringService(serviceContext,
                 systemInterface);
+        mCarConfigurationService =
+                new CarConfigurationService(serviceContext, new JsonReaderImpl());
 
         // Be careful with order. Service depending on other service should be inited later.
         List<CarServiceBase> allServices = new ArrayList<>(Arrays.asList(
@@ -155,7 +163,6 @@ public class ICarImpl extends ICar.Stub {
                 mCarAudioService,
                 mCarCabinService,
                 mCarHvacService,
-                mCarRadioService,
                 mCarNightService,
                 mInstrumentClusterService,
                 mCarProjectionService,
@@ -165,6 +172,7 @@ public class ICarImpl extends ICar.Stub {
                 mCarDiagnosticService,
                 mPerUserCarServiceHelper,
                 mCarStorageMonitoringService,
+                mCarConfigurationService,
                 mVmsSubscriberService,
                 mVmsPublisherService
         ));
@@ -235,9 +243,6 @@ public class ICarImpl extends ICar.Stub {
             case Car.POWER_SERVICE:
                 assertPowerPermission(mContext);
                 return mCarPowerManagementService;
-            case Car.RADIO_SERVICE:
-                assertRadioPermission(mContext);
-                return mCarRadioService;
             case Car.CAR_NAVIGATION_SERVICE:
                 assertNavigationManagerPermission(mContext);
                 IInstrumentClusterNavigation navService =
@@ -315,15 +320,11 @@ public class ICarImpl extends ICar.Stub {
     }
 
     public static void assertHvacPermission(Context context) {
-        assertPermission(context, Car.PERMISSION_ADJUST_CAR_CLIMATE);
+        assertPermission(context, Car.PERMISSION_CONTROL_CAR_CLIMATE);
     }
 
     public static void assertPowerPermission(Context context) {
         assertPermission(context, Car.PERMISSION_CAR_POWER);
-    }
-
-    private static void assertRadioPermission(Context context) {
-        assertPermission(context, Car.PERMISSION_CAR_RADIO);
     }
 
     public static void assertProjectionPermission(Context context) {
@@ -368,22 +369,39 @@ public class ICarImpl extends ICar.Stub {
         throw new SecurityException("requires any of " + Arrays.toString(permissions));
     }
 
-    void dump(PrintWriter writer) {
-        writer.println("*FutureConfig, DEFAULT:" + FeatureConfiguration.DEFAULT);
-        writer.println("*Dump all services*");
-        for (CarServiceBase service : mAllServices) {
-            dumpService(service, writer);
+    @Override
+    protected void dump(FileDescriptor fd, PrintWriter writer, String[] args) {
+        if (mContext.checkCallingOrSelfPermission(android.Manifest.permission.DUMP)
+                != PackageManager.PERMISSION_GRANTED) {
+            writer.println("Permission Denial: can't dump CarService from from pid="
+                    + Binder.getCallingPid() + ", uid=" + Binder.getCallingUid()
+                    + " without permission " + android.Manifest.permission.DUMP);
+            return;
         }
-        if (mCarTestService != null) {
-            dumpService(mCarTestService, writer);
-        }
-        writer.println("*Dump Vehicle HAL*");
-        try {
-            // TODO dump all feature flags by creating a dumpable interface
-            mHal.dump(writer);
-        } catch (Exception e) {
-            writer.println("Failed dumping: " + mHal.getClass().getName());
-            e.printStackTrace(writer);
+        if (args == null || args.length == 0) {
+            writer.println("*dump car service*");
+
+            writer.println("*FutureConfig, DEFAULT:" + FeatureConfiguration.DEFAULT);
+            writer.println("*Dump all services*");
+            for (CarServiceBase service : mAllServices) {
+                dumpService(service, writer);
+            }
+            if (mCarTestService != null) {
+                dumpService(mCarTestService, writer);
+            }
+            writer.println("*Dump Vehicle HAL*");
+            writer.println("Vehicle HAL Interface: " + mVehicleInterfaceName);
+            try {
+                // TODO dump all feature flags by creating a dumpable interface
+                mHal.dump(writer);
+            } catch (Exception e) {
+                writer.println("Failed dumping: " + mHal.getClass().getName());
+                e.printStackTrace(writer);
+            }
+        } else if (Build.IS_USERDEBUG || Build.IS_ENG) {
+            execShellCmd(args, writer);
+        } else {
+            writer.println("Commands not supported in " + Build.TYPE);
         }
     }
 

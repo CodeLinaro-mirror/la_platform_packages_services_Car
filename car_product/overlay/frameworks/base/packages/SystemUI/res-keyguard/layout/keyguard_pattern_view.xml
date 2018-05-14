@@ -30,7 +30,6 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     androidprv:layout_maxWidth="@dimen/keyguard_security_width"
-    androidprv:layout_maxHeight="@dimen/keyguard_security_height"
     android:gravity="center_horizontal">
 
     <FrameLayout
@@ -63,6 +62,13 @@
                 android:layout_height="@dimen/keyguard_pattern_dimension"
                 android:layout_gravity="center_horizontal"
                 android:gravity="center" />
+
+            <Button
+                android:id="@+id/cancel_button"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:text="@string/cancel"/>
 
           <include layout="@layout/keyguard_eca"
               android:id="@+id/keyguard_selector_fade_container"
