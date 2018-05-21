@@ -30,7 +30,6 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     androidprv:layout_maxWidth="@dimen/keyguard_security_width"
-    androidprv:layout_maxHeight="@dimen/keyguard_security_height"
     android:gravity="center_horizontal">
 
     <FrameLayout
@@ -61,6 +60,7 @@
                 android:id="@+id/lockPatternView"
                 android:layout_width="@dimen/keyguard_pattern_dimension"
                 android:layout_height="@dimen/keyguard_pattern_dimension"
+                android:layout_marginVertical="@dimen/pin_pattern_pad_margin_vertical"
                 android:layout_gravity="center_horizontal"
                 android:gravity="center" />
 

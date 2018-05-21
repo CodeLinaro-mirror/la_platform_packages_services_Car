@@ -43,11 +43,8 @@ import com.android.internal.annotations.GuardedBy;
 import com.android.internal.car.ICarServiceHelper;
 
 import java.io.FileDescriptor;
-import java.io.FileOutputStream;
 import java.io.PrintWriter;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.List;
 
 public class ICarImpl extends ICar.Stub {
 
@@ -57,6 +54,8 @@ public class ICarImpl extends ICar.Stub {
 
     private final Context mContext;
     private final VehicleHal mHal;
+
+    private final SystemInterface mSystemInterface;
 
     private final SystemActivityMonitoringService mSystemActivityMonitoringService;
     private final CarPowerManagementService mCarPowerManagementService;
@@ -81,7 +80,8 @@ public class ICarImpl extends ICar.Stub {
     private final PerUserCarServiceHelper mPerUserCarServiceHelper;
     private final CarDiagnosticService mCarDiagnosticService;
     private final CarStorageMonitoringService mCarStorageMonitoringService;
-    private final SystemInterface mSystemInterface;
+    private final CarConfigurationService mCarConfigurationService;
+
     private VmsSubscriberService mVmsSubscriberService;
     private VmsPublisherService mVmsPublisherService;
 
@@ -142,36 +142,38 @@ public class ICarImpl extends ICar.Stub {
         mCarDiagnosticService = new CarDiagnosticService(serviceContext, mHal.getDiagnosticHal());
         mCarStorageMonitoringService = new CarStorageMonitoringService(serviceContext,
                 systemInterface);
+        mCarConfigurationService =
+                new CarConfigurationService(serviceContext, new JsonReaderImpl());
 
         // Be careful with order. Service depending on other service should be inited later.
-        List<CarServiceBase> allServices = new ArrayList<>(Arrays.asList(
-                mSystemActivityMonitoringService,
-                mCarPowerManagementService,
-                mCarSensorService,
-                mCarDrivingStateService,
-                mCarUXRestrictionsService,
-                mCarPackageManagerService,
-                mCarInputService,
-                mCarLocationService,
-                mGarageModeService,
-                mCarInfoService,
-                mAppFocusService,
-                mCarAudioService,
-                mCarCabinService,
-                mCarHvacService,
-                mCarNightService,
-                mInstrumentClusterService,
-                mCarProjectionService,
-                mSystemStateControllerService,
-                mCarVendorExtensionService,
-                mCarBluetoothService,
-                mCarDiagnosticService,
-                mPerUserCarServiceHelper,
-                mCarStorageMonitoringService,
-                mVmsSubscriberService,
-                mVmsPublisherService
-        ));
-        mAllServices = allServices.toArray(new CarServiceBase[0]);
+        mAllServices = new CarServiceBase[] {
+            mSystemActivityMonitoringService,
+            mCarPowerManagementService,
+            mCarSensorService,
+            mCarDrivingStateService,
+            mCarUXRestrictionsService,
+            mCarPackageManagerService,
+            mCarInputService,
+            mCarLocationService,
+            mGarageModeService,
+            mCarInfoService,
+            mAppFocusService,
+            mCarAudioService,
+            mCarCabinService,
+            mCarHvacService,
+            mCarNightService,
+            mInstrumentClusterService,
+            mCarProjectionService,
+            mSystemStateControllerService,
+            mCarVendorExtensionService,
+            mCarBluetoothService,
+            mCarDiagnosticService,
+            mPerUserCarServiceHelper,
+            mCarStorageMonitoringService,
+            mCarConfigurationService,
+            mVmsSubscriberService,
+            mVmsPublisherService
+        };
     }
 
     @MainThread
@@ -367,10 +369,10 @@ public class ICarImpl extends ICar.Stub {
     @Override
     protected void dump(FileDescriptor fd, PrintWriter writer, String[] args) {
         if (mContext.checkCallingOrSelfPermission(android.Manifest.permission.DUMP)
-            != PackageManager.PERMISSION_GRANTED) {
+                != PackageManager.PERMISSION_GRANTED) {
             writer.println("Permission Denial: can't dump CarService from from pid="
-                + Binder.getCallingPid() + ", uid=" + Binder.getCallingUid()
-                + " without permission " + android.Manifest.permission.DUMP);
+                    + Binder.getCallingPid() + ", uid=" + Binder.getCallingUid()
+                    + " without permission " + android.Manifest.permission.DUMP);
             return;
         }
         if (args == null || args.length == 0) {

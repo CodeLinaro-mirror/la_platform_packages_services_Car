@@ -102,9 +102,7 @@
         box and restart the car</string>
 
     <!--  Blocking activity: Message to show to user when an application is not allowed. [CHAR LIMIT=NONE] -->
-    <string name="activity_blocked_string">The application is not allowed while driving.</string>
-    <!--  Blocking activity: Message on exit button. [CHAR LIMIT=NONE] -->
-    <string name="exit_now">Exit</string>
+    <string name="activity_blocked_string">%1$s can\'t be used while driving.</string>
 
     <!-- Permission text: apps can control diagnostic data [CHAR LIMIT=NONE] -->
     <string name="car_permission_label_diag_read">Diagnostic Data</string>
@@ -185,6 +183,11 @@
     <string name="car_permission_label_control_car_exterior_lights">Car exterior lights</string>
     <!-- Permission text: apps control car's exterior lights [CHAR LIMIT=NONE] -->
     <string name="car_permission_desc_control_car_exterior_lights">Control car exterior lights </string>
+
+    <!-- Permission text: apps control car's exterior temperature [CHAR LIMIT=NONE] -->
+    <string name="car_permission_label_car_exterior_environment">Car exterior temperature</string>
+    <!-- Permission text: apps control car's exterior lights [CHAR LIMIT=NONE] -->
+    <string name="car_permission_desc_car_exterior_environment">Access car exterior temperature </string>
 
     <!-- Permission text: apps access car's tire information [CHAR LIMIT=NONE] -->
     <string name="car_permission_label_car_tires">Car tires</string>
