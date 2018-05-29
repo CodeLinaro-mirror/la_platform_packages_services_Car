@@ -16,14 +16,6 @@
 
 package com.google.android.car.kitchensink.power;
 
-import static java.lang.Integer.toHexString;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.Executor;
-
-import com.google.android.car.kitchensink.KitchenSinkActivity;
-import com.google.android.car.kitchensink.R;
-
 import android.car.CarNotConnectedException;
 import android.car.hardware.power.CarPowerManager;
 import android.content.Context;
@@ -37,7 +29,11 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.TextView;
-import android.widget.Toast;
+
+import com.google.android.car.kitchensink.KitchenSinkActivity;
+import com.google.android.car.kitchensink.R;
+
+import java.util.concurrent.Executor;
 
 public class PowerTestFragment extends Fragment {
     private final boolean DBG = false;

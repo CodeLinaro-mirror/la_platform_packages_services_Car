@@ -15,13 +15,16 @@
  */
 package com.google.android.car.kitchensink.storagelifetime;
 
+import static android.system.OsConstants.O_APPEND;
+import static android.system.OsConstants.O_RDWR;
+
 import android.annotation.Nullable;
 import android.car.Car;
 import android.car.CarNotConnectedException;
 import android.car.storagemonitoring.CarStorageMonitoringManager;
 import android.car.storagemonitoring.CarStorageMonitoringManager.IoStatsListener;
-import android.car.storagemonitoring.IoStatsEntry;
 import android.car.storagemonitoring.IoStats;
+import android.car.storagemonitoring.IoStatsEntry;
 import android.os.Bundle;
 import android.os.StatFs;
 import android.support.v4.app.Fragment;
@@ -33,22 +36,22 @@ import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
 import android.widget.ListView;
 import android.widget.TextView;
+
 import com.google.android.car.kitchensink.KitchenSinkActivity;
 import com.google.android.car.kitchensink.R;
-import java.io.FileDescriptor;
-import java.nio.ByteBuffer;
+
 import libcore.io.Libcore;
+
 import java.io.File;
+import java.io.FileDescriptor;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.List;
-
-import static android.system.OsConstants.O_APPEND;
-import static android.system.OsConstants.O_RDWR;
 
 public class StorageLifetimeFragment extends Fragment {
     private static final String FILE_NAME = "storage.bin";

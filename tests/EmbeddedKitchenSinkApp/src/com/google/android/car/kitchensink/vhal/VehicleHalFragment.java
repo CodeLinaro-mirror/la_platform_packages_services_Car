@@ -33,10 +33,10 @@ import android.widget.AdapterView;
 import android.widget.AdapterView.OnItemClickListener;
 import android.widget.ArrayAdapter;
 import android.widget.ListView;
+
 import com.google.android.car.kitchensink.KitchenSinkActivity;
 import com.google.android.car.kitchensink.R;
-import java.util.ArrayList;
-import java.util.Comparator;
+
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
