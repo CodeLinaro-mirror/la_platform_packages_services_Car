@@ -1,1 +1,0 @@
-allow powertestservice servicemanager:binder call;

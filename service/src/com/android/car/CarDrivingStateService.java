@@ -17,7 +17,6 @@
 package com.android.car;
 
 import android.annotation.Nullable;
-import android.car.Car;
 import android.car.drivingstate.CarDrivingStateEvent;
 import android.car.drivingstate.CarDrivingStateEvent.CarDrivingState;
 import android.car.drivingstate.ICarDrivingState;
@@ -33,6 +32,7 @@ import android.util.Log;
 
 import java.io.PrintWriter;
 import java.util.ArrayList;
+import java.util.LinkedList;
 import java.util.List;
 
 /**
@@ -43,6 +43,7 @@ import java.util.List;
 public class CarDrivingStateService extends ICarDrivingState.Stub implements CarServiceBase {
     private static final String TAG = "CarDrivingState";
     private static final boolean DBG = false;
+    private static final int MAX_TRANSITION_LOG_SIZE = 20;
     private final Context mContext;
     private CarSensorService mSensorService;
     // List of clients listening to driving state events.
@@ -53,7 +54,10 @@ public class CarDrivingStateService extends ICarDrivingState.Stub implements Car
             CarSensorManager.SENSOR_TYPE_CAR_SPEED,
             CarSensorManager.SENSOR_TYPE_GEAR};
     private CarDrivingStateEvent mCurrentDrivingState;
-
+    private CarSensorEvent mLastGear;
+    private CarSensorEvent mLastSpeed;
+    // For dumpsys logging
+    private final LinkedList<Utils.TransitionLog> mTransitionLogs = new LinkedList<>();
 
     public CarDrivingStateService(Context context, CarSensorService sensorService) {
         mContext = context;
@@ -104,7 +108,7 @@ public class CarDrivingStateService extends ICarDrivingState.Stub implements Car
     private synchronized void subscribeToSensors() {
         for (int sensor : mRequiredSensors) {
             mSensorService.registerOrUpdateSensorListener(sensor,
-                    CarSensorManager.SENSOR_RATE_FASTEST,
+                    CarSensorManager.SENSOR_RATE_UI,
                     mICarSensorEventListener);
         }
 
@@ -253,7 +257,11 @@ public class CarDrivingStateService extends ICarDrivingState.Stub implements Car
 
     @Override
     public void dump(PrintWriter writer) {
-
+        writer.println("Driving state chane log:");
+        for (Utils.TransitionLog tLog : mTransitionLogs) {
+            writer.println(tLog);
+        }
+        writer.println("Current Driving State: " + mCurrentDrivingState.eventValue);
     }
 
     /**
@@ -290,6 +298,8 @@ public class CarDrivingStateService extends ICarDrivingState.Stub implements Car
                 if (drivingState == mCurrentDrivingState.eventValue) {
                     break;
                 }
+                addTransitionLog(TAG, mCurrentDrivingState.eventValue, drivingState,
+                        System.currentTimeMillis());
                 // Update if there is a change in state.
                 mCurrentDrivingState = createDrivingStateEvent(drivingState);
 
@@ -305,6 +315,15 @@ public class CarDrivingStateService extends ICarDrivingState.Stub implements Car
         }
     }
 
+    private void addTransitionLog(String name, int from, int to, long timestamp) {
+        if (mTransitionLogs.size() >= MAX_TRANSITION_LOG_SIZE) {
+            mTransitionLogs.remove();
+        }
+
+        Utils.TransitionLog tLog = new Utils.TransitionLog(name, from, to, timestamp);
+        mTransitionLogs.add(tLog);
+    }
+
     /**
      * Infers the current driving state of the car from the other Car Sensor properties like
      * Current Gear, Speed etc.
@@ -315,11 +334,41 @@ public class CarDrivingStateService extends ICarDrivingState.Stub implements Car
     @CarDrivingState
     private int inferDrivingStateLocked() {
         int drivingState = CarDrivingStateEvent.DRIVING_STATE_UNKNOWN;
-        CarSensorEvent lastGear = mSensorService.getLatestSensorEvent(
+        CarSensorEvent currentGear = mSensorService.getLatestSensorEvent(
                 CarSensorManager.SENSOR_TYPE_GEAR);
-        CarSensorEvent lastSpeed = mSensorService.getLatestSensorEvent(
+        CarSensorEvent currentSpeed = mSensorService.getLatestSensorEvent(
                 CarSensorManager.SENSOR_TYPE_CAR_SPEED);
 
+        // Ignoring data with older timestamps if we get them out of order.
+        if (currentSpeed != null) {
+            if (DBG) {
+                Log.d(TAG, "Speed: " + currentSpeed.floatValues[0] + "@" + currentSpeed.timestamp);
+            }
+            if (mLastSpeed != null && currentSpeed.timestamp < mLastSpeed.timestamp) {
+                if (DBG) {
+                    Log.d(TAG, "Ignoring speed with older timestamp:" + currentSpeed.timestamp);
+                }
+                // assign the last speed to current speed, since that has a more recent timestamp
+                // and let the logic flow through.
+                currentSpeed = mLastSpeed;
+            } else {
+                mLastSpeed = currentSpeed;
+            }
+        }
+
+        if (currentGear != null) {
+            if (DBG) {
+                Log.d(TAG, "Gear: " + currentGear.intValues[0] + "@" + currentGear.timestamp);
+            }
+            if (mLastGear != null && currentGear.timestamp < mLastGear.timestamp) {
+                if (DBG) {
+                    Log.d(TAG, "Ignoring Gear with older timestamp:" + currentGear.timestamp);
+                }
+                currentGear = mLastGear;
+            } else {
+                mLastGear = currentGear;
+            }
+        }
         /*
             Simple logic to start off deriving driving state:
             1. If gear == parked, then Driving State is parked.
@@ -329,19 +378,13 @@ public class CarDrivingStateService extends ICarDrivingState.Stub implements Car
                 2c. if speed unavailable, then driving state is unknown
             This logic needs to be tested and iterated on.  Tracked in b/69859926
          */
-        if (lastGear != null) {
-            if (DBG) {
-                Log.d(TAG, "Last known Gear:" + lastGear.intValues[0]);
-            }
-            if (isGearInParking(lastGear)) {
+        if (currentGear != null) {
+            if (isGearInParking(currentGear)) {
                 drivingState = CarDrivingStateEvent.DRIVING_STATE_PARKED;
-            } else if (lastSpeed == null) {
+            } else if (currentSpeed == null) {
                 drivingState = CarDrivingStateEvent.DRIVING_STATE_UNKNOWN;
             } else {
-                if (DBG) {
-                    Log.d(TAG, "Speed: " + lastSpeed);
-                }
-                if (lastSpeed.floatValues[0] == 0f) {
+                if (currentSpeed.floatValues[0] == 0f) {
                     drivingState = CarDrivingStateEvent.DRIVING_STATE_IDLING;
                 } else {
                     drivingState = CarDrivingStateEvent.DRIVING_STATE_MOVING;
@@ -363,4 +406,5 @@ public class CarDrivingStateService extends ICarDrivingState.Stub implements Car
     private static CarDrivingStateEvent createDrivingStateEvent(int eventValue) {
         return new CarDrivingStateEvent(eventValue, SystemClock.elapsedRealtimeNanos());
     }
+
 }
