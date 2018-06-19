@@ -138,7 +138,7 @@ public class CarAudioService extends ICarAudio.Stub implements CarServiceBase {
                             + " suggested usage: " + AudioAttributes.usageToString(usage));
             final int groupId = getVolumeGroupIdForUsage(usage);
             final int currentVolume = getGroupVolume(groupId);
-            final int flags = AudioManager.FLAG_FROM_KEY;
+            final int flags = AudioManager.FLAG_FROM_KEY | AudioManager.FLAG_SHOW_UI;
             switch (adjustment) {
                 case AudioManager.ADJUST_LOWER:
                     if (currentVolume > getGroupMinVolume(groupId)) {
@@ -152,15 +152,15 @@ public class CarAudioService extends ICarAudio.Stub implements CarServiceBase {
                     break;
                 case AudioManager.ADJUST_MUTE:
                     mAudioManager.setMasterMute(true, flags);
-                    callbackMasterMuteChange();
+                    callbackMasterMuteChange(flags);
                     break;
                 case AudioManager.ADJUST_UNMUTE:
                     mAudioManager.setMasterMute(false, flags);
-                    callbackMasterMuteChange();
+                    callbackMasterMuteChange(flags);
                     break;
                 case AudioManager.ADJUST_TOGGLE_MUTE:
                     mAudioManager.setMasterMute(!mAudioManager.isMasterMute(), flags);
-                    callbackMasterMuteChange();
+                    callbackMasterMuteChange(flags);
                     break;
                 case AudioManager.ADJUST_SAME:
                 default:
@@ -185,11 +185,11 @@ public class CarAudioService extends ICarAudio.Stub implements CarServiceBase {
                     if (groupId == -1) {
                         Log.w(CarLog.TAG_AUDIO, "Unknown stream type: " + streamType);
                     } else {
-                        callbackGroupVolumeChange(groupId);
+                        callbackGroupVolumeChange(groupId, 0);
                     }
                     break;
                 case AudioManager.MASTER_MUTE_CHANGED_ACTION:
-                    callbackMasterMuteChange();
+                    callbackMasterMuteChange(0);
                     break;
             }
         }
@@ -241,7 +241,8 @@ public class CarAudioService extends ICarAudio.Stub implements CarServiceBase {
     @Override
     public void dump(PrintWriter writer) {
         writer.println("*CarAudioService*");
-        writer.println("Run in legacy mode? " + (!mUseDynamicRouting));
+        writer.println("\tRun in legacy mode? " + (!mUseDynamicRouting));
+        writer.println("\tMaster mute? " + mAudioManager.isMasterMute());
         // Empty line for comfortable reading
         writer.println();
         if (mUseDynamicRouting) {
@@ -259,7 +260,7 @@ public class CarAudioService extends ICarAudio.Stub implements CarServiceBase {
         synchronized (mImplLock) {
             enforcePermission(Car.PERMISSION_CAR_CONTROL_AUDIO_VOLUME);
 
-            callbackGroupVolumeChange(groupId);
+            callbackGroupVolumeChange(groupId, flags);
             // For legacy stream type based volume control
             if (!mUseDynamicRouting) {
                 mAudioManager.setStreamVolume(STREAM_TYPES[groupId], index, flags);
@@ -271,22 +272,22 @@ public class CarAudioService extends ICarAudio.Stub implements CarServiceBase {
         }
     }
 
-    private void callbackGroupVolumeChange(int groupId) {
+    private void callbackGroupVolumeChange(int groupId, int flags) {
         for (BinderInterfaceContainer.BinderInterface<ICarVolumeCallback> callback :
                 mVolumeCallbackContainer.getInterfaces()) {
             try {
-                callback.binderInterface.onGroupVolumeChanged(groupId);
+                callback.binderInterface.onGroupVolumeChanged(groupId, flags);
             } catch (RemoteException e) {
                 Log.e(CarLog.TAG_AUDIO, "Failed to callback onGroupVolumeChanged", e);
             }
         }
     }
 
-    private void callbackMasterMuteChange() {
+    private void callbackMasterMuteChange(int flags) {
         for (BinderInterfaceContainer.BinderInterface<ICarVolumeCallback> callback :
                 mVolumeCallbackContainer.getInterfaces()) {
             try {
-                callback.binderInterface.onMasterMuteChanged();
+                callback.binderInterface.onMasterMuteChanged(flags);
             } catch (RemoteException e) {
                 Log.e(CarLog.TAG_AUDIO, "Failed to callback onMasterMuteChanged", e);
             }
@@ -489,6 +490,7 @@ public class CarAudioService extends ICarAudio.Stub implements CarServiceBase {
         // Note that one can not register audio mix for same bus more than once.
         for (int i = 0; i < mCarAudioDeviceInfos.size(); i++) {
             int busNumber = mCarAudioDeviceInfos.keyAt(i);
+            boolean hasContext = false;
             CarAudioDeviceInfo info = mCarAudioDeviceInfos.valueAt(i);
             AudioFormat mixFormat = new AudioFormat.Builder()
                     .setSampleRate(info.getSampleRate())
@@ -498,6 +500,7 @@ public class CarAudioService extends ICarAudio.Stub implements CarServiceBase {
             AudioMixingRule.Builder mixingRuleBuilder = new AudioMixingRule.Builder();
             for (int j = 0; j < mContextToBus.size(); j++) {
                 if (mContextToBus.valueAt(j) == busNumber) {
+                    hasContext = true;
                     int contextNumber = mContextToBus.keyAt(j);
                     int[] usages = getUsagesForContext(contextNumber);
                     for (int usage : usages) {
@@ -512,12 +515,17 @@ public class CarAudioService extends ICarAudio.Stub implements CarServiceBase {
                             + " usages: " + Arrays.toString(usages));
                 }
             }
-            AudioMix audioMix = new AudioMix.Builder(mixingRuleBuilder.build())
-                    .setFormat(mixFormat)
-                    .setDevice(info.getAudioDeviceInfo())
-                    .setRouteFlags(AudioMix.ROUTE_FLAG_RENDER)
-                    .build();
-            builder.addMix(audioMix);
+            if (hasContext) {
+                // It's a valid case that an audio output bus is defined in
+                // audio_policy_configuration and no context is assigned to it.
+                // In such case, do not build a policy mix with zero rules.
+                AudioMix audioMix = new AudioMix.Builder(mixingRuleBuilder.build())
+                        .setFormat(mixFormat)
+                        .setDevice(info.getAudioDeviceInfo())
+                        .setRouteFlags(AudioMix.ROUTE_FLAG_RENDER)
+                        .build();
+                builder.addMix(audioMix);
+            }
         }
 
         // 4th, attach the {@link AudioPolicyVolumeCallback}
