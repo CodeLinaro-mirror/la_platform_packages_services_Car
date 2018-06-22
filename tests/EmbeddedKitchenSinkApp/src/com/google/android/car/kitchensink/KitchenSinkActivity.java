@@ -17,8 +17,10 @@
 package com.google.android.car.kitchensink;
 
 
+import android.car.hardware.CarSensorManager;
 import android.car.hardware.hvac.CarHvacManager;
 import android.car.hardware.power.CarPowerManager;
+import android.car.hardware.property.CarPropertyManager;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
@@ -26,7 +28,6 @@ import android.support.car.Car;
 import android.support.car.CarAppFocusManager;
 import android.support.car.CarConnectionCallback;
 import android.support.car.CarNotConnectedException;
-import android.support.car.hardware.CarSensorManager;
 import android.support.v4.app.Fragment;
 import android.util.Log;
 
@@ -50,6 +51,7 @@ import com.google.android.car.kitchensink.job.JobSchedulerFragment;
 import com.google.android.car.kitchensink.notification.NotificationFragment;
 import com.google.android.car.kitchensink.orientation.OrientationTestFragment;
 import com.google.android.car.kitchensink.power.PowerTestFragment;
+import com.google.android.car.kitchensink.property.PropertyTestFragment;
 import com.google.android.car.kitchensink.sensor.SensorsTestFragment;
 import com.google.android.car.kitchensink.setting.CarServiceSettingsActivity;
 import com.google.android.car.kitchensink.storagelifetime.StorageLifetimeFragment;
@@ -153,6 +155,7 @@ public class KitchenSinkActivity extends CarDrawerActivity {
             add("notification", NotificationFragment.class);
             add("orientation test", OrientationTestFragment.class);
             add("power test", PowerTestFragment.class);
+            add("property test", PropertyTestFragment.class);
             add("sensors", SensorsTestFragment.class);
             add("storage lifetime", StorageLifetimeFragment.class);
             add("touch test", TouchTestFragment.class);
@@ -177,16 +180,9 @@ public class KitchenSinkActivity extends CarDrawerActivity {
     private Car mCarApi;
     private CarHvacManager mHvacManager;
     private CarPowerManager mPowerManager;
-    private CarSensorManager mCarSensorManager;
+    private CarPropertyManager mPropertyManager;
+    private CarSensorManager mSensorManager;
     private CarAppFocusManager mCarAppFocusManager;
-
-    private final CarSensorManager.OnSensorChangedListener mListener = (manager, event) -> {
-        switch (event.sensorType) {
-            case CarSensorManager.SENSOR_TYPE_DRIVING_STATUS:
-                Log.d(TAG, "driving status:" + event.intValues[0]);
-                break;
-        }
-    };
 
     public CarHvacManager getHvacManager() {
         return mHvacManager;
@@ -196,9 +192,17 @@ public class KitchenSinkActivity extends CarDrawerActivity {
         return mPowerManager;
     }
 
+    public CarPropertyManager getPropertyManager() {
+        return mPropertyManager;
+    }
+
     @Override
     protected CarDrawerAdapter getRootAdapter() {
         return new DrawerAdapter();
+    }
+
+    public CarSensorManager getSensorManager() {
+        return mSensorManager;
     }
 
     @Override
@@ -247,9 +251,6 @@ public class KitchenSinkActivity extends CarDrawerActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        if (mCarSensorManager != null) {
-            mCarSensorManager.removeListener(mListener);
-        }
         if (mCarApi != null) {
             mCarApi.disconnect();
         }
@@ -271,10 +272,10 @@ public class KitchenSinkActivity extends CarDrawerActivity {
                 mHvacManager = (CarHvacManager) mCarApi.getCarManager(android.car.Car.HVAC_SERVICE);
                 mPowerManager = (CarPowerManager) mCarApi.getCarManager(
                     android.car.Car.POWER_SERVICE);
-                mCarSensorManager = (CarSensorManager) mCarApi.getCarManager(Car.SENSOR_SERVICE);
-                mCarSensorManager.addListener(mListener,
-                        CarSensorManager.SENSOR_TYPE_DRIVING_STATUS,
-                        CarSensorManager.SENSOR_RATE_NORMAL);
+                mPropertyManager = (CarPropertyManager) mCarApi.getCarManager(
+                    android.car.Car.PROPERTY_SERVICE);
+                mSensorManager = (CarSensorManager) mCarApi.getCarManager(
+                    android.car.Car.SENSOR_SERVICE);
                 mCarAppFocusManager =
                         (CarAppFocusManager) mCarApi.getCarManager(Car.APP_FOCUS_SERVICE);
             } catch (CarNotConnectedException e) {

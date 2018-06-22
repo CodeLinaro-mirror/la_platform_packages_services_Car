@@ -16,16 +16,12 @@
 
 package com.android.car;
 
-import android.annotation.SystemApi;
 import android.car.Car;
 import android.car.vms.IVmsSubscriberClient;
 import android.car.vms.IVmsSubscriberService;
-import android.car.vms.VmsAssociatedLayer;
-import android.car.vms.VmsLayer;
 import android.car.vms.VmsAvailableLayers;
+import android.car.vms.VmsLayer;
 import android.content.Context;
-import android.content.pm.PackageManager;
-import android.os.Binder;
 import android.os.IBinder;
 import android.os.RemoteException;
 import android.util.Log;
@@ -34,9 +30,7 @@ import com.android.car.hal.VmsHalService;
 import com.android.internal.annotations.GuardedBy;
 
 import java.io.PrintWriter;
-import java.util.Arrays;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -47,7 +41,6 @@ import java.util.Set;
  * + Receives HAL updates by implementing VmsHalService.VmsHalListener.
  * + Offers subscriber/publisher services by implementing IVmsService.Stub.
  */
-@SystemApi
 public class VmsSubscriberService extends IVmsSubscriberService.Stub
         implements CarServiceBase, VmsHalService.VmsHalSubscriberListener {
     private static final boolean DBG = true;
@@ -56,7 +49,6 @@ public class VmsSubscriberService extends IVmsSubscriberService.Stub
 
     private final Context mContext;
     private final VmsHalService mHal;
-    private final Set<String> mWhitelistedSubscribersNames;
 
     @GuardedBy("mSubscriberServiceLock")
     private final VmsSubscribersManager mSubscribersManager = new VmsSubscribersManager();
@@ -205,30 +197,6 @@ public class VmsSubscriberService extends IVmsSubscriberService.Stub
     public VmsSubscriberService(Context context, VmsHalService hal) {
         mContext = context;
         mHal = hal;
-        mWhitelistedSubscribersNames = Collections.unmodifiableSet(
-                new HashSet(Arrays.asList(
-                        mContext.getResources().getStringArray(R.array.allowedVmsSubscriberClients))));
-        Log.d(TAG, "Initialized VMS subscribers whitelist: " + mWhitelistedSubscribersNames);
-    }
-
-    private void verifySubscriberOrThrow() {
-        // Assert permissions.
-        ICarImpl.assertVmsSubscriberPermission(mContext);
-
-        // Assert whitelisted.
-        int callingUid = Binder.getCallingUid();
-        PackageManager pm = mContext.getPackageManager();
-        Set<String> packagesForUid = new HashSet<>(Arrays.asList(pm.getPackagesForUid(callingUid)));
-
-        packagesForUid.retainAll(mWhitelistedSubscribersNames);
-        if (packagesForUid.isEmpty()) {
-            throw new SecurityException(
-                    "Package is not whitelisted as a VMS Subscriber. got : "
-                            + Arrays.asList(pm.getPackagesForUid(callingUid))
-                            + " expected :"
-                            + mWhitelistedSubscribersNames);
-        }
-        Log.d(TAG, "verified package for VMS subscriber API: " + packagesForUid);
     }
 
     // Implements CarServiceBase interface.
@@ -250,7 +218,7 @@ public class VmsSubscriberService extends IVmsSubscriberService.Stub
     // Implements IVmsService interface.
     @Override
     public void addVmsSubscriberToNotifications(IVmsSubscriberClient subscriber) {
-        verifySubscriberOrThrow();
+        ICarImpl.assertVmsSubscriberPermission(mContext);
         synchronized (mSubscriberServiceLock) {
             // Add the subscriber so it can subscribe.
             mSubscribersManager.add(subscriber);
@@ -259,7 +227,7 @@ public class VmsSubscriberService extends IVmsSubscriberService.Stub
 
     @Override
     public void removeVmsSubscriberToNotifications(IVmsSubscriberClient subscriber) {
-        verifySubscriberOrThrow();
+        ICarImpl.assertVmsSubscriberPermission(mContext);
         synchronized (mSubscriberServiceLock) {
             if (mHal.containsSubscriber(subscriber)) {
                 throw new IllegalArgumentException("Subscriber has active subscriptions.");
@@ -270,7 +238,7 @@ public class VmsSubscriberService extends IVmsSubscriberService.Stub
 
     @Override
     public void addVmsSubscriber(IVmsSubscriberClient subscriber, VmsLayer layer) {
-        verifySubscriberOrThrow();
+        ICarImpl.assertVmsSubscriberPermission(mContext);
         synchronized (mSubscriberServiceLock) {
             // Add the subscriber so it can subscribe.
             mSubscribersManager.add(subscriber);
@@ -282,7 +250,7 @@ public class VmsSubscriberService extends IVmsSubscriberService.Stub
 
     @Override
     public void removeVmsSubscriber(IVmsSubscriberClient subscriber, VmsLayer layer) {
-        verifySubscriberOrThrow();
+        ICarImpl.assertVmsSubscriberPermission(mContext);
         synchronized (mSubscriberServiceLock) {
             // Remove the subscription.
             mHal.removeSubscription(subscriber, layer);
@@ -293,7 +261,7 @@ public class VmsSubscriberService extends IVmsSubscriberService.Stub
     public void addVmsSubscriberToPublisher(IVmsSubscriberClient subscriber,
                                             VmsLayer layer,
                                             int publisherId) {
-        verifySubscriberOrThrow();
+        ICarImpl.assertVmsSubscriberPermission(mContext);
         synchronized (mSubscriberServiceLock) {
             // Add the subscriber so it can subscribe.
             mSubscribersManager.add(subscriber);
@@ -307,7 +275,7 @@ public class VmsSubscriberService extends IVmsSubscriberService.Stub
     public void removeVmsSubscriberToPublisher(IVmsSubscriberClient subscriber,
                                                VmsLayer layer,
                                                int publisherId) {
-        verifySubscriberOrThrow();
+        ICarImpl.assertVmsSubscriberPermission(mContext);
         synchronized (mSubscriberServiceLock) {
             // Remove the subscription.
             mHal.removeSubscription(subscriber, layer, publisherId);
@@ -316,7 +284,7 @@ public class VmsSubscriberService extends IVmsSubscriberService.Stub
 
     @Override
     public void addVmsSubscriberPassive(IVmsSubscriberClient subscriber) {
-        verifySubscriberOrThrow();
+        ICarImpl.assertVmsSubscriberPermission(mContext);
         synchronized (mSubscriberServiceLock) {
             mSubscribersManager.add(subscriber);
             mHal.addSubscription(subscriber);
@@ -325,7 +293,7 @@ public class VmsSubscriberService extends IVmsSubscriberService.Stub
 
     @Override
     public void removeVmsSubscriberPassive(IVmsSubscriberClient subscriber) {
-        verifySubscriberOrThrow();
+        ICarImpl.assertVmsSubscriberPermission(mContext);
         synchronized (mSubscriberServiceLock) {
             // Remove the subscription.
             mHal.removeSubscription(subscriber);
@@ -334,7 +302,7 @@ public class VmsSubscriberService extends IVmsSubscriberService.Stub
 
     @Override
     public byte[] getPublisherInfo(int publisherId) {
-        verifySubscriberOrThrow();
+        ICarImpl.assertVmsSubscriberPermission(mContext);
         synchronized (mSubscriberServiceLock) {
             return mHal.getPublisherInfo(publisherId);
         }
@@ -374,9 +342,7 @@ public class VmsSubscriberService extends IVmsSubscriberService.Stub
         }
 
         Set<IVmsSubscriberClient> subscribers;
-        synchronized (mSubscriberServiceLock) {
-            subscribers = new HashSet<>(mSubscribersManager.getListeners());
-        }
+        subscribers = new HashSet<>(mSubscribersManager.getListeners());
 
         for (IVmsSubscriberClient subscriber : subscribers) {
             try {
