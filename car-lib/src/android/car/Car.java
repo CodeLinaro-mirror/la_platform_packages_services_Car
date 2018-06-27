@@ -29,6 +29,7 @@ import android.car.hardware.CarVendorExtensionManager;
 import android.car.hardware.cabin.CarCabinManager;
 import android.car.hardware.hvac.CarHvacManager;
 import android.car.hardware.power.CarPowerManager;
+import android.car.hardware.property.CarPropertyManager;
 import android.car.media.CarAudioManager;
 import android.car.navigation.CarNavigationStatusManager;
 import android.car.settings.CarConfigurationManager;
@@ -83,11 +84,9 @@ public final class Car {
     /** Service name for {@link CarAudioManager} */
     public static final String AUDIO_SERVICE = "audio";
 
-    /**
-     * Service name for {@link CarNavigationStatusManager}
-     * @hide
-     */
+    /** Service name for {@link CarNavigationStatusManager} */
     public static final String CAR_NAVIGATION_SERVICE = "car_navigation_service";
+
     /**
      * Service name for {@link CarInstrumentClusterManager}
      * @hide
@@ -123,6 +122,12 @@ public final class Car {
      */
     @SystemApi
     public static final String PROJECTION_SERVICE = "projection";
+
+    /**
+     * @hide
+     */
+    @SystemApi
+    public static final String PROPERTY_SERVICE = "property";
 
     /**
      * @hide
@@ -230,7 +235,6 @@ public final class Car {
 
     /**
      * Permission necessary to use {@link CarNavigationStatusManager}.
-     * @hide
      */
     public static final String PERMISSION_CAR_NAVIGATION_MANAGER =
             "android.car.permission.CAR_NAVIGATION_MANAGER";
@@ -769,6 +773,10 @@ public final class Car {
             case PROJECTION_SERVICE:
                 manager = new CarProjectionManager(binder, mEventHandler);
                 break;
+            case PROPERTY_SERVICE:
+                manager = new CarPropertyManager(binder, mEventHandler, false,
+                                                 "CarPropertyManager");
+                break;
             case VENDOR_EXTENSION_SERVICE:
                 manager = new CarVendorExtensionManager(binder, mEventHandler);
                 break;
@@ -781,7 +789,7 @@ public final class Car {
                 manager = new CarTestManagerBinderWrapper(binder);
                 break;
             case VMS_SUBSCRIBER_SERVICE:
-                manager = new VmsSubscriberManager(binder, mEventHandler);
+                manager = new VmsSubscriberManager(binder);
                 break;
             case BLUETOOTH_SERVICE:
                 manager = new CarBluetoothManager(binder, mContext);
