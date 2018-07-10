@@ -21,6 +21,7 @@ import android.app.UiModeManager;
 import android.car.Car;
 import android.car.ICar;
 import android.car.cluster.renderer.IInstrumentClusterNavigation;
+import android.car.user.CarUserManagerHelper;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.hardware.automotive.vehicle.V2_0.IVehicle;
@@ -39,12 +40,15 @@ import com.android.car.hal.VehicleHal;
 import com.android.car.internal.FeatureConfiguration;
 import com.android.car.pm.CarPackageManagerService;
 import com.android.car.systeminterface.SystemInterface;
+import com.android.car.user.CarUserService;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.car.ICarServiceHelper;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 public class ICarImpl extends ICar.Stub {
 
@@ -61,27 +65,25 @@ public class ICarImpl extends ICar.Stub {
     private final CarPowerManagementService mCarPowerManagementService;
     private final CarPackageManagerService mCarPackageManagerService;
     private final CarInputService mCarInputService;
-    private final CarSensorService mCarSensorService;
     private final CarDrivingStateService mCarDrivingStateService;
     private final CarUxRestrictionsManagerService mCarUXRestrictionsService;
-    private final CarInfoService mCarInfoService;
     private final CarAudioService mCarAudioService;
     private final CarProjectionService mCarProjectionService;
-    private final CarCabinService mCarCabinService;
-    private final CarHvacService mCarHvacService;
+    private final CarPropertyService mCarPropertyService;
     private final CarNightService mCarNightService;
     private final AppFocusService mAppFocusService;
     private final GarageModeService mGarageModeService;
     private final InstrumentClusterService mInstrumentClusterService;
     private final CarLocationService mCarLocationService;
     private final SystemStateControllerService mSystemStateControllerService;
-    private final CarVendorExtensionService mCarVendorExtensionService;
     private final CarBluetoothService mCarBluetoothService;
     private final PerUserCarServiceHelper mPerUserCarServiceHelper;
     private final CarDiagnosticService mCarDiagnosticService;
     private final CarStorageMonitoringService mCarStorageMonitoringService;
     private final CarConfigurationService mCarConfigurationService;
 
+    private final CarUserManagerHelper mUserManagerHelper;
+    private CarUserService mCarUserService;
     private VmsSubscriberService mVmsSubscriberService;
     private VmsPublisherService mVmsPublisherService;
 
@@ -110,10 +112,10 @@ public class ICarImpl extends ICar.Stub {
         mSystemActivityMonitoringService = new SystemActivityMonitoringService(serviceContext);
         mCarPowerManagementService = new CarPowerManagementService(mContext, mHal.getPowerHal(),
                 systemInterface);
-        mCarSensorService = new CarSensorService(serviceContext, mHal.getSensorHal());
-        mCarDrivingStateService = new CarDrivingStateService(serviceContext, mCarSensorService);
+        mCarPropertyService = new CarPropertyService(serviceContext, mHal.getPropertyHal());
+        mCarDrivingStateService = new CarDrivingStateService(serviceContext, mCarPropertyService);
         mCarUXRestrictionsService = new CarUxRestrictionsManagerService(serviceContext,
-                mCarDrivingStateService, mCarSensorService);
+                mCarDrivingStateService, mCarPropertyService);
         mCarPackageManagerService = new CarPackageManagerService(serviceContext,
                 mCarUXRestrictionsService,
                 mSystemActivityMonitoringService);
@@ -121,22 +123,17 @@ public class ICarImpl extends ICar.Stub {
         mCarProjectionService = new CarProjectionService(serviceContext, mCarInputService);
         mGarageModeService = new GarageModeService(mContext, mCarPowerManagementService);
         mCarLocationService = new CarLocationService(mContext, mCarPowerManagementService,
-                mCarSensorService);
-        mCarInfoService = new CarInfoService(serviceContext, mHal.getInfoHal());
+                mCarPropertyService);
         mAppFocusService = new AppFocusService(serviceContext, mSystemActivityMonitoringService);
         mCarAudioService = new CarAudioService(serviceContext);
-        mCarCabinService = new CarCabinService(serviceContext, mHal.getCabinHal());
-        mCarHvacService = new CarHvacService(serviceContext, mHal.getHvacHal());
-        mCarNightService = new CarNightService(serviceContext, mCarSensorService);
+        mCarNightService = new CarNightService(serviceContext, mCarPropertyService);
         mInstrumentClusterService = new InstrumentClusterService(serviceContext,
                 mAppFocusService, mCarInputService);
         mSystemStateControllerService = new SystemStateControllerService(serviceContext,
                 mCarPowerManagementService, mCarAudioService, this);
-        mCarVendorExtensionService = new CarVendorExtensionService(serviceContext,
-                mHal.getVendorExtensionHal());
         mPerUserCarServiceHelper = new PerUserCarServiceHelper(serviceContext);
-        mCarBluetoothService = new CarBluetoothService(serviceContext, mCarCabinService,
-                mCarSensorService, mPerUserCarServiceHelper, mCarUXRestrictionsService);
+        mCarBluetoothService = new CarBluetoothService(serviceContext, mCarPropertyService,
+                mPerUserCarServiceHelper, mCarUXRestrictionsService);
         mVmsSubscriberService = new VmsSubscriberService(serviceContext, mHal.getVmsHal());
         mVmsPublisherService = new VmsPublisherService(serviceContext, mHal.getVmsHal());
         mCarDiagnosticService = new CarDiagnosticService(serviceContext, mHal.getDiagnosticHal());
@@ -144,36 +141,39 @@ public class ICarImpl extends ICar.Stub {
                 systemInterface);
         mCarConfigurationService =
                 new CarConfigurationService(serviceContext, new JsonReaderImpl());
+        mUserManagerHelper = new CarUserManagerHelper(serviceContext);
 
         // Be careful with order. Service depending on other service should be inited later.
-        mAllServices = new CarServiceBase[] {
-            mSystemActivityMonitoringService,
-            mCarPowerManagementService,
-            mCarSensorService,
-            mCarDrivingStateService,
-            mCarUXRestrictionsService,
-            mCarPackageManagerService,
-            mCarInputService,
-            mCarLocationService,
-            mGarageModeService,
-            mCarInfoService,
-            mAppFocusService,
-            mCarAudioService,
-            mCarCabinService,
-            mCarHvacService,
-            mCarNightService,
-            mInstrumentClusterService,
-            mCarProjectionService,
-            mSystemStateControllerService,
-            mCarVendorExtensionService,
-            mCarBluetoothService,
-            mCarDiagnosticService,
-            mPerUserCarServiceHelper,
-            mCarStorageMonitoringService,
-            mCarConfigurationService,
-            mVmsSubscriberService,
-            mVmsPublisherService
-        };
+        List<CarServiceBase> allServices = new ArrayList<>();
+        allServices.add(mSystemActivityMonitoringService);
+        allServices.add(mCarPowerManagementService);
+        allServices.add(mCarPropertyService);
+        allServices.add(mCarDrivingStateService);
+        allServices.add(mCarUXRestrictionsService);
+        allServices.add(mCarPackageManagerService);
+        allServices.add(mCarInputService);
+        allServices.add(mCarLocationService);
+        allServices.add(mGarageModeService);
+        allServices.add(mAppFocusService);
+        allServices.add(mCarAudioService);
+        allServices.add(mCarNightService);
+        allServices.add(mInstrumentClusterService);
+        allServices.add(mCarProjectionService);
+        allServices.add(mSystemStateControllerService);
+        allServices.add(mCarBluetoothService);
+        allServices.add(mCarDiagnosticService);
+        allServices.add(mPerUserCarServiceHelper);
+        allServices.add(mCarStorageMonitoringService);
+        allServices.add(mCarConfigurationService);
+        allServices.add(mVmsSubscriberService);
+        allServices.add(mVmsPublisherService);
+
+        if (mUserManagerHelper.isHeadlessSystemUser()) {
+            mCarUserService = new CarUserService(serviceContext, mUserManagerHelper);
+            allServices.add(mCarUserService);
+        }
+
+        mAllServices = allServices.toArray(new CarServiceBase[allServices.size()]);
     }
 
     @MainThread
@@ -220,26 +220,23 @@ public class ICarImpl extends ICar.Stub {
         switch (serviceName) {
             case Car.AUDIO_SERVICE:
                 return mCarAudioService;
-            case Car.SENSOR_SERVICE:
-                return mCarSensorService;
-            case Car.INFO_SERVICE:
-                return mCarInfoService;
             case Car.APP_FOCUS_SERVICE:
                 return mAppFocusService;
             case Car.PACKAGE_SERVICE:
                 return mCarPackageManagerService;
-            case Car.CABIN_SERVICE:
-                assertCabinPermission(mContext);
-                return mCarCabinService;
             case Car.DIAGNOSTIC_SERVICE:
                 assertAnyDiagnosticPermission(mContext);
                 return mCarDiagnosticService;
-            case Car.HVAC_SERVICE:
-                assertHvacPermission(mContext);
-                return mCarHvacService;
             case Car.POWER_SERVICE:
                 assertPowerPermission(mContext);
                 return mCarPowerManagementService;
+            case Car.CABIN_SERVICE:
+            case Car.HVAC_SERVICE:
+            case Car.INFO_SERVICE:
+            case Car.PROPERTY_SERVICE:
+            case Car.SENSOR_SERVICE:
+            case Car.VENDOR_EXTENSION_SERVICE:
+                return mCarPropertyService;
             case Car.CAR_NAVIGATION_SERVICE:
                 assertNavigationManagerPermission(mContext);
                 IInstrumentClusterNavigation navService =
@@ -251,9 +248,6 @@ public class ICarImpl extends ICar.Stub {
             case Car.PROJECTION_SERVICE:
                 assertProjectionPermission(mContext);
                 return mCarProjectionService;
-            case Car.VENDOR_EXTENSION_SERVICE:
-                assertVendorExtensionPermission(mContext);
-                return mCarVendorExtensionService;
             case Car.VMS_SUBSCRIBER_SERVICE:
                 assertVmsSubscriberPermission(mContext);
                 return mVmsSubscriberService;
@@ -306,10 +300,6 @@ public class ICarImpl extends ICar.Stub {
         assertPermission(context, Car.PERMISSION_MOCK_VEHICLE_HAL);
     }
 
-    public static void assertCabinPermission(Context context) {
-        assertPermission(context, Car.PERMISSION_ADJUST_CAR_CABIN);
-    }
-
     public static void assertNavigationManagerPermission(Context context) {
         assertPermission(context, Car.PERMISSION_CAR_NAVIGATION_MANAGER);
     }
@@ -318,20 +308,12 @@ public class ICarImpl extends ICar.Stub {
         assertPermission(context, Car.PERMISSION_CAR_INSTRUMENT_CLUSTER_CONTROL);
     }
 
-    public static void assertHvacPermission(Context context) {
-        assertPermission(context, Car.PERMISSION_CONTROL_CAR_CLIMATE);
-    }
-
     public static void assertPowerPermission(Context context) {
         assertPermission(context, Car.PERMISSION_CAR_POWER);
     }
 
     public static void assertProjectionPermission(Context context) {
         assertPermission(context, Car.PERMISSION_CAR_PROJECTION);
-    }
-
-    public static void assertVendorExtensionPermission(Context context) {
-        assertPermission(context, Car.PERMISSION_VENDOR_EXTENSION);
     }
 
     public static void assertAnyDiagnosticPermission(Context context) {
@@ -356,6 +338,18 @@ public class ICarImpl extends ICar.Stub {
         if (context.checkCallingOrSelfPermission(permission) != PackageManager.PERMISSION_GRANTED) {
             throw new SecurityException("requires " + permission);
         }
+    }
+
+    /**
+     * Checks to see if the caller has a permission.
+     * @param context
+     * @param permission
+     *
+     * @return boolean TRUE if caller has the permission.
+     */
+    public static boolean hasPermission(Context context, String permission) {
+        return context.checkCallingOrSelfPermission(permission)
+                == PackageManager.PERMISSION_GRANTED;
     }
 
     public static void assertAnyPermission(Context context, String... permissions) {
