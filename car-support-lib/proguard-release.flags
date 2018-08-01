@@ -1823,6 +1823,7 @@
     public void finishOp(java.lang.String, int, java.lang.String);
     public void finishOp(int, int, java.lang.String);
     public void finishOp(int);
+    public static int getNumOps();
     public static java.lang.String[] getOpStrs();
     public java.util.List getOpsForPackage(int, java.lang.String, int[]);
     public java.util.List getPackagesForOps(int[]);
@@ -4451,7 +4452,6 @@
     public int describeContents();
     public void dump(boolean);
     public void ensureData();
-    public void ensureDataForAutofill();
     public long getAcquisitionEndTime();
     public long getAcquisitionStartTime();
     public android.content.ComponentName getActivityComponent();
@@ -7201,6 +7201,7 @@
     public int enabledSetting;
     public int flags;
     public int fullBackupContent;
+    public boolean hiddenUntilInstalled;
     public int installLocation;
     public int largestWidthLimitDp;
     public long longVersionCode;
@@ -7646,6 +7647,8 @@
     public abstract java.lang.String[] setPackagesSuspendedAsUser(java.lang.String[], boolean, android.os.PersistableBundle, android.os.PersistableBundle, java.lang.String, java.lang.String, int);
     public abstract void setPermissionEnforced(java.lang.String, boolean);
     public abstract boolean setRequiredForSystemUser(java.lang.String, boolean);
+    public abstract void setSystemAppHiddenUntilInstalled(java.lang.String, boolean);
+    public abstract boolean setSystemAppInstallState(java.lang.String, boolean, int);
     public abstract void setUpdateAvailable(java.lang.String, boolean);
     public abstract boolean shouldShowRequestPermissionRationale(java.lang.String, java.lang.String, int);
     public abstract void systemReady();
@@ -8094,6 +8097,7 @@
     public void writeToProto(android.util.proto.ProtoOutputStream, long);
 
 
+    public static float DEFAULT_MAX_LABEL_SIZE_PX;
     public static int DUMP_FLAG_ALL;
     public static int DUMP_FLAG_APPLICATION;
     public static int DUMP_FLAG_DETAILS;
@@ -8589,6 +8593,7 @@
     public static int MATCH_DISABLED_UNTIL_USED_COMPONENTS;
     public static int MATCH_EXPLICITLY_VISIBLE_ONLY;
     public static int MATCH_FACTORY_ONLY;
+    public static int MATCH_HIDDEN_UNTIL_INSTALLED_COMPONENTS;
     public static int MATCH_INSTANT;
     public static int MATCH_KNOWN_PACKAGES;
     public static int MATCH_STATIC_SHARED_LIBRARIES;
@@ -10763,7 +10768,6 @@
     public boolean isMutable();
     public boolean isPremultiplied();
     public boolean isRecycled();
-    public void makeImmutable();
     public void prepareToDraw();
     public void reconfigure(int, int, android.graphics.Bitmap$Config);
     public void recycle();
@@ -10775,6 +10779,7 @@
     public void setHasAlpha(boolean);
     public void setHasMipMap(boolean);
     public void setHeight(int);
+    public void setImmutable();
     public void setNinePatchChunk(byte[]);
     public void setPixel(int, int, int);
     public void setPixels(int[], int, int, int, int, int, int);
@@ -15107,6 +15112,7 @@
     public static int DETECT_CUSTOM;
     public static int DETECT_DISK_READ;
     public static int DETECT_DISK_WRITE;
+    public static int DETECT_EXPLICIT_GC;
     public static int DETECT_NETWORK;
     public static int DETECT_RESOURCE_MISMATCH;
     public static int DETECT_UNBUFFERED_IO;
@@ -17003,8 +17009,8 @@
 
     public boolean equals(java.lang.Object);
     public static android.view.DisplayCutout fromBoundingRect(int, int, int, int);
-    public static android.view.DisplayCutout fromBounds(android.graphics.Path);
-    public static android.view.DisplayCutout fromResources(android.content.res.Resources, int, int);
+    public static android.view.DisplayCutout fromBounds(android.graphics.Region);
+    public static android.view.DisplayCutout fromResourcesRectApproximation(android.content.res.Resources, int, int);
     public static android.view.DisplayCutout fromSpec(java.lang.String, int, int, float);
     public java.util.List getBoundingRects();
     public android.graphics.Region getBounds();
@@ -17460,7 +17466,7 @@
     protected void finalize();
     public void finishInputEvent(android.view.InputEvent, boolean);
     public void onBatchedInputEventPending();
-    public void onInputEvent(android.view.InputEvent, int);
+    public void onInputEvent(android.view.InputEvent);
 
 
 }
@@ -17946,6 +17952,7 @@
     public static int KEYCODE_ZENKAKU_HANKAKU;
     public static int KEYCODE_ZOOM_IN;
     public static int KEYCODE_ZOOM_OUT;
+    public static int LAST_KEYCODE;
     public static int MAX_KEYCODE;
     public static int META_ALT_LEFT_ON;
     public static int META_ALT_LOCKED;
@@ -18260,6 +18267,7 @@
     public float getAxisValue(int, int);
     public int getButtonState();
     public int getDeviceId();
+    public int getDisplayId();
     public long getDownTime();
     public int getEdgeFlags();
     public long getEventTime();
@@ -18325,6 +18333,7 @@
     public boolean isTargetAccessibilityFocus();
     public boolean isTouchEvent();
     public boolean isWithinBoundsNoHistory(float, float, float, float);
+    public static android.view.MotionEvent obtain(long, long, int, int, android.view.MotionEvent$PointerProperties[], android.view.MotionEvent$PointerCoords[], int, int, float, float, int, int, int, int, int);
     public static android.view.MotionEvent obtain(long, long, int, int, android.view.MotionEvent$PointerProperties[], android.view.MotionEvent$PointerCoords[], int, int, float, float, int, int, int, int);
     public static android.view.MotionEvent obtain(long, long, int, int, int[], android.view.MotionEvent$PointerCoords[], int, float, float, int, int, int, int);
     public static android.view.MotionEvent obtain(long, long, int, float, float, float, float, int, float, float, int, int);
@@ -18338,6 +18347,7 @@
     public void setAction(int);
     public void setActionButton(int);
     public void setButtonState(int);
+    public void setDisplayId(int);
     public void setDownTime(long);
     public void setEdgeFlags(int);
     public void setHoverExitPending(boolean);
@@ -19081,7 +19091,6 @@
     public void notifyFramePending();
     public static void overrideProperty(java.lang.String, java.lang.String);
     public void removeRenderNode(android.view.RenderNode);
-    public void serializeDisplayListTree();
     public void setContentDrawBounds(int, int, int, int);
     public static void setContextPriority(int);
     public static void setDebuggingEnabled(boolean);
@@ -23405,6 +23414,8 @@
     protected android.widget.Toolbar$LayoutParams generateLayoutParams(android.view.ViewGroup$LayoutParams);
     protected android.view.ViewGroup$LayoutParams generateLayoutParams(android.view.ViewGroup$LayoutParams);
     public android.view.ViewGroup$LayoutParams generateLayoutParams(android.util.AttributeSet);
+    public java.lang.CharSequence getCollapseContentDescription();
+    public android.graphics.drawable.Drawable getCollapseIcon();
     public int getContentInsetEnd();
     public int getContentInsetEndWithActions();
     public int getContentInsetLeft();
@@ -23445,6 +23456,10 @@
     protected android.os.Parcelable onSaveInstanceState();
     protected void onSetLayoutParams(android.view.View, android.view.ViewGroup$LayoutParams);
     public boolean onTouchEvent(android.view.MotionEvent);
+    public void setCollapseContentDescription(int);
+    public void setCollapseContentDescription(java.lang.CharSequence);
+    public void setCollapseIcon(int);
+    public void setCollapseIcon(android.graphics.drawable.Drawable);
     public void setCollapsible(boolean);
     public void setContentInsetEndWithActions(int);
     public void setContentInsetStartWithNavigation(int);

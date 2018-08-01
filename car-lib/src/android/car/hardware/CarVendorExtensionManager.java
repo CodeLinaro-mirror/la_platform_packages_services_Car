@@ -106,7 +106,6 @@ public final class CarVendorExtensionManager implements CarManagerBase {
             if (mCallbacks.isEmpty()) {
                 mListenerToBase = new CarPropertyEventListenerToBase(this);
             }
-
             List<CarPropertyConfig> configs = mPropertyManager.getPropertyList();
             for (CarPropertyConfig c : configs) {
                 // Register each individual propertyId

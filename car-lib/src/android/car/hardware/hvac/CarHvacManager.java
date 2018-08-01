@@ -325,7 +325,7 @@ public final class CarHvacManager implements CarManagerBase {
         }
         List<CarPropertyConfig> configs = getPropertyList();
         for (CarPropertyConfig c : configs) {
-            // Register each individual propertyId
+                // Register each individual propertyId
             mCarPropertyMgr.registerListener(mListenerToBase, c.getPropertyId(), 0);
         }
         mCallbacks.add(callback);
@@ -343,6 +343,7 @@ public final class CarHvacManager implements CarManagerBase {
             for (CarPropertyConfig c : configs) {
                 // Register each individual propertyId
                 mCarPropertyMgr.unregisterListener(mListenerToBase, c.getPropertyId());
+
             }
         } catch (Exception e) {
             Log.e(TAG, "getPropertyList exception ", e);

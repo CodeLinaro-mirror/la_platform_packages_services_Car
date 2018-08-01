@@ -23,7 +23,6 @@ PRODUCT_PACKAGES += \
     Bluetooth \
     OneTimeInitializer \
     Provision \
-    SystemUI \
     SystemUpdater
 
 PRODUCT_PACKAGES += \
@@ -91,10 +90,12 @@ PRODUCT_PACKAGES += \
     CarRadioApp \
     OverviewApp \
     CarLauncher \
+    CarSystemUI \
     CarLensPickerApp \
     LocalMediaPlayer \
     CarMediaApp \
     CarMessengerApp \
+    CarNotification \
     CarHvacApp \
     CarMapsPlaceholder \
     CarLatinIME \

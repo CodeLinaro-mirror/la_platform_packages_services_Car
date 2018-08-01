@@ -47,6 +47,13 @@ public final class CarAudioManager implements CarManagerBase {
         return VOLUME_SETTINGS_KEY_FOR_GROUP_PREFIX + groupId;
     }
 
+    /**
+     * Key to persist master mute state in {@link Settings.Global}
+     *
+     * @hide
+     */
+    public static final String VOLUME_SETTINGS_KEY_MASTER_MUTE = "android.car.MASTER_MUTE";
+
     private final ContentResolver mContentResolver;
     private final ICarAudio mService;
 
@@ -109,7 +116,7 @@ public final class CarAudioManager implements CarManagerBase {
         try {
             return mService.getGroupMaxVolume(groupId);
         } catch (RemoteException e) {
-            Log.e(CarLibLog.TAG_CAR, "getUsageMaxVolume failed", e);
+            Log.e(CarLibLog.TAG_CAR, "getGroupMaxVolume failed", e);
             throw new CarNotConnectedException(e);
         }
     }
@@ -127,7 +134,7 @@ public final class CarAudioManager implements CarManagerBase {
         try {
             return mService.getGroupMinVolume(groupId);
         } catch (RemoteException e) {
-            Log.e(CarLibLog.TAG_CAR, "getUsageMinVolume failed", e);
+            Log.e(CarLibLog.TAG_CAR, "getGroupMinVolume failed", e);
             throw new CarNotConnectedException(e);
         }
     }
@@ -148,7 +155,7 @@ public final class CarAudioManager implements CarManagerBase {
         try {
             return mService.getGroupVolume(groupId);
         } catch (RemoteException e) {
-            Log.e(CarLibLog.TAG_CAR, "getUsageVolume failed", e);
+            Log.e(CarLibLog.TAG_CAR, "getGroupVolume failed", e);
             throw new CarNotConnectedException(e);
         }
     }

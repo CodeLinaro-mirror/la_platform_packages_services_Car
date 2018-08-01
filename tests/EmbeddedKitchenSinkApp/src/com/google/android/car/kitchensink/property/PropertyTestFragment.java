@@ -26,7 +26,7 @@ import android.content.DialogInterface.OnClickListener;
 import android.hardware.automotive.vehicle.V2_0.VehicleProperty;
 import android.hardware.automotive.vehicle.V2_0.VehiclePropertyType;
 import android.os.Bundle;
-import android.support.v4.app.Fragment;
+import android.os.Handler;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -41,6 +41,8 @@ import android.widget.ScrollView;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
+
+import androidx.fragment.app.Fragment;
 
 import com.google.android.car.kitchensink.KitchenSinkActivity;
 import com.google.android.car.kitchensink.R;
@@ -74,9 +76,6 @@ public class PropertyTestFragment extends Fragment implements OnItemSelectedList
             @Nullable ViewGroup container,
             @Nullable Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.property, container, false);
-        mActivity = (KitchenSinkActivity) getHost();
-        mMgr = mActivity.getPropertyManager();
-
         // Get resource IDs
         mAreaId = view.findViewById(R.id.sAreaId);
         mEventLog = view.findViewById(R.id.tvEventLog);
@@ -85,20 +84,23 @@ public class PropertyTestFragment extends Fragment implements OnItemSelectedList
         mPropertyId = view.findViewById(R.id.sPropertyId);
         mScrollView = view.findViewById(R.id.svEventLog);
         mSetValue = view.findViewById(R.id.etSetPropertyValue);
+        mActivity = (KitchenSinkActivity) getActivity();
 
-        populateConfigList();
-        mListView.setAdapter(new PropertyListAdapter(mPropInfo, mMgr, mEventLog, mScrollView,
-                                                     mActivity));
+        final Runnable r = () -> {
+            mMgr = mActivity.getPropertyManager();
+            populateConfigList();
+            mListView.setAdapter(new PropertyListAdapter(mPropInfo, mMgr, mEventLog, mScrollView,
+                    mActivity));
 
-        // Configure dropdown menu for propertyId spinner
-        ArrayAdapter<PropertyInfo> adapter =
-                new ArrayAdapter<PropertyInfo>(mActivity, android.R.layout.simple_spinner_item,
-                                               mPropInfo);
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        mPropertyId.setAdapter(adapter);
-        mPropertyId.setOnItemSelectedListener(this);
-
-
+            // Configure dropdown menu for propertyId spinner
+            ArrayAdapter<PropertyInfo> adapter =
+                    new ArrayAdapter<PropertyInfo>(mActivity, android.R.layout.simple_spinner_item,
+                            mPropInfo);
+            adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+            mPropertyId.setAdapter(adapter);
+            mPropertyId.setOnItemSelectedListener(this);
+        };
+        mActivity.requestRefreshManager(r, new Handler(getContext().getMainLooper()));
 
         // Configure listeners for buttons
         Button b = view.findViewById(R.id.bGetProperty);

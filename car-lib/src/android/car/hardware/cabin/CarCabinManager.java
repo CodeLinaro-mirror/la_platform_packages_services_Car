@@ -496,8 +496,6 @@ public final class CarCabinManager implements CarManagerBase {
             mCarPropertyMgr.registerListener(mListenerToBase, c.getPropertyId(), 0);
         }
         mCallbacks.add(callback);
-
-
     }
 
     /**
@@ -510,7 +508,7 @@ public final class CarCabinManager implements CarManagerBase {
         mCallbacks.remove(callback);
         List<CarPropertyConfig> configs = getPropertyList();
         for (CarPropertyConfig c : configs) {
-            // Register each individual propertyId
+                // Register each individual propertyId
             mCarPropertyMgr.unregisterListener(mListenerToBase, c.getPropertyId());
         }
         if (mCallbacks.isEmpty()) {
