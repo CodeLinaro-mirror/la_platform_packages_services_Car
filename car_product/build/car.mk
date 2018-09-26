@@ -39,7 +39,6 @@ PRODUCT_PACKAGES += \
     VmsPublisherClientSample \
     VmsSubscriberClientSample \
     android.car.cluster.loggingrenderer \
-    DirectRenderingClusterSample \
     GarageModeTestApp \
 
 # SEPolicy for test apps / services
