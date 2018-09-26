@@ -40,7 +40,6 @@ PRODUCT_PACKAGES += \
     VmsPublisherClientSample \
     VmsSubscriberClientSample \
     android.car.cluster.loggingrenderer \
-    DirectRenderingClusterSample \
     com.android.car.powertestservice \
 
 # SEPolicy for test apps / services
