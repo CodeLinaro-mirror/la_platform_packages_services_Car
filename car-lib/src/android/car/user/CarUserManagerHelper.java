@@ -57,6 +57,10 @@ import java.util.Set;
 public class CarUserManagerHelper {
     private static final String TAG = "CarUserManagerHelper";
     private static final String HEADLESS_SYSTEM_USER = "android.car.systemuser.headless";
+
+    // Place holder for user name of the first user created.
+    public static final String DEFAULT_FIRST_ADMIN_NAME = "Driver";
+
     /**
      * Default set of restrictions for Non-Admin users.
      */
@@ -538,6 +542,13 @@ public class CarUserManagerHelper {
     }
 
     /**
+     * Checks if the foreground user is a demo user.
+     */
+    public boolean isForegroundUserDemo() {
+        return getCurrentForegroundUserInfo().isDemo();
+    }
+
+    /**
      * Checks if the foreground user is ephemeral.
      */
     public boolean isForegroundUserEphemeral() {
@@ -581,6 +592,23 @@ public class CarUserManagerHelper {
      */
     public boolean canForegroundUserAddUsers() {
         return !foregroundUserHasUserRestriction(UserManager.DISALLOW_ADD_USER);
+    }
+
+    /**
+     * Checks if the current process user can modify accounts. Demo and Guest users cannot modify
+     * accounts even if the DISALLOW_MODIFY_ACCOUNTS restriction is not applied.
+     */
+    public boolean canForegroundUserModifyAccounts() {
+        return !foregroundUserHasUserRestriction(UserManager.DISALLOW_MODIFY_ACCOUNTS)
+            && !isForegroundUserDemo()
+            && !isForegroundUserGuest();
+    }
+
+    /**
+     * Checks if the foreground user can switch to other users.
+     */
+    public boolean canForegroundUserSwitchUsers() {
+        return !foregroundUserHasUserRestriction(UserManager.DISALLOW_USER_SWITCH);
     }
 
     // Current process user information accessors
@@ -774,10 +802,9 @@ public class CarUserManagerHelper {
             return false;
         }
 
-        // Not allow to delete the last admin user on the device for now.
+        // Try to create a new admin before deleting the current one.
         if (userInfo.isAdmin() && getAllAdminUsers().size() <= 1) {
-            Log.w(TAG, "User " + userInfo.id + " is the last admin user on device.");
-            return false;
+            return removeLastAdmin(userInfo);
         }
 
         if (!isCurrentProcessAdminUser() && !isCurrentProcessUser(userInfo)) {
@@ -787,9 +814,29 @@ public class CarUserManagerHelper {
         }
 
         if (userInfo.id == getCurrentForegroundUserId()) {
+            if (!canCurrentProcessSwitchUsers()) {
+                // If we can't switch to a different user, we can't exit this one and therefore
+                // can't delete it.
+                Log.w(TAG, "User switching is not allowed. Current user cannot be deleted");
+                return false;
+            }
             startNewGuestSession(guestUserName);
         }
 
+        return mUserManager.removeUser(userInfo.id);
+    }
+
+    private boolean removeLastAdmin(UserInfo userInfo) {
+        Log.i(TAG, "User " + userInfo.id
+                + " is the last admin user on device. Creating a new admin.");
+
+        UserInfo newAdmin = createNewAdminUser(DEFAULT_FIRST_ADMIN_NAME);
+        if (newAdmin == null) {
+            Log.w(TAG, "Couldn't create another admin, cannot delete current user.");
+            return false;
+        }
+
+        switchToUser(newAdmin);
         return mUserManager.removeUser(userInfo.id);
     }
 
@@ -804,6 +851,12 @@ public class CarUserManagerHelper {
             // System User doesn't associate with real person, can not be switched to.
             return false;
         }
+        if (!canCurrentProcessSwitchUsers()) {
+            return false;
+        }
+        if (id == getCurrentForegroundUserId()) {
+            return false;
+        }
         return mActivityManager.switchUser(id);
     }
 
@@ -814,10 +867,6 @@ public class CarUserManagerHelper {
      * @return {@code true} if user switching succeed.
      */
     public boolean switchToUser(UserInfo userInfo) {
-        if (userInfo.id == getCurrentForegroundUserId()) {
-            return false;
-        }
-
         return switchToUserId(userInfo.id);
     }
 

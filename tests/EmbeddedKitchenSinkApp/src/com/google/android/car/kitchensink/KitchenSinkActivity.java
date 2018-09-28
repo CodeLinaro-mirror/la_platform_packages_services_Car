@@ -49,7 +49,6 @@ import com.google.android.car.kitchensink.diagnostic.DiagnosticTestFragment;
 import com.google.android.car.kitchensink.displayinfo.DisplayInfoFragment;
 import com.google.android.car.kitchensink.hvac.HvacTestFragment;
 import com.google.android.car.kitchensink.input.InputTestFragment;
-import com.google.android.car.kitchensink.job.JobSchedulerFragment;
 import com.google.android.car.kitchensink.notification.NotificationFragment;
 import com.google.android.car.kitchensink.orientation.OrientationTestFragment;
 import com.google.android.car.kitchensink.power.PowerTestFragment;
@@ -153,7 +152,6 @@ public class KitchenSinkActivity extends CarDrawerActivity {
             add("hvac", HvacTestFragment.class);
             add("inst cluster", InstrumentClusterFragment.class);
             add("input test", InputTestFragment.class);
-            add("job scheduler", JobSchedulerFragment.class);
             add("notification", NotificationFragment.class);
             add("orientation test", OrientationTestFragment.class);
             add("power test", PowerTestFragment.class);
@@ -323,11 +321,11 @@ public class KitchenSinkActivity extends CarDrawerActivity {
 
         @Override
         protected void populateViewHolder(DrawerItemViewHolder holder, int position) {
-            holder.getTitle().setText(mMenuEntries.get(position).getText());
+            holder.getTitleView().setText(mMenuEntries.get(position).getText());
+            holder.itemView.setOnClickListener(v -> onItemClick(holder.getAdapterPosition()));
         }
 
-        @Override
-        public void onItemClick(int position) {
+        private void onItemClick(int position) {
             if ((position < 0) || (position >= mMenuEntries.size())) {
                 Log.wtf(TAG, "Unknown menu item: " + position);
                 return;

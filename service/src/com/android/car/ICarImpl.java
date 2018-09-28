@@ -167,12 +167,9 @@ public class ICarImpl extends ICar.Stub {
         allServices.add(mCarConfigurationService);
         allServices.add(mVmsSubscriberService);
         allServices.add(mVmsPublisherService);
-
         if (mUserManagerHelper.isHeadlessSystemUser()) {
-            mCarUserService = new CarUserService(serviceContext, mUserManagerHelper);
-            allServices.add(mCarUserService);
+            allServices.add(new CarUserService(serviceContext, mUserManagerHelper));
         }
-
         allServices.add(mCarLocationService);
         mAllServices = allServices.toArray(new CarServiceBase[allServices.size()]);
     }
@@ -563,10 +560,10 @@ public class ICarImpl extends ICar.Stub {
         private void forceGarageMode(String arg, PrintWriter writer) {
             switch (arg) {
                 case PARAM_ON_MODE:
-                    mGarageModeService.onPrepareShutdown(false);
+                    mGarageModeService.forceStartGarageMode();
                     break;
                 case PARAM_OFF_MODE:
-                    mGarageModeService.onSleepEntry();
+                    mGarageModeService.stopAndResetGarageMode();
                     break;
                 case PARAM_QUERY_MODE:
                     // Nothing to do. Always query at the end anyway.
@@ -576,7 +573,7 @@ public class ICarImpl extends ICar.Stub {
                             + PARAM_OFF_MODE + "|" + PARAM_QUERY_MODE);
                     return;
             }
-            writer.println("Garage mode: " + mGarageModeService.isInGarageMode());
+            writer.println("Garage mode: " + mGarageModeService.isGarageModeActive());
         }
 
         /**

@@ -124,17 +124,19 @@ public class VmsSubscriberService extends IVmsSubscriberService.Stub
         public void add(IVmsSubscriberClient subscriber) {
             ICarImpl.assertVmsSubscriberPermission(mContext);
             if (subscriber == null) {
-                Log.e(TAG, "register: subscriber is null.");
+                Log.e(TAG, "Trying to add a null subscriber.");
                 throw new IllegalArgumentException("subscriber cannot be null.");
-            }
-            if (DBG) {
-                Log.d(TAG, "register: " + subscriber);
             }
             IBinder subscriberBinder = subscriber.asBinder();
             synchronized (mListenerManagerLock) {
                 if (mSubscriberMap.containsKey(subscriberBinder)) {
-                    // Already registered, nothing to do.
+                    if (DBG) {
+                        Log.d(TAG, "Subscriber already registered: " + subscriber);
+                    }
                     return;
+                }
+                if (DBG) {
+                    Log.d(TAG, "Registering subscriber: " + subscriber);
                 }
                 ListenerDeathRecipient deathRecipient =
                         new ListenerDeathRecipient(subscriberBinder);
@@ -203,6 +205,9 @@ public class VmsSubscriberService extends IVmsSubscriberService.Stub
     @Override
     public void init() {
         mHal.addSubscriberListener(this);
+
+        // Signal to subscribers that the SubscriberService is ready.
+        mHal.signalSubscriberServiceIsReady();
     }
 
     @Override

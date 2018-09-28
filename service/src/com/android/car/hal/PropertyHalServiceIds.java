@@ -258,6 +258,9 @@ public class PropertyHalServiceIds {
         mProps.put(VehicleProperty.PERF_VEHICLE_SPEED, new Pair<>(
                 Car.PERMISSION_SPEED,
                 Car.PERMISSION_SPEED));
+        mProps.put(VehicleProperty.PERF_VEHICLE_SPEED_DISPLAY, new Pair<>(
+                Car.PERMISSION_SPEED,
+                Car.PERMISSION_SPEED));
         mProps.put(VehicleProperty.ENGINE_COOLANT_TEMP, new Pair<>(
                 Car.PERMISSION_CAR_ENGINE_DETAILED,
                 Car.PERMISSION_CAR_ENGINE_DETAILED));
@@ -319,8 +322,8 @@ public class PropertyHalServiceIds {
                 Car.PERMISSION_EXTERIOR_LIGHTS,
                 Car.PERMISSION_EXTERIOR_LIGHTS));
         mProps.put(VehicleProperty.IGNITION_STATE, new Pair<>(
-                Car.PERMISSION_CAR_POWER,
-                Car.PERMISSION_CAR_POWER));
+                Car.PERMISSION_POWERTRAIN,
+                Car.PERMISSION_POWERTRAIN));
         mProps.put(VehicleProperty.ABS_ACTIVE, new Pair<>(
                 Car.PERMISSION_CAR_DYNAMICS_STATE,
                 Car.PERMISSION_CAR_DYNAMICS_STATE));
