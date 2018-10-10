@@ -94,6 +94,13 @@
     <!-- Permission text: apps can handle input events [CHAR LIMIT=NONE] -->
     <string name="car_permission_desc_bind_input_service">Handle input events</string>
 
+    <string name="car_permission_lable_vms_publisher">Car Vms Publisher</string>
+    <string name="car_permission_desc_vms_publisher">Car Vms Publisher</string>
+    <string name="car_permission_lable_vms_subscriber">Car Vms Subscriber</string>
+    <string name="car_permission_desc_vms_subscriber">Car Vms Subscriber</string>
+    <string name="car_permission_lable_storage_monitoring">Car Storage Monitoring</string>
+    <string name="car_permission_desc_storage_monitoring">Car Storage Monitoring</string>
+
     <!-- Notification messages -->
     <!-- Notification text: Notification shown to the user when vehicle CAN bus fails -->
     <string name="car_can_bus_failure">CAN bus failed</string>
