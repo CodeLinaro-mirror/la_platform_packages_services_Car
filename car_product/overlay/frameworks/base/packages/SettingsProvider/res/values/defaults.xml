@@ -20,4 +20,6 @@
     <bool name="def_device_provisioned">false</bool>
     <!--  default setting for Settings.System.END_BUTTON_BEHAVIOR: 0 for car -->
     <integer name="def_end_button_behavior">0</integer>
+    <!--  disable bluetooth toggleable when airplane mode is on -->
+    <string name="airplane_mode_toggleable_radios" translatable="false">wifi,nfc</string>
 </resources>
