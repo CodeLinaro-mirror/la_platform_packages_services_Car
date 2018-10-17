@@ -13,13 +13,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package android.car.user;
+
+package android.car.userlib;
 
 import android.Manifest;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.app.ActivityManager;
-import android.car.settings.CarSettings;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -156,7 +156,7 @@ public class CarUserManagerHelper {
     public void setDefaultBootUser(int userId) {
         Settings.Global.putInt(
                 mContext.getContentResolver(),
-                CarSettings.Global.DEFAULT_USER_ID_TO_BOOT_INTO, userId);
+                Settings.Global.DEFAULT_USER_ID_TO_BOOT_INTO, userId);
     }
 
     /**
@@ -169,7 +169,7 @@ public class CarUserManagerHelper {
         mLastActiveUser = userId;
         if (!skipGlobalSetting) {
             Settings.Global.putInt(
-                    mContext.getContentResolver(), CarSettings.Global.LAST_ACTIVE_USER_ID, userId);
+                    mContext.getContentResolver(), Settings.Global.LAST_ACTIVE_USER_ID, userId);
         }
     }
 
@@ -181,7 +181,7 @@ public class CarUserManagerHelper {
     public int getDefaultBootUser() {
         // Make user 10 the original default boot user.
         return Settings.Global.getInt(
-            mContext.getContentResolver(), CarSettings.Global.DEFAULT_USER_ID_TO_BOOT_INTO,
+            mContext.getContentResolver(), Settings.Global.DEFAULT_USER_ID_TO_BOOT_INTO,
             /* default user id= */ 10);
     }
 
@@ -195,7 +195,7 @@ public class CarUserManagerHelper {
             return mLastActiveUser;
         }
         return Settings.Global.getInt(
-            mContext.getContentResolver(), CarSettings.Global.LAST_ACTIVE_USER_ID,
+            mContext.getContentResolver(), Settings.Global.LAST_ACTIVE_USER_ID,
             /* default user id= */ UserHandle.USER_SYSTEM);
     }
 
@@ -577,14 +577,23 @@ public class CarUserManagerHelper {
     }
 
     /**
+     * Returns whether a user has a restriction.
+     *
+     * @param restriction Restriction to check. Should be a UserManager.* restriction.
+     * @param userInfo the user whose restriction is to be checked
+     */
+    public boolean hasUserRestriction(String restriction, UserInfo userInfo) {
+        return mUserManager.hasUserRestriction(restriction, userInfo.getUserHandle());
+    }
+
+    /**
      * Return whether the foreground user has a restriction.
      *
      * @param restriction Restriction to check. Should be a UserManager.* restriction.
      * @return Whether that restriction exists for the foreground user.
      */
     public boolean foregroundUserHasUserRestriction(String restriction) {
-        return mUserManager.hasUserRestriction(
-            restriction, getCurrentForegroundUserInfo().getUserHandle());
+        return hasUserRestriction(restriction, getCurrentForegroundUserInfo());
     }
 
     /**
@@ -693,7 +702,7 @@ public class CarUserManagerHelper {
     }
 
     /**
-     * Assigns admin privileges to the user.
+     * Grants admin permissions to the user.
      *
      * @param user User to be upgraded to Admin status.
      */
@@ -701,9 +710,9 @@ public class CarUserManagerHelper {
             Manifest.permission.INTERACT_ACROSS_USERS_FULL,
             Manifest.permission.MANAGE_USERS
     })
-    public void assignAdminPrivileges(UserInfo user) {
+    public void grantAdminPermissions(UserInfo user) {
         if (!isCurrentProcessAdminUser()) {
-            Log.w(TAG, "Only admin users can assign admin privileges.");
+            Log.w(TAG, "Only admin users can assign admin permissions.");
             return;
         }
 
