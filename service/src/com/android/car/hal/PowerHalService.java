@@ -104,7 +104,8 @@ public class PowerHalService extends HalServiceBase {
             if (mState != STATE_SHUTDOWN_PREPARE) {
                 throw new IllegalStateException("wrong state");
             }
-            return (mParam & VehicleApPowerStateShutdownParam.CAN_SLEEP) != 0;
+            /* Fix ambiguity between CAN_SLEEP (2) and SHUTDOWN_ONLY (3). */
+            return (mParam == VehicleApPowerStateShutdownParam.CAN_SLEEP);
         }
 
         /**
@@ -117,7 +118,8 @@ public class PowerHalService extends HalServiceBase {
             if (mState != STATE_SHUTDOWN_PREPARE) {
                 throw new IllegalStateException("wrong state");
             }
-            return (mParam & VehicleApPowerStateShutdownParam.SHUTDOWN_IMMEDIATELY) == 0;
+            /* Fix ambiguity between SHUTDOWN_IMMEDIATELY (1) and SHUTDOWN_ONLY (3). */
+            return (mParam == VehicleApPowerStateShutdownParam.SHUTDOWN_ONLY);
         }
 
         @Override

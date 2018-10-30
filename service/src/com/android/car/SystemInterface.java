@@ -114,7 +114,7 @@ public abstract class SystemInterface {
         @Override
         public boolean isSystemSupportingDeepSleep() {
             //TODO should return by checking some kernel suspend control sysfs, bug: 32061842
-            return false;
+            return true;
         }
 
         @Override
