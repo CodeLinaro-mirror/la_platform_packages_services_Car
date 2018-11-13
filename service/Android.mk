@@ -40,7 +40,9 @@ LOCAL_PROGUARD_FLAG_FILES := proguard.flags
 LOCAL_PROGUARD_ENABLED := disabled
 
 LOCAL_JAVA_LIBRARIES += android.car
+
 LOCAL_STATIC_JAVA_LIBRARIES += \
+        android.car.user \
         android.hidl.base-V1.0-java \
         android.hardware.automotive.audiocontrol-V1.0-java \
         android.hardware.automotive.vehicle-V2.0-java \
@@ -68,7 +70,9 @@ LOCAL_MODULE := car-service-lib-for-test
 
 LOCAL_JAVA_LIBRARIES += android.car \
         car-frameworks-service
+
 LOCAL_STATIC_JAVA_LIBRARIES += \
+        android.car.user \
         android.hidl.base-V1.0-java \
         android.hardware.automotive.audiocontrol-V1.0-java \
         android.hardware.automotive.vehicle-V2.0-java \

@@ -16,20 +16,27 @@
 
 package com.android.car;
 
+import android.car.Car;
+import android.car.CarNotConnectedException;
 import android.car.hardware.CarPropertyValue;
+import android.car.hardware.power.CarPowerManager;
+import android.car.hardware.power.CarPowerManager.CarPowerStateListener;
 import android.car.hardware.property.CarPropertyEvent;
 import android.car.hardware.property.ICarPropertyEventListener;
-import android.car.user.CarUserManagerHelper;
+import android.car.userlib.CarUserManagerHelper;
 import android.content.BroadcastReceiver;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.ServiceConnection;
 import android.hardware.automotive.vehicle.V2_0.VehicleIgnitionState;
 import android.hardware.automotive.vehicle.V2_0.VehicleProperty;
 import android.location.Location;
 import android.location.LocationManager;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.os.IBinder;
 import android.os.RemoteException;
 import android.os.SystemClock;
 import android.os.UserHandle;
@@ -48,13 +55,14 @@ import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * This service stores the last known location from {@link LocationManager} when a car is parked
  * and restores the location when the car is powered on.
  */
-public class CarLocationService extends BroadcastReceiver implements CarServiceBase,
-        CarPowerManagementService.PowerEventProcessingHandler {
+public class CarLocationService extends BroadcastReceiver implements
+            CarServiceBase, CarPowerStateListener {
     private static final String TAG = "CarLocationService";
     private static final String FILENAME = "location_cache.json";
     private static final boolean DBG = false;
@@ -69,22 +77,57 @@ public class CarLocationService extends BroadcastReceiver implements CarServiceB
     private final Object mLock = new Object();
 
     private final Context mContext;
-    private final CarPowerManagementService mCarPowerManagementService;
     private final CarPropertyService mCarPropertyService;
     private final CarPropertyEventListener mCarPropertyEventListener;
     private final CarUserManagerHelper mCarUserManagerHelper;
+    private final Car mCar;
+    private final ServiceConnection mCarServiceConnection = new ServiceConnection() {
+        @Override
+        public void onServiceConnected(ComponentName name, IBinder service) {
+            try {
+                mCarPowerManager = (CarPowerManager) mCar.getCarManager(Car.POWER_SERVICE);
+                mCarPowerManager.setListener(CarLocationService.this);
+            } catch (CarNotConnectedException e) {
+                Log.e(TAG, "Failed to get CarPowerManager instance", e);
+            }
+        }
+
+        @Override
+        public void onServiceDisconnected(ComponentName name) {
+            if (mCarPowerManager != null) {
+                mCarPowerManager.clearListener();
+            }
+        }
+    };
+
     private int mTaskCount = 0;
     private HandlerThread mHandlerThread;
     private Handler mHandler;
+    private CarPowerManager mCarPowerManager;
 
-    public CarLocationService(Context context, CarPowerManagementService carPowerManagementService,
-            CarPropertyService carPropertyService, CarUserManagerHelper carUserManagerHelper) {
+    public CarLocationService(
+            Context context,
+            CarPropertyService carPropertyService,
+            CarUserManagerHelper carUserManagerHelper) {
+        this(context, carPropertyService, carUserManagerHelper, null);
+    }
+
+    public CarLocationService(
+            Context context,
+            CarPropertyService carPropertyService,
+            CarUserManagerHelper carUserManagerHelper,
+            Car car) {
         logd("constructed");
         mContext = context;
-        mCarPowerManagementService = carPowerManagementService;
         mCarPropertyService = carPropertyService;
         mCarPropertyEventListener = new CarPropertyEventListener();
         mCarUserManagerHelper = carUserManagerHelper;
+        if (car != null) {
+            mCar = car;
+        } else {
+            mCar = Car.createCar(context, mCarServiceConnection);
+            mCar.connect();
+        }
     }
 
     @Override
@@ -96,16 +139,15 @@ public class CarLocationService extends BroadcastReceiver implements CarServiceB
         filter.addAction(LocationManager.MODE_CHANGED_ACTION);
         filter.addAction(LocationManager.GPS_ENABLED_CHANGE_ACTION);
         mContext.registerReceiver(this, filter);
-        mCarPropertyService.registerListener(VehicleProperty.IGNITION_STATE, 0,
-                mCarPropertyEventListener);
-        mCarPowerManagementService.registerPowerEventProcessingHandler(this);
+        mCarPropertyService.registerListener(
+                VehicleProperty.IGNITION_STATE, 0, mCarPropertyEventListener);
     }
 
     @Override
     public void release() {
         logd("release");
-        mCarPropertyService.unregisterListener(VehicleProperty.IGNITION_STATE,
-                mCarPropertyEventListener);
+        mCarPropertyService.unregisterListener(
+                VehicleProperty.IGNITION_STATE, mCarPropertyEventListener);
         mContext.unregisterReceiver(this);
     }
 
@@ -118,19 +160,28 @@ public class CarLocationService extends BroadcastReceiver implements CarServiceB
     }
 
     @Override
-    public long onPrepareShutdown(boolean shuttingDown) {
-        logd("onPrepareShutdown " + shuttingDown);
-        asyncOperation(() -> storeLocation());
-        return 100;
-    }
-
-    @Override
-    public void onPowerOn(boolean displayOn) {
-    }
-
-    @Override
-    public int getWakeupTime() {
-        return 0;
+    public void onStateChanged(int state, CompletableFuture<Void> future) {
+        switch (state) {
+            case CarPowerStateListener.SHUTDOWN_ENTER:
+            case CarPowerStateListener.SUSPEND_ENTER:
+                logd("onStateChanged: " + state);
+                asyncOperation(() -> {
+                    storeLocation();
+                    // Notify the CarPowerManager that it may proceed to shutdown or suspend.
+                    if (future != null) {
+                        future.complete(null);
+                    }
+                });
+                break;
+            case CarPowerStateListener.SHUTDOWN_CANCELLED:
+            case CarPowerStateListener.SUSPEND_EXIT:
+                // This service does not need to do any work for these events but should still
+                // notify the CarPowerManager that it may proceed.
+                if (future != null) {
+                    future.complete(null);
+                }
+                break;
+        }
     }
 
     @Override
