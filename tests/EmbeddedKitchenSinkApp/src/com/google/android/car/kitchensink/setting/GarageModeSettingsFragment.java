@@ -17,12 +17,14 @@ package com.google.android.car.kitchensink.setting;
 
 import android.app.TimePickerDialog;
 import android.car.CarApiUtil;
+import android.car.settings.CarSettings;
 import android.car.settings.GarageModeSettingsObserver;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.preference.Preference;
 import android.preference.PreferenceFragment;
+import android.preference.PreferenceManager;
 import android.preference.PreferenceScreen;
 import android.provider.Settings;
 import android.text.format.DateFormat;
@@ -70,6 +72,8 @@ public class GarageModeSettingsFragment extends PreferenceFragment implements
                 onSettingsChangedInternal(uri);
             }
         };
+        Log.d(TAG, "setDefaultValues");
+        PreferenceManager.setDefaultValues(getActivity(), R.xml.garage_mode_prefs, false);
     }
 
     @Override
@@ -89,9 +93,16 @@ public class GarageModeSettingsFragment extends PreferenceFragment implements
             try {
                 switch (key) {
                     case KEY_GARAGE_MODE_ENABLED:
-                        mGarageSwitchPreference.setDefaultValue(
-                                Settings.Global.getInt(getContext().getContentResolver(), key)
-                                        == 1);
+                        /* Garage mode is enabled by default. */
+                        boolean garageModeEnabled =
+                                Settings.Global.getInt(getContext().getContentResolver(), key, 1) == 1;
+                        if (garageModeEnabled) {
+                            Log.d(TAG, "garage_enabled");
+                            mGarageSwitchPreference.setSummary(R.string.garage_enabled);
+                        } else {
+                            Log.d(TAG, "garage_disabled");
+                            mGarageSwitchPreference.setSummary(R.string.garage_disabled);
+                        }
                         break;
                     case KEY_GARAGE_MODE_WAKE_UP_TIME:
                         int time[] = CarApiUtil.decodeGarageTimeSetting(
@@ -105,12 +116,12 @@ public class GarageModeSettingsFragment extends PreferenceFragment implements
                         break;
                     case KEY_GARAGE_MODE_MAINTENANCE_WINDOW:
                         int limitMinutes = Settings.Global.getInt(getContext().getContentResolver(),
-                                key) / 60 / 1000;
+                                key, CarSettings.DEFAULT_GARAGE_MODE_MAINTENANCE_WINDOW) / 60 / 1000;
                         mGarageLimitPreference.setSummary(
                                 getString(R.string.garage_time_limit_summary, limitMinutes));
                         break;
                 }
-            } catch (Settings.SettingNotFoundException e) {
+            } catch (Exception e) {
                 Log.e(TAG, "Settings not found " + key);
             }
         }

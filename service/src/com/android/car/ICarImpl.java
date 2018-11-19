@@ -72,6 +72,7 @@ public class ICarImpl extends ICar.Stub {
     private final CarBluetoothService mCarBluetoothService;
     private final PerUserCarServiceHelper mPerUserCarServiceHelper;
     private CarDiagnosticService mCarDiagnosticService;
+    private final AirplaneModeService mAirplaneModeService;
 
     private final CarServiceBase[] mAllServices;
 
@@ -118,6 +119,8 @@ public class ICarImpl extends ICar.Stub {
         mCarBluetoothService = new CarBluetoothService(serviceContext, mCarCabinService,
                 mCarSensorService, mPerUserCarServiceHelper);
         mCarDiagnosticService = new CarDiagnosticService(serviceContext, mHal.getDiagnosticHal());
+        mAirplaneModeService = new AirplaneModeService(serviceContext, mCarCabinService,
+                mCarSensorService, mPerUserCarServiceHelper, mCarPowerManagementService);
 
         // Be careful with order. Service depending on other service should be inited later.
         List<CarServiceBase> allServices = new ArrayList<>(Arrays.asList(
@@ -140,7 +143,8 @@ public class ICarImpl extends ICar.Stub {
                 mCarVendorExtensionService,
                 mCarBluetoothService,
                 mCarDiagnosticService,
-                mPerUserCarServiceHelper
+                mPerUserCarServiceHelper,
+                mAirplaneModeService
         ));
         mAllServices = allServices.toArray(new CarServiceBase[0]);
     }
