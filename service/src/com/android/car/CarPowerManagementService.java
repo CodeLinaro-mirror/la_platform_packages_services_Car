@@ -323,7 +323,7 @@ public class CarPowerManagementService implements CarServiceBase,
     protected long notifyPrepareShutdown(boolean shuttingDown) {
         long processingTimeMs = 0;
         for (PowerEventProcessingHandlerWrapper wrapper : mPowerEventProcessingHandlers) {
-            long handlerProcessingTime = wrapper.handler.onPrepareShutdown(shuttingDown);
+            long handlerProcessingTime = wrapper.callOnPrepareShutdown(shuttingDown);
             if (handlerProcessingTime > processingTimeMs) {
                 processingTimeMs = handlerProcessingTime;
             }
@@ -363,7 +363,7 @@ public class CarPowerManagementService implements CarServiceBase,
     private void doHandlePreprocessing(boolean shuttingDown) {
         long processingTimeMs = 0;
         for (PowerEventProcessingHandlerWrapper wrapper : mPowerEventProcessingHandlers) {
-            long handlerProcessingTime = wrapper.handler.onPrepareShutdown(shuttingDown);
+            long handlerProcessingTime = wrapper.callOnPrepareShutdown(shuttingDown);
             if (handlerProcessingTime > 0) {
                 wrapper.setProcessingTimeAndResetProcessingDone(handlerProcessingTime);
             }
@@ -387,6 +387,10 @@ public class CarPowerManagementService implements CarServiceBase,
         } else {
             PowerHandler handler;
             synchronized (this) {
+                // Update processing start time. Otherwise service may
+                // consider duplicated sleep entry so as to ignore the request.
+                Log.i(CarLog.TAG_POWER, "Update mProcessingStartTime");
+                mProcessingStartTime = SystemClock.elapsedRealtime();
                 handler = mHandler;
             }
             handler.handleProcessingComplete(shuttingDown);
@@ -394,6 +398,10 @@ public class CarPowerManagementService implements CarServiceBase,
     }
 
     private void doHandleDeepSleep() {
+        doHandleDeepSleep(false);
+    }
+
+    private void doHandleDeepSleep(boolean needExitSleep) {
         // keep holding partial wakelock to prevent entering sleep before enterDeepSleep call
         // enterDeepSleep should force sleep entry even if wake lock is kept.
         mSystemInterface.switchToPartialWakeLock();
@@ -411,6 +419,14 @@ public class CarPowerManagementService implements CarServiceBase,
             mLastSleepEntryTime = SystemClock.elapsedRealtime();
         }
         mSystemInterface.enterDeepSleep(wakeupTimeSec);
+
+        if (!needExitSleep) {
+            Log.i(CarLog.TAG_POWER, "Release all wake locks");
+            mSystemInterface.releaseAllWakeLocks();
+            return;
+        }
+
+        Log.i(CarLog.TAG_POWER, "Exit sleep");
         mHal.sendSleepExit();
         for (PowerServiceEventListener listener : mListeners) {
             listener.onSleepExit();
@@ -506,6 +522,7 @@ public class CarPowerManagementService implements CarServiceBase,
 
     private void doHandleMainDisplayStateChange(boolean on) {
         //TODO bug: 32065231
+        Log.i(CarLog.TAG_POWER, "doHandleMainDisplayStateChange " + on);
     }
 
     public void handleMainDisplayChanged(boolean on) {
@@ -665,6 +682,15 @@ public class CarPowerManagementService implements CarServiceBase,
             if (shouldCall) {
                 handler.onPowerOn(displayOn);
             }
+        }
+
+        public long callOnPrepareShutdown(boolean shuttingDown) {
+            synchronized (this) {
+                if (mPowerOnSent) {
+                    mPowerOnSent = false;
+                }
+            }
+            return handler.onPrepareShutdown(shuttingDown);
         }
 
         @Override
