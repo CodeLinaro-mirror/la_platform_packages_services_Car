@@ -39,6 +39,7 @@ import android.os.Handler;
 import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.os.UserManager;
+import android.provider.Settings;
 import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.SmallTest;
 import android.support.test.runner.AndroidJUnit4;
@@ -91,6 +92,8 @@ public class CarUserManagerHelperTest {
         doReturn(mActivityManager).when(mContext).getSystemService(Context.ACTIVITY_SERVICE);
         doReturn(InstrumentationRegistry.getTargetContext().getResources())
                 .when(mContext).getResources();
+        doReturn(InstrumentationRegistry.getTargetContext().getContentResolver())
+                .when(mContext).getContentResolver();
         doReturn(mContext).when(mContext).getApplicationContext();
         mCarUserManagerHelper = new CarUserManagerHelper(mContext);
 
@@ -476,12 +479,12 @@ public class CarUserManagerHelperTest {
 
     @Test
     public void testSwitchToGuest() {
-        mCarUserManagerHelper.startNewGuestSession(mGuestUserName);
+        mCarUserManagerHelper.startGuestSession(mGuestUserName);
         verify(mUserManager).createGuest(mContext, mGuestUserName);
 
         UserInfo guestInfo = new UserInfo(/* id= */21, mGuestUserName, UserInfo.FLAG_GUEST);
         doReturn(guestInfo).when(mUserManager).createGuest(mContext, mGuestUserName);
-        mCarUserManagerHelper.startNewGuestSession(mGuestUserName);
+        mCarUserManagerHelper.startGuestSession(mGuestUserName);
         verify(mActivityManager).switchUser(21);
     }
 
@@ -776,8 +779,7 @@ public class CarUserManagerHelperTest {
         UserInfo otherUser2 = createUserInfoForId(lastActiveUserId - 1);
         UserInfo otherUser3 = createUserInfoForId(lastActiveUserId);
 
-        mCarUserManagerHelper.setLastActiveUser(
-                lastActiveUserId, /* skipGlobalSettings= */ true);
+        setLastActiveUser(lastActiveUserId);
         mockGetUsers(mSystemUser, otherUser1, otherUser2, otherUser3);
 
         assertThat(mCarUserManagerHelper.getInitialUser()).isEqualTo(lastActiveUserId);
@@ -791,11 +793,41 @@ public class CarUserManagerHelperTest {
         UserInfo otherUser1 = createUserInfoForId(lastActiveUserId - 2);
         UserInfo otherUser2 = createUserInfoForId(lastActiveUserId - 1);
 
-        mCarUserManagerHelper.setLastActiveUser(
-                lastActiveUserId, /* skipGlobalSettings= */ true);
+        setLastActiveUser(lastActiveUserId);
         mockGetUsers(mSystemUser, otherUser1, otherUser2);
 
         assertThat(mCarUserManagerHelper.getInitialUser()).isEqualTo(lastActiveUserId - 2);
+    }
+
+    @Test
+    public void test_CreateNewOrFindExistingGuest_ReturnsExistingGuest() {
+        // Create two users and a guest user.
+        UserInfo user1 = createUserInfoForId(10);
+        UserInfo user2 = createUserInfoForId(12);
+        UserInfo user3 = new UserInfo(/* id= */ 13, /* name = */ "user13", UserInfo.FLAG_GUEST);
+
+        mockGetUsers(user1, user2, user3);
+        doReturn(null).when(mUserManager).createGuest(any(), any());
+
+        UserInfo guest = mCarUserManagerHelper.createNewOrFindExistingGuest(mGuestUserName);
+        assertThat(guest).isEqualTo(user3);
+    }
+
+    @Test
+    public void test_CreateNewOrFindExistingGuest_CreatesNewGuest_IfNoExisting() {
+        // Create two users.
+        UserInfo user1 = createUserInfoForId(10);
+        UserInfo user2 = createUserInfoForId(12);
+
+        mockGetUsers(user1, user2);
+
+        // Create a user for the "new guest" user.
+        UserInfo guestInfo = new UserInfo(/* id= */21, mGuestUserName, UserInfo.FLAG_GUEST);
+        doReturn(guestInfo).when(mUserManager).createGuest(mContext, mGuestUserName);
+
+        UserInfo guest = mCarUserManagerHelper.createNewOrFindExistingGuest(mGuestUserName);
+        verify(mUserManager).createGuest(mContext, mGuestUserName);
+        assertThat(guest).isEqualTo(guestInfo);
     }
 
     private UserInfo createUserInfoForId(int id) {
@@ -810,5 +842,10 @@ public class CarUserManagerHelperTest {
             testUsers.add(user);
         }
         doReturn(testUsers).when(mUserManager).getUsers(true);
+    }
+
+    private void setLastActiveUser(int userId) {
+        Settings.Global.putInt(InstrumentationRegistry.getTargetContext().getContentResolver(),
+                Settings.Global.LAST_ACTIVE_USER_ID, userId);
     }
 }
