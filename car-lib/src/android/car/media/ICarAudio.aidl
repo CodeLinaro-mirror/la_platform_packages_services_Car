@@ -25,10 +25,12 @@ import android.car.media.CarAudioPatchHandle;
  * @hide
  */
 interface ICarAudio {
-    void setGroupVolume(int groupId, int index, int flags);
-    int getGroupMaxVolume(int groupId);
-    int getGroupMinVolume(int groupId);
-    int getGroupVolume(int groupId);
+    boolean isDynamicRoutingEnabled();
+
+    void setGroupVolume(int zoneId, int groupId, int index, int flags);
+    int getGroupMaxVolume(int zoneId, int groupId);
+    int getGroupMinVolume(int zoneId, int groupId);
+    int getGroupVolume(int zoneId, int groupId);
 
     void setFadeTowardFront(float value);
     void setBalanceTowardRight(float value);
@@ -37,9 +39,9 @@ interface ICarAudio {
     CarAudioPatchHandle createAudioPatch(in String sourceAddress, int usage, int gainInMillibels);
     void releaseAudioPatch(in CarAudioPatchHandle patch);
 
-    int getVolumeGroupCount();
-    int getVolumeGroupIdForUsage(int usage);
-    int[] getUsagesForVolumeGroupId(int groupId);
+    int getVolumeGroupCount(int zoneId);
+    int getVolumeGroupIdForUsage(int zoneId, int usage);
+    int[] getUsagesForVolumeGroupId(int zoneId, int groupId);
 
     /**
      * IBinder is ICarVolumeCallback but passed as IBinder due to aidl hidden.
