@@ -31,8 +31,12 @@ import android.view.SurfaceHolder.Callback;
 import android.view.SurfaceView;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ProgressBar;
+import android.widget.TextView;
 
 import androidx.fragment.app.Fragment;
+import androidx.lifecycle.ViewModelProvider;
+import androidx.lifecycle.ViewModelProviders;
 
 public class NavigationFragment extends Fragment {
     private static final String TAG = "Cluster.NavFragment";
@@ -41,6 +45,10 @@ public class NavigationFragment extends Fragment {
     private DisplayManager mDisplayManager;
     private Rect mUnobscuredBounds;
     private MainClusterActivity mMainClusterActivity;
+    private ClusterViewModel mViewModel;
+    private ProgressBar mProgressBar;
+    private TextView mMessage;
+
 
     // Static because we want to keep alive this virtual display when navigating through
     // ViewPager (this fragment gets dynamically destroyed and created)
@@ -109,6 +117,9 @@ public class NavigationFragment extends Fragment {
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
         Log.i(TAG, "onCreateView");
+        ViewModelProvider provider = ViewModelProviders.of(requireActivity());
+        mViewModel = provider.get(ClusterViewModel.class);
+
         mDisplayManager = getActivity().getSystemService(DisplayManager.class);
         mDisplayManager.registerDisplayListener(mDisplayListener, new Handler());
 
@@ -127,8 +138,17 @@ public class NavigationFragment extends Fragment {
                 Log.i(TAG, "surfaceChanged, holder: " + holder + ", size:" + width + "x" + height
                         + ", format:" + format);
 
-                //Create dummy unobscured area to report to navigation activity.
-                mUnobscuredBounds = new Rect(40, 0, width - 80, height - 40);
+                // Create dummy unobscured area to report to navigation activity.
+                int obscuredWidth = (int) getResources()
+                        .getDimension(R.dimen.speedometer_overlap_width);
+                int obscuredHeight = (int) getResources()
+                        .getDimension(R.dimen.navigation_gradient_height);
+                mUnobscuredBounds = new Rect(
+                        obscuredWidth,          /* left: size of gauge */
+                        obscuredHeight,         /* top: gradient */
+                        width - obscuredWidth,  /* right: size of the display - size of gauge */
+                        height - obscuredHeight /* bottom: size of display - gradient */
+                );
 
                 if (mVirtualDisplay == null) {
                     mVirtualDisplay = createVirtualDisplay(holder.getSurface(), width, height);
@@ -144,6 +164,18 @@ public class NavigationFragment extends Fragment {
                 // detaching surface is similar to turning off the display
                 mVirtualDisplay.setSurface(null);
             }
+        });
+        mProgressBar = root.findViewById(R.id.progress_bar);
+        mMessage = root.findViewById(R.id.message);
+
+        mViewModel.getNavigationActivityState().observe(this, state -> {
+            if (Log.isLoggable(TAG, Log.DEBUG)) {
+                Log.d(TAG, "State: " + state);
+            }
+            mProgressBar.setVisibility(state == ClusterViewModel.NavigationActivityState.LOADING
+                    ? View.VISIBLE : View.INVISIBLE);
+            mMessage.setVisibility(state == ClusterViewModel.NavigationActivityState.NOT_SELECTED
+                    ? View.VISIBLE : View.INVISIBLE);
         });
 
         return root;
