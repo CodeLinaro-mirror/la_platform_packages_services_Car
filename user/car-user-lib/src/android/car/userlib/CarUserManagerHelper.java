@@ -33,8 +33,10 @@ import android.os.UserHandle;
 import android.os.UserManager;
 import android.provider.Settings;
 import android.sysprop.CarProperties;
+import android.text.TextUtils;
 import android.util.Log;
 
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.UserIcons;
 
 import com.google.android.collect.Sets;
@@ -57,14 +59,12 @@ import java.util.Set;
 public class CarUserManagerHelper {
     private static final String TAG = "CarUserManagerHelper";
 
-    // Place holder for user name of the first user created.
-    public static final String DEFAULT_FIRST_ADMIN_NAME = "Driver";
-
     /**
      * Default set of restrictions for Non-Admin users.
      */
     private static final Set<String> DEFAULT_NON_ADMIN_RESTRICTIONS = Sets.newArraySet(
-            UserManager.DISALLOW_FACTORY_RESET
+            UserManager.DISALLOW_FACTORY_RESET,
+            UserManager.DISALLOW_RUN_IN_BACKGROUND
     );
 
     /**
@@ -83,6 +83,7 @@ public class CarUserManagerHelper {
     private final Context mContext;
     private final UserManager mUserManager;
     private final ActivityManager mActivityManager;
+    private String mDefaultAdminName;
     private Bitmap mDefaultGuestUserIcon;
     private ArrayList<OnUsersUpdateListener> mUpdateListeners;
     private final BroadcastReceiver mUserChangeReceiver = new BroadcastReceiver() {
@@ -99,6 +100,11 @@ public class CarUserManagerHelper {
         }
     };
 
+    /**
+     * Initializes with a default name for admin users.
+     *
+     * @param context Application Context
+     */
     public CarUserManagerHelper(Context context) {
         mUpdateListeners = new ArrayList<>();
         mContext = context.getApplicationContext();
@@ -730,6 +736,18 @@ public class CarUserManagerHelper {
     }
 
     /**
+     * Creates a new user on the system with a default user name. This user name is set during
+     * constrution. The created user would be granted admin role. Only admins can create other
+     * admins.
+     *
+     * @return Newly created admin user, null if failed to create a user.
+     */
+    @Nullable
+    public UserInfo createNewAdminUser() {
+        return createNewAdminUser(getDefaultAdminName());
+    }
+
+    /**
      * Creates a new user on the system, the created user would be granted admin role.
      * Only admins can create other admins.
      *
@@ -808,8 +826,10 @@ public class CarUserManagerHelper {
      * Tries to remove the user that's passed in. System user cannot be removed.
      * If the user to be removed is user currently running the process,
      * it switches to the guest user first, and then removes the user.
+     * If the user being removed is the last admin user, this will create a new admin user.
      *
      * @param userInfo User to be removed
+     * @param guestUserName User name to use for the guest user if we need to switch to it
      * @return {@code true} if user is successfully removed, {@code false} otherwise.
      */
     public boolean removeUser(UserInfo userInfo, String guestUserName) {
@@ -843,10 +863,12 @@ public class CarUserManagerHelper {
     }
 
     private boolean removeLastAdmin(UserInfo userInfo) {
-        Log.i(TAG, "User " + userInfo.id
-                + " is the last admin user on device. Creating a new admin.");
+        if (Log.isLoggable(TAG, Log.INFO)) {
+            Log.i(TAG, "User " + userInfo.id
+                    + " is the last admin user on device. Creating a new admin.");
+        }
 
-        UserInfo newAdmin = createNewAdminUser(DEFAULT_FIRST_ADMIN_NAME);
+        UserInfo newAdmin = createNewAdminUser(getDefaultAdminName());
         if (newAdmin == null) {
             Log.w(TAG, "Couldn't create another admin, cannot delete current user.");
             return false;
@@ -1021,6 +1043,18 @@ public class CarUserManagerHelper {
 
     private void unregisterReceiver() {
         mContext.unregisterReceiver(mUserChangeReceiver);
+    }
+
+    private String getDefaultAdminName() {
+        if (TextUtils.isEmpty(mDefaultAdminName)) {
+            mDefaultAdminName = mContext.getString(com.android.internal.R.string.owner_name);
+        }
+        return mDefaultAdminName;
+    }
+
+    @VisibleForTesting
+    void setDefaultAdminName(String defaultAdminName) {
+        mDefaultAdminName = defaultAdminName;
     }
 
     /**
