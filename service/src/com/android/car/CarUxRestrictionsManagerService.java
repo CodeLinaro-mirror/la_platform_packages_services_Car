@@ -185,6 +185,8 @@ public class CarUxRestrictionsManagerService extends ICarUxRestrictionsManager.S
                 PROPERTY_UPDATE_RATE, mICarPropertyEventListener);
         registerReceiverToLoadConfig();
         initializeUxRestrictions();
+        // temporarily disable Ux Restrictions for general UI use
+        setUxRChangeBroadcastEnabled(false);
     }
 
     private void registerReceiverToLoadConfig() {
