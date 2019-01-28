@@ -1,0 +1,16 @@
+package android.car.content.pm {
+
+  public final class CarPackageManager {
+    method public void setEnableActivityBlocking(boolean);
+  }
+
+}
+
+package android.car.media {
+
+  public final class CarAudioManager {
+    method public boolean isDynamicRoutingEnabled() throws android.car.CarNotConnectedException;
+  }
+
+}
+
