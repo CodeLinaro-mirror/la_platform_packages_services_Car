@@ -18,8 +18,11 @@ package android.car;
 
 import android.annotation.IntDef;
 import android.annotation.Nullable;
+import android.annotation.SdkConstant;
+import android.annotation.SdkConstant.SdkConstantType;
 import android.annotation.SystemApi;
 import android.car.cluster.CarInstrumentClusterManager;
+import android.car.cluster.ClusterActivityState;
 import android.car.content.pm.CarPackageManager;
 import android.car.diagnostic.CarDiagnosticManager;
 import android.car.drivingstate.CarDrivingStateManager;
@@ -91,8 +94,11 @@ public final class Car {
 
     /**
      * Service name for {@link CarInstrumentClusterManager}
+     *
+     * @deprecated CarInstrumentClusterManager is being deprecated
      * @hide
      */
+    @Deprecated
     public static final String CAR_INSTRUMENT_CLUSTER_SERVICE = "cluster_service";
 
     /**
@@ -237,7 +243,6 @@ public final class Car {
 
     /**
      * Permission necessary to change car audio settings through {@link CarAudioManager}.
-     * @hide
      */
     public static final String PERMISSION_CAR_CONTROL_AUDIO_SETTINGS =
             "android.car.permission.CAR_CONTROL_AUDIO_SETTINGS";
@@ -467,6 +472,7 @@ public final class Car {
      * package name of the media app which user wants to play media on.
      * <p>Output: nothing.
      */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String CAR_INTENT_ACTION_MEDIA_TEMPLATE =
             "android.car.intent.action.MEDIA_TEMPLATE";
 
@@ -482,6 +488,26 @@ public final class Car {
     private static final String CAR_SERVICE_PACKAGE = "com.android.car";
 
     private static final String CAR_SERVICE_CLASS = "com.android.car.CarService";
+
+    /**
+     * Category used by navigation applications to indicate which activity should be launched on
+     * the instrument cluster when such application holds
+     * {@link CarAppFocusManager#APP_FOCUS_TYPE_NAVIGATION} focus.
+     *
+     * @hide
+     */
+    public static final String CAR_CATEGORY_NAVIGATION = "android.car.cluster.NAVIGATION";
+
+    /**
+     * When an activity is launched in the cluster, it will receive {@link ClusterActivityState} in
+     * the intent's extra under this key, containing instrument cluster information such as
+     * unobscured area, visibility, etc.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String CAR_EXTRA_CLUSTER_ACTIVITY_STATE =
+            "android.car.cluster.ClusterActivityState";
 
     private static final long CAR_SERVICE_BIND_RETRY_INTERVAL_MS = 500;
     private static final long CAR_SERVICE_BIND_MAX_RETRY = 20;
@@ -525,13 +551,11 @@ public final class Car {
 
         public void onServiceDisconnected(ComponentName name) {
             synchronized (Car.this) {
-                mService = null;
                 if (mConnectionState  == STATE_DISCONNECTED) {
                     return;
                 }
-                mConnectionState = STATE_DISCONNECTED;
             }
-            // unbind explicitly here.
+            // unbind explicitly and set connectionState to STATE_DISCONNECTED here.
             disconnect();
             mServiceConnectionListenerClient.onServiceDisconnected(name);
         }
