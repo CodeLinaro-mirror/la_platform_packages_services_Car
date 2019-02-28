@@ -149,9 +149,13 @@ public class CarPowerManagementService implements CarServiceBase,
                         + "initialization");
             }
         } else {
-            Log.w(CarLog.TAG_POWER, "Vehicle hal does not support power state yet.");
-            onApPowerStateChange(new PowerState(PowerHalService.STATE_ON_FULL, 0));
-            mSystemInterface.switchToFullWakeLock();
+            // Since Vehicle HAL doesn’t support power state yet, it is going in to the
+            // STATE_ON_FULL hence this is will acquire FULL_WAKE_LOCK, and never will go
+            // in to suspend state. By Commenting these code, we could able to achieve
+            // the XO / Suspend  within 1 minutes
+            // Log.w(CarLog.TAG_POWER, "Vehicle hal does not support power state yet.");
+            // onApPowerStateChange(new PowerState(PowerHalService.STATE_ON_FULL, 0));
+            // mSystemInterface.switchToFullWakeLock();
         }
         mSystemInterface.startDisplayStateMonitoring(this);
     }
