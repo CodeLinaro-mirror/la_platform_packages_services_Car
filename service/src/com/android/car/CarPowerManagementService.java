@@ -454,6 +454,8 @@ public class CarPowerManagementService implements CarServiceBase,
         synchronized (this) {
             if (mCurrentState != null && mCurrentState.mState == PowerHalService.STATE_ON_FULL) {
                 displayOn = true;
+            } else { //audio Fix
+                displayOn = true;
             }
         }
         for (PowerEventProcessingHandlerWrapper wrapper : mPowerEventProcessingHandlers) {
