@@ -28,8 +28,10 @@ import android.car.vms.VmsSubscriberManager;
 import android.hardware.automotive.vehicle.V2_0.VehicleProperty;
 import android.hardware.automotive.vehicle.V2_0.VehiclePropertyAccess;
 import android.hardware.automotive.vehicle.V2_0.VehiclePropertyChangeMode;
-import android.support.test.filters.MediumTest;
-import android.support.test.runner.AndroidJUnit4;
+
+import androidx.test.filters.FlakyTest;
+import androidx.test.filters.MediumTest;
+import androidx.test.runner.AndroidJUnit4;
 
 import com.android.car.vehiclehal.test.MockedVehicleHal;
 
@@ -47,6 +49,7 @@ import java.util.concurrent.TimeUnit;
 
 @RunWith(AndroidJUnit4.class)
 @MediumTest
+@FlakyTest // TODO(b/116333782): Remove the flag when issue fixed
 public class VmsPublisherSubscriberTest extends MockedCarTestBase {
     private static final int LAYER_ID = 88;
     private static final int LAYER_VERSION = 19;

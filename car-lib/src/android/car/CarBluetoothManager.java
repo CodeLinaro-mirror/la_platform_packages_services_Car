@@ -19,10 +19,6 @@ import android.Manifest;
 import android.annotation.IntDef;
 import android.annotation.RequiresPermission;
 import android.bluetooth.BluetoothDevice;
-import android.car.CarLibLog;
-import android.car.CarManagerBase;
-import android.car.CarNotConnectedException;
-import android.car.ICarBluetooth;
 import android.content.Context;
 import android.os.IBinder;
 import android.os.RemoteException;
@@ -131,6 +127,7 @@ public final class CarBluetoothManager implements CarManagerBase {
             throw new CarNotConnectedException(e);
         }
     }
+
 
     /** @hide */
     public CarBluetoothManager(IBinder service, Context context) {

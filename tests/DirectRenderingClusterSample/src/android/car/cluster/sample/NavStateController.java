@@ -19,12 +19,14 @@ import android.annotation.Nullable;
 import android.content.Context;
 import android.graphics.drawable.Drawable;
 import android.util.Log;
+import android.view.View;
 import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.car.cluster.navigation.Distance;
 import androidx.car.cluster.navigation.Maneuver;
 import androidx.car.cluster.navigation.NavigationState;
+import androidx.car.cluster.navigation.Segment;
 import androidx.car.cluster.navigation.Step;
 
 /**
@@ -34,33 +36,74 @@ public class NavStateController {
     private static final String TAG = "Cluster.NavController";
 
     private ImageView mManeuver;
+    private LaneView mLane;
     private TextView mDistance;
     private TextView mSegment;
+    private CueView mCue;
     private Context mContext;
+    private View mNavigationState;
 
     /**
      * Creates a controller to coordinate updates to the views displaying navigation state
      * data.
      *
-     * @param maneuver {@link ImageView} used to display the immediate navigation maneuver
-     * @param distance {@link TextView} displaying distance to the maneuver
-     * @param segment {@link TextView} displaying the current street.
+     * @param container {@link View} containing the navigation state views
      */
-    public NavStateController(ImageView maneuver, TextView distance, TextView segment) {
-        mManeuver = maneuver;
-        mDistance = distance;
-        mSegment = segment;
-        mContext = maneuver.getContext();
+    public NavStateController(View container) {
+        mNavigationState = container;
+        mManeuver = container.findViewById(R.id.maneuver);
+        mLane = container.findViewById(R.id.lane);
+        mDistance = container.findViewById(R.id.distance);
+        mSegment = container.findViewById(R.id.segment);
+        mCue = container.findViewById(R.id.cue);
+
+        mContext = container.getContext();
     }
 
     /**
      * Updates views to reflect the provided navigation state
      */
     public void update(@Nullable NavigationState state) {
-        Log.i(TAG, "Updating nav state: " + state);
+        if (Log.isLoggable(TAG, Log.DEBUG)) {
+            Log.d(TAG, "Updating nav state: " + state);
+        }
         Step step = getImmediateStep(state);
         mManeuver.setImageDrawable(getManeuverIcon(step != null ? step.getManeuver() : null));
         mDistance.setText(formatDistance(step != null ? step.getDistance() : null));
+        mSegment.setText(getSegmentString(state.getCurrentSegment()));
+        mCue.setRichText(step != null ? step.getCue() : null);
+
+        if (step.getLanes().size() > 0) {
+            mLane.setLanes(step.getLanes());
+            mLane.setVisibility(View.VISIBLE);
+        } else {
+            mLane.setVisibility(View.GONE);
+        }
+    }
+
+    /**
+     * Updates whether turn-by-turn display is active or not. Turn-by-turn would be active whenever
+     * a navigation application has focus.
+     */
+    public void setActive(boolean active) {
+        if (Log.isLoggable(TAG, Log.DEBUG)) {
+            Log.d(TAG, "Navigation status active: " + active);
+        }
+        if (!active) {
+            mManeuver.setImageDrawable(null);
+            mDistance.setText(null);
+            mLane.setVisibility(View.GONE);
+            mCue.setText(null);
+            mSegment.setText(null);
+        }
+    }
+
+    private String getSegmentString(Segment segment) {
+        if (segment != null) {
+            return segment.getName();
+        }
+
+        return null;
     }
 
     private Drawable getManeuverIcon(@Nullable Maneuver maneuver) {
@@ -93,7 +136,7 @@ public class NavStateController {
             case U_TURN_LEFT:
                 return mContext.getDrawable(R.drawable.direction_uturn);
             case U_TURN_RIGHT:
-                return mContext.getDrawable(R.drawable.direction_uturn);
+                return mContext.getDrawable(R.drawable.direction_uturn_right);
             case ON_RAMP_SLIGHT_LEFT:
                 return mContext.getDrawable(R.drawable.direction_on_ramp_slight_left);
             case ON_RAMP_SLIGHT_RIGHT:
@@ -109,7 +152,7 @@ public class NavStateController {
             case ON_RAMP_U_TURN_LEFT:
                 return mContext.getDrawable(R.drawable.direction_uturn);
             case ON_RAMP_U_TURN_RIGHT:
-                return mContext.getDrawable(R.drawable.direction_uturn);
+                return mContext.getDrawable(R.drawable.direction_uturn_right);
             case OFF_RAMP_SLIGHT_LEFT:
                 return mContext.getDrawable(R.drawable.direction_off_ramp_slight_left);
             case OFF_RAMP_SLIGHT_RIGHT:
@@ -145,7 +188,7 @@ public class NavStateController {
             case ROUNDABOUT_ENTER_AND_EXIT_CW_SLIGHT_LEFT:
                 return mContext.getDrawable(R.drawable.direction_roundabout_slight_left);
             case ROUNDABOUT_ENTER_AND_EXIT_CW_U_TURN:
-                return mContext.getDrawable(R.drawable.direction_uturn);
+                return mContext.getDrawable(R.drawable.direction_uturn_right);
             case ROUNDABOUT_ENTER_AND_EXIT_CCW_SHARP_RIGHT:
                 return mContext.getDrawable(R.drawable.direction_roundabout_sharp_right);
             case ROUNDABOUT_ENTER_AND_EXIT_CCW_NORMAL_RIGHT:

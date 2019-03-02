@@ -29,7 +29,7 @@
     <uses-permission android:name="android.car.permission.CAR_CONTROL_AUDIO_SETTINGS" />
     <uses-permission android:name="android.car.permission.STORAGE_MONITORING" />
 
-    <instrumentation android:name="android.support.test.runner.AndroidJUnitRunner"
+    <instrumentation android:name="androidx.test.runner.AndroidJUnitRunner"
             android:targetPackage="com.android.car.test"
             android:label="Tests for Car APIs"/>
 
@@ -50,6 +50,7 @@
         <activity android:name="com.android.car.SystemActivityMonitoringServiceTest$ActivityA"/>
         <activity android:name="com.android.car.SystemActivityMonitoringServiceTest$ActivityB"/>
         <activity android:name="com.android.car.SystemActivityMonitoringServiceTest$ActivityC"/>
+        <activity android:name="com.android.car.SystemActivityMonitoringServiceTest$ActivityThatFinishesImmediately"/>
         <activity android:name="com.android.car.SystemActivityMonitoringServiceTest$BlockingActivity"
                   android:taskAffinity="com.android.car.carservicetest.block"/>
 

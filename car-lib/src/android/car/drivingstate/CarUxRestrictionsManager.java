@@ -18,10 +18,11 @@ package android.car.drivingstate;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.RequiresPermission;
+import android.annotation.TestApi;
 import android.car.Car;
 import android.car.CarManagerBase;
 import android.car.CarNotConnectedException;
-import android.car.drivingstate.ICarUxRestrictionsManager;
 import android.content.Context;
 import android.os.Handler;
 import android.os.IBinder;
@@ -117,6 +118,31 @@ public final class CarUxRestrictionsManager implements CarManagerBase {
     }
 
     /**
+     * Set a new {@link CarUxRestrictionsConfiguration} for next trip.
+     * <p>
+     * Saving a new configuration does not affect current configuration. The new configuration will
+     * only be used after UX Restrictions service restarts when the vehicle is parked.
+     * <p>
+     * Requires Permission:
+     * {@link android.car.Manifest.permission#CAR_UX_RESTRICTIONS_CONFIGURATION}.
+     *
+     * @param config UX restrictions configuration to be persisted.
+     * @return {@code true} if input config was successfully saved; {@code false} otherwise.
+     *
+     * @hide
+     */
+    @RequiresPermission(value = Car.PERMISSION_CAR_UX_RESTRICTIONS_CONFIGURATION)
+    public synchronized boolean saveUxRestrictionsConfigurationForNextBoot(
+            CarUxRestrictionsConfiguration config) throws CarNotConnectedException {
+        try {
+            return mUxRService.saveUxRestrictionsConfigurationForNextBoot(config);
+        } catch (RemoteException e) {
+            Log.e(TAG, "Could not save new UX restrictions configuration", e);
+            throw new CarNotConnectedException(e);
+        }
+    }
+
+    /**
      * Unregister the registered {@link OnUxRestrictionsChangedListener}
      */
     public synchronized void unregisterListener()
@@ -148,6 +174,49 @@ public final class CarUxRestrictionsManager implements CarManagerBase {
             return mUxRService.getCurrentUxRestrictions();
         } catch (RemoteException e) {
             Log.e(TAG, "Could not get current UX restrictions " + e);
+            throw new CarNotConnectedException(e);
+        }
+    }
+
+    /**
+     * Get the current staged configuration, staged config file will only be accessible after
+     * the boot up completed or user has been switched.
+     * This methods is only for test purpose, please do not use in production.
+     *
+     * @return current staged configuration, {@code null} if it's not available
+     *
+     * @hide
+     *
+     */
+    @TestApi
+    @Nullable
+    @RequiresPermission(value = Car.PERMISSION_CAR_UX_RESTRICTIONS_CONFIGURATION)
+    public synchronized CarUxRestrictionsConfiguration getStagedConfig()
+            throws CarNotConnectedException {
+        try {
+            return mUxRService.getStagedConfig();
+        } catch (RemoteException e) {
+            Log.e(TAG, "Could not get staged UX restrictions staged configuration " + e);
+            throw new CarNotConnectedException(e);
+        }
+    }
+
+    /**
+     * Get the current prod configuration
+     *
+     * @return current prod configuration that is in effect.
+     *
+     * @hide
+     *
+     */
+    @TestApi
+    @RequiresPermission(value = Car.PERMISSION_CAR_UX_RESTRICTIONS_CONFIGURATION)
+    public synchronized CarUxRestrictionsConfiguration getConfig()
+            throws CarNotConnectedException {
+        try {
+            return mUxRService.getConfig();
+        } catch (RemoteException e) {
+            Log.e(TAG, "Could not get production UX restrictions prod configuration" + e);
             throw new CarNotConnectedException(e);
         }
     }
@@ -226,35 +295,4 @@ public final class CarUxRestrictionsManager implements CarManagerBase {
             listener.onUxRestrictionsChanged(restrictionInfo);
         }
     }
-
-    /**
-     * To be removed after updating the support library with the new car stubs lib.
-     * b/80506092 has more details.
-     *
-     */
-    public interface onUxRestrictionsChangedListener {
-        /**
-         * To be removed see b/80506092 for details.
-         * @param restrictionInfo
-         */
-        void onUxRestrictionsChanged(CarUxRestrictions restrictionInfo);
-        /**
-         * Temp workaround.  To be removed.
-         * To differentiate from the new OnUxRestrictionsChangedListener for clients calling
-         * registerListener with an anonymous class or lambda functions.
-         */
-        void dummy();
-    }
-
-    /**
-     * To be removed after updating the support library with the new car stubs lib.
-     * b/80506092 has more details.
-     *
-     */
-    public synchronized void registerListener(@NonNull onUxRestrictionsChangedListener listener)
-            throws CarNotConnectedException, IllegalArgumentException {
-        // Intentionally left NOP.
-    }
-
-
 }

@@ -20,7 +20,8 @@ include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES := $(call all-java-files-under, src)
 
-LOCAL_RESOURCE_DIR += packages/services/Car/service/res
+LOCAL_RESOURCE_DIR += $(LOCAL_PATH)/res \
+    packages/services/Car/service/res
 
 LOCAL_AAPT_FLAGS += --extra-packages com.android.car --auto-add-overlay
 
@@ -43,7 +44,7 @@ LOCAL_STATIC_JAVA_LIBRARIES += \
     vehicle-hal-support-lib \
     car-systemtest \
     mockito-target-inline \
-    android-support-test \
+    androidx.test.rules \
     android.hardware.automotive.vehicle-V2.0-java \
     com.android.car.test.utils \
     truth-prebuilt

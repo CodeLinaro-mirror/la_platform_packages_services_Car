@@ -15,22 +15,14 @@
  */
 package com.android.car;
 
-import static android.car.settings.CarSettings.Secure
-        .KEY_BLUETOOTH_AUTOCONNECT_MESSAGING_DEVICE_PRIORITY_0;
-import static android.car.settings.CarSettings.Secure
-        .KEY_BLUETOOTH_AUTOCONNECT_MESSAGING_DEVICE_PRIORITY_1;
-import static android.car.settings.CarSettings.Secure
-        .KEY_BLUETOOTH_AUTOCONNECT_MUSIC_DEVICE_PRIORITY_0;
-import static android.car.settings.CarSettings.Secure
-        .KEY_BLUETOOTH_AUTOCONNECT_MUSIC_DEVICE_PRIORITY_1;
-import static android.car.settings.CarSettings.Secure
-        .KEY_BLUETOOTH_AUTOCONNECT_NETWORK_DEVICE_PRIORITY_0;
-import static android.car.settings.CarSettings.Secure
-        .KEY_BLUETOOTH_AUTOCONNECT_NETWORK_DEVICE_PRIORITY_1;
-import static android.car.settings.CarSettings.Secure
-        .KEY_BLUETOOTH_AUTOCONNECT_PHONE_DEVICE_PRIORITY_0;
-import static android.car.settings.CarSettings.Secure
-        .KEY_BLUETOOTH_AUTOCONNECT_PHONE_DEVICE_PRIORITY_1;
+import static android.car.settings.CarSettings.Secure.KEY_BLUETOOTH_AUTOCONNECT_MESSAGING_DEVICE_PRIORITY_0;
+import static android.car.settings.CarSettings.Secure.KEY_BLUETOOTH_AUTOCONNECT_MESSAGING_DEVICE_PRIORITY_1;
+import static android.car.settings.CarSettings.Secure.KEY_BLUETOOTH_AUTOCONNECT_MUSIC_DEVICE_PRIORITY_0;
+import static android.car.settings.CarSettings.Secure.KEY_BLUETOOTH_AUTOCONNECT_MUSIC_DEVICE_PRIORITY_1;
+import static android.car.settings.CarSettings.Secure.KEY_BLUETOOTH_AUTOCONNECT_NETWORK_DEVICE_PRIORITY_0;
+import static android.car.settings.CarSettings.Secure.KEY_BLUETOOTH_AUTOCONNECT_NETWORK_DEVICE_PRIORITY_1;
+import static android.car.settings.CarSettings.Secure.KEY_BLUETOOTH_AUTOCONNECT_PHONE_DEVICE_PRIORITY_0;
+import static android.car.settings.CarSettings.Secure.KEY_BLUETOOTH_AUTOCONNECT_PHONE_DEVICE_PRIORITY_1;
 
 import android.app.ActivityManager;
 import android.bluetooth.BluetoothDevice;
@@ -39,6 +31,7 @@ import android.car.CarBluetoothManager;
 import android.car.ICarBluetooth;
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.os.IBinder;
 import android.provider.Settings;
 import android.util.Log;
 
@@ -57,7 +50,7 @@ public class CarBluetoothService extends ICarBluetooth.Stub implements CarServic
     private static final String TAG = "CarBluetoothService";
     private final Context mContext;
     private final BluetoothDeviceConnectionPolicy mBluetoothDeviceConnectionPolicy;
-    private static final boolean DBG = false;
+    private static final boolean DBG = Utils.DBG;
 
     public CarBluetoothService(Context context, CarPropertyService carPropertyService,
             PerUserCarServiceHelper userSwitchService, CarUxRestrictionsManagerService uxrService) {
@@ -155,6 +148,34 @@ public class CarBluetoothService extends ICarBluetooth.Stub implements CarServic
             }
             return false;
         }
+    }
+
+    /**
+     * Request to disconnect the given profile on the given device, and prevent it from reconnecting
+     * until either the request is released, or the process owning the given token dies.
+     *
+     * @param device  The device on which to inhibit a profile.
+     * @param profile The {@link android.bluetooth.BluetoothProfile} to inhibit.
+     * @param token   A {@link IBinder} to be used as an identity for the request. If the process
+     *                owning the token dies, the request will automatically be released.
+     * @return True if the profile was successfully inhibited, false if an error occurred.
+     */
+    boolean requestProfileInhibit(BluetoothDevice device, int profile, IBinder token) {
+        return mBluetoothDeviceConnectionPolicy.requestProfileInhibit(device, profile, token);
+    }
+
+    /**
+     * Release an inhibit request made by {@link #requestProfileInhibit}, and reconnect the
+     * profile if no other inhibit requests are active.
+     *
+     * @param device  The device on which to release the inhibit request.
+     * @param profile The profile on which to release the inhibit request.
+     * @param token   The token provided in the original call to
+     *                {@link #requestProfileInhibit}.
+     * @return True if the request was released, false if an error occurred.
+     */
+    boolean releaseProfileInhibit(BluetoothDevice device, int profile, IBinder token) {
+        return mBluetoothDeviceConnectionPolicy.releaseProfileInhibit(device, profile, token);
     }
 
     /**

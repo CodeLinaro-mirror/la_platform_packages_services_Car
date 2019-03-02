@@ -18,8 +18,11 @@ package android.car;
 
 import android.annotation.IntDef;
 import android.annotation.Nullable;
+import android.annotation.SdkConstant;
+import android.annotation.SdkConstant.SdkConstantType;
 import android.annotation.SystemApi;
 import android.car.cluster.CarInstrumentClusterManager;
+import android.car.cluster.ClusterActivityState;
 import android.car.content.pm.CarPackageManager;
 import android.car.diagnostic.CarDiagnosticManager;
 import android.car.drivingstate.CarDrivingStateManager;
@@ -35,6 +38,7 @@ import android.car.navigation.CarNavigationStatusManager;
 import android.car.settings.CarConfigurationManager;
 import android.car.storagemonitoring.CarStorageMonitoringManager;
 import android.car.test.CarTestManagerBinderWrapper;
+import android.car.trust.CarTrustAgentEnrollmentManager;
 import android.car.vms.VmsSubscriberManager;
 import android.content.ComponentName;
 import android.content.Context;
@@ -45,6 +49,7 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.RemoteException;
+import android.os.ServiceManager;
 import android.os.UserHandle;
 import android.util.Log;
 
@@ -89,8 +94,11 @@ public final class Car {
 
     /**
      * Service name for {@link CarInstrumentClusterManager}
+     *
+     * @deprecated CarInstrumentClusterManager is being deprecated
      * @hide
      */
+    @Deprecated
     public static final String CAR_INSTRUMENT_CLUSTER_SERVICE = "cluster_service";
 
     /**
@@ -170,6 +178,13 @@ public final class Car {
     public static final String STORAGE_MONITORING_SERVICE = "storage_monitoring";
 
     /**
+     * Service name for {@link android.car.trust.CarTrustAgentEnrollmentManager}
+     * @hide
+     */
+    @SystemApi
+    public static final String CAR_TRUST_AGENT_ENROLLMENT_SERVICE = "trust_enroll";
+
+    /**
      * Service for testing. This is system app only feature.
      * Service name for {@link CarTestManager}, to be used in {@link #getCarManager(String)}.
      * @hide
@@ -228,7 +243,6 @@ public final class Car {
 
     /**
      * Permission necessary to change car audio settings through {@link CarAudioManager}.
-     * @hide
      */
     public static final String PERMISSION_CAR_CONTROL_AUDIO_SETTINGS =
             "android.car.permission.CAR_CONTROL_AUDIO_SETTINGS";
@@ -405,7 +419,16 @@ public final class Car {
      * @hide
      */
     @SystemApi
-    public static final String PERMISSION_CAR_DIAGNOSTIC_CLEAR = "android.car.permission.CLEAR_CAR_DIAGNOSTICS";
+    public static final String PERMISSION_CAR_DIAGNOSTIC_CLEAR =
+            "android.car.permission.CLEAR_CAR_DIAGNOSTICS";
+
+    /**
+     * Permission necessary to configure UX restrictions through {@link CarUxRestrictionsManager}.
+     *
+     * @hide
+     */
+    public static final String PERMISSION_CAR_UX_RESTRICTIONS_CONFIGURATION =
+            "android.car.permission.CAR_UX_RESTRICTIONS_CONFIGURATION";
 
     /**
      * Permissions necessary to clear diagnostic information.
@@ -413,7 +436,17 @@ public final class Car {
      * @hide
      */
     @SystemApi
-    public static final String PERMISSION_STORAGE_MONITORING = "android.car.permission.STORAGE_MONITORING";
+    public static final String PERMISSION_STORAGE_MONITORING =
+            "android.car.permission.STORAGE_MONITORING";
+
+    /**
+     * Permission necessary to enroll a device as a trusted authenticator device.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String PERMISSION_CAR_ENROLL_TRUST =
+            "android.car.permission.CAR_ENROLL_TRUST";
 
     /** Type of car connection: platform runs directly in car. */
     public static final int CONNECTION_TYPE_EMBEDDED = 5;
@@ -439,6 +472,7 @@ public final class Car {
      * package name of the media app which user wants to play media on.
      * <p>Output: nothing.
      */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String CAR_INTENT_ACTION_MEDIA_TEMPLATE =
             "android.car.intent.action.MEDIA_TEMPLATE";
 
@@ -454,6 +488,26 @@ public final class Car {
     private static final String CAR_SERVICE_PACKAGE = "com.android.car";
 
     private static final String CAR_SERVICE_CLASS = "com.android.car.CarService";
+
+    /**
+     * Category used by navigation applications to indicate which activity should be launched on
+     * the instrument cluster when such application holds
+     * {@link CarAppFocusManager#APP_FOCUS_TYPE_NAVIGATION} focus.
+     *
+     * @hide
+     */
+    public static final String CAR_CATEGORY_NAVIGATION = "android.car.cluster.NAVIGATION";
+
+    /**
+     * When an activity is launched in the cluster, it will receive {@link ClusterActivityState} in
+     * the intent's extra under this key, containing instrument cluster information such as
+     * unobscured area, visibility, etc.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String CAR_EXTRA_CLUSTER_ACTIVITY_STATE =
+            "android.car.cluster.ClusterActivityState";
 
     private static final long CAR_SERVICE_BIND_RETRY_INTERVAL_MS = 500;
     private static final long CAR_SERVICE_BIND_MAX_RETRY = 20;
@@ -497,13 +551,11 @@ public final class Car {
 
         public void onServiceDisconnected(ComponentName name) {
             synchronized (Car.this) {
-                mService = null;
                 if (mConnectionState  == STATE_DISCONNECTED) {
                     return;
                 }
-                mConnectionState = STATE_DISCONNECTED;
             }
-            // unbind explicitly here.
+            // unbind explicitly and set connectionState to STATE_DISCONNECTED here.
             disconnect();
             mServiceConnectionListenerClient.onServiceDisconnected(name);
         }
@@ -527,7 +579,10 @@ public final class Car {
      * service's main thread. Note: the service connection listener will be always on the main
      * thread regardless of the handler given.
      * @return Car instance if system is in car environment and returns {@code null} otherwise.
+     *
+     * @deprecated use {@link #createCar(Context, Handler)} instead.
      */
+    @Deprecated
     public static Car createCar(Context context, ServiceConnection serviceConnectionListener,
             @Nullable Handler handler) {
         if (!context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_AUTOMOTIVE)) {
@@ -547,9 +602,42 @@ public final class Car {
      * Looper}.
      *
      * @see #createCar(Context, ServiceConnection, Handler)
+     *
+     * @deprecated use {@link #createCar(Context, Handler)} instead.
      */
+    @Deprecated
     public static Car createCar(Context context, ServiceConnection serviceConnectionListener) {
       return createCar(context, serviceConnectionListener, null);
+    }
+
+    /**
+     * Creates new {@link Car} object which connected synchronously to Car Service and ready to use.
+     *
+     * @param context application's context
+     *
+     * @return Car object if operation succeeded, otherwise null.
+     */
+    @Nullable
+    public static Car createCar(Context context) {
+        return createCar(context, (Handler) null);
+    }
+
+    /**
+     * Creates new {@link Car} object which connected synchronously to Car Service and ready to use.
+     *
+     * @param context application's context
+     * @param handler the handler on which the manager's callbacks will be executed, or null to
+     * execute on the application's main thread.
+     *
+     * @return Car object if operation succeeded, otherwise null.
+     */
+    @Nullable
+    public static Car createCar(Context context, @Nullable Handler handler) {
+        IBinder service = ServiceManager.getService("car_service");
+        if (service == null) {
+            return null;
+        }
+        return new Car(context, ICar.Stub.asInterface(service), handler);
     }
 
     private Car(Context context, ServiceConnection serviceConnectionListener,
@@ -596,7 +684,11 @@ public final class Car {
      * Connect to car service. This can be called while it is disconnected.
      * @throws IllegalStateException If connection is still on-going from previous
      *         connect call or it is already connected
+     *
+     * @deprecated this method is not need if this object is created via
+     * {@link #createCar(Context, Handler)}.
      */
+    @Deprecated
     public void connect() throws IllegalStateException {
         synchronized (this) {
             if (mConnectionState != STATE_DISCONNECTED) {
@@ -660,6 +752,7 @@ public final class Car {
      * @return Matching service manager or null if there is no such service.
      * @throws CarNotConnectedException if the connection to the car service has been lost.
      */
+    @Nullable
     public Object getCarManager(String serviceName) throws CarNotConnectedException {
         CarManagerBase manager;
         ICar service = getICarOrThrow();
@@ -728,6 +821,7 @@ public final class Car {
         }
     }
 
+    @Nullable
     private CarManagerBase createCarManager(String serviceName, IBinder binder)
             throws CarNotConnectedException {
         CarManagerBase manager = null;
@@ -797,6 +891,9 @@ public final class Car {
                 break;
             case CAR_CONFIGURATION_SERVICE:
                 manager = new CarConfigurationManager(binder);
+                break;
+            case CAR_TRUST_AGENT_ENROLLMENT_SERVICE:
+                manager = new CarTrustAgentEnrollmentManager(binder, mContext, mEventHandler);
                 break;
             default:
                 break;

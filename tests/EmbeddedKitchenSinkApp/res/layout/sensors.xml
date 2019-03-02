@@ -20,10 +20,10 @@
     <!--  Top area -->
     <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="110dp"
+            android:layout_height="wrap_content"
             android:orientation="vertical">
         <TextView
-            android:id="@string/location_title"
+            android:id="@+id/location_title"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/location_title" />

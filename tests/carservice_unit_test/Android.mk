@@ -42,7 +42,8 @@ LOCAL_JAVA_LIBRARIES := \
 
 LOCAL_STATIC_JAVA_LIBRARIES := \
     junit \
-    android-support-test \
+    androidx.test.core \
+    androidx.test.rules \
     mockito-target-minus-junit4 \
     com.android.car.test.utils \
     truth-prebuilt

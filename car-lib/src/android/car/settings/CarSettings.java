@@ -68,6 +68,14 @@ public class CarSettings {
          */
         public static final String LAST_ACTIVE_USER_ID =
                 "android.car.LAST_ACTIVE_USER_ID";
+
+        /**
+         * Whether default restrictions for users have been set.
+         *
+         * @hide
+         */
+        public static final String DEFAULT_USER_RESTRICTIONS_SET =
+                "android.car.DEFAULT_USER_RESTRICTIONS_SET";
     }
 
     /**
@@ -193,6 +201,12 @@ public class CarSettings {
         public static final String KEY_BLUETOOTH_AUTOCONNECT_NETWORK_DEVICE_PRIORITY_1 =
                 "android.car.BLUETOOTH_AUTOCONNECT_NETWORK_DEVICE_PRIORITY_1";
 
-
+        /**
+         * Key for storing temporarily-disconnected devices and profiles.
+         * Read and written by {@link com.android.car.BluetoothDeviceConnectionPolicy}.
+         * @hide
+         */
+        public static final String KEY_BLUETOOTH_PROFILES_INHIBITED =
+                "android.car.BLUETOOTH_PROFILES_INHIBITED";
     }
 }
