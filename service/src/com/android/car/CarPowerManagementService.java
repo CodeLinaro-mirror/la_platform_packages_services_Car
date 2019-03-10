@@ -128,7 +128,7 @@ public class CarPowerManagementService extends ICarPower.Stub implements CarServ
     private boolean mShutdownOnNextSuspend = false;
 
     // TODO:  Make this OEM configurable.
-    private final static int APP_EXTEND_MAX_MS = 10000;
+    private final static int APP_EXTEND_MAX_MS = 5000;
     private final static int SHUTDOWN_POLLING_INTERVAL_MS = 2000;
     private final static int SHUTDOWN_EXTEND_MAX_MS = 5000;
 
@@ -249,7 +249,7 @@ public class CarPowerManagementService extends ICarPower.Stub implements CarServ
     public void notifyPowerEventProcessingCompletion(PowerEventProcessingHandler handler) {
         long processingTime = 0;
         for (PowerEventProcessingHandlerWrapper wrapper : mPowerEventProcessingHandlers) {
-            if (wrapper.handler == handler) {
+            if ((handler != null) && (wrapper.handler == handler)) {
                 wrapper.markProcessingDone();
             } else if (!wrapper.isProcessingDone()) {
                 processingTime = Math.max(processingTime, wrapper.getProcessingTime());
@@ -369,7 +369,7 @@ public class CarPowerManagementService extends ICarPower.Stub implements CarServ
     protected long notifyPrepareShutdown(boolean shuttingDown) {
         long processingTimeMs = 0;
         for (PowerEventProcessingHandlerWrapper wrapper : mPowerEventProcessingHandlers) {
-            long handlerProcessingTime = wrapper.handler.onPrepareShutdown(shuttingDown);
+            long handlerProcessingTime = wrapper.callOnPrepareShutdown(shuttingDown);
             if (handlerProcessingTime > processingTimeMs) {
                 processingTimeMs = handlerProcessingTime;
             }
@@ -412,7 +412,7 @@ public class CarPowerManagementService extends ICarPower.Stub implements CarServ
     private void doHandlePreprocessing(boolean shuttingDown) {
         long processingTimeMs = 0;
         for (PowerEventProcessingHandlerWrapper wrapper : mPowerEventProcessingHandlers) {
-            long handlerProcessingTime = wrapper.handler.onPrepareShutdown(shuttingDown);
+            long handlerProcessingTime = wrapper.callOnPrepareShutdown(shuttingDown);
             if (handlerProcessingTime > 0) {
                 wrapper.setProcessingTimeAndResetProcessingDone(handlerProcessingTime);
             }
@@ -420,14 +420,22 @@ public class CarPowerManagementService extends ICarPower.Stub implements CarServ
                 processingTimeMs = handlerProcessingTime;
             }
         }
-        // Add time for powerManager events
-        processingTimeMs += sendPowerManagerEvent(shuttingDown);
+
+        // Update processing start time before sending power manager event.
+        // Otherwise, power event processing completion may well be handled
+        // ahead without necessary synchronization, so as to block sleep.
+        synchronized (this) {
+            Log.i(CarLog.TAG_POWER, "Update processing start time");
+            mProcessingStartTime = SystemClock.elapsedRealtime();
+        }
+
+        // Add time for powerManager events (selecting max time)
+        processingTimeMs = Math.max(processingTimeMs, sendPowerManagerEvent(shuttingDown));
         if (processingTimeMs > 0) {
             int pollingCount = (int)(processingTimeMs / SHUTDOWN_POLLING_INTERVAL_MS) + 1;
             Log.i(CarLog.TAG_POWER, "processing before shutdown expected for :" + processingTimeMs +
                     " ms, adding polling:" + pollingCount);
             synchronized (this) {
-                mProcessingStartTime = SystemClock.elapsedRealtime();
                 releaseTimerLocked();
                 mTimer = new Timer();
                 mTimer.scheduleAtFixedRate(new ShutdownProcessingTimerTask(shuttingDown,
@@ -488,6 +496,10 @@ public class CarPowerManagementService extends ICarPower.Stub implements CarServ
         synchronized (this) {
             mLastSleepEntryTime = SystemClock.elapsedRealtime();
         }
+
+        Log.i(CarLog.TAG_POWER, "Release all wakelock before deep sleep");
+        mSystemInterface.releaseAllWakeLocks();
+
         if (mSystemInterface.enterDeepSleep(wakeupTimeSec) == false) {
             // System did not suspend.  Need to shutdown
             // TODO:  Shutdown gracefully
@@ -834,6 +846,15 @@ public class CarPowerManagementService extends ICarPower.Stub implements CarServ
             if (shouldCall) {
                 handler.onPowerOn(displayOn);
             }
+        }
+
+        public long callOnPrepareShutdown(boolean shuttingDown) {
+            synchronized (this) {
+                if (mPowerOnSent) {
+                    mPowerOnSent = false;
+                }
+            }
+            return handler.onPrepareShutdown(shuttingDown);
         }
 
         @Override

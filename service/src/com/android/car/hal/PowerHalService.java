@@ -32,6 +32,7 @@ import android.hardware.automotive.vehicle.V2_0.VehiclePropConfig;
 import android.hardware.automotive.vehicle.V2_0.VehiclePropValue;
 import android.hardware.automotive.vehicle.V2_0.VehicleProperty;
 import android.util.Log;
+import android.os.SystemProperties;
 
 import com.android.car.CarLog;
 import com.android.internal.annotations.VisibleForTesting;
@@ -258,7 +259,8 @@ public class PowerHalService extends HalServiceBase {
 
     public synchronized boolean isPowerStateSupported() {
         VehiclePropConfig config = mProperties.get(VehicleProperty.AP_POWER_STATE_REQ);
-        return config != null;
+        boolean enableCarPowerManager = SystemProperties.getBoolean("persist.car.lpm", false);
+        return config != null && enableCarPowerManager;
     }
 
     private synchronized boolean isConfigFlagSet(int flag) {

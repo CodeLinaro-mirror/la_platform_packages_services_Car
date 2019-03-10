@@ -34,6 +34,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.os.PowerManager;
 import android.os.SystemClock;
+import android.os.SystemProperties;
 import android.util.Log;
 import android.util.Pair;
 
@@ -56,7 +57,7 @@ public interface SystemStateInterface {
 
     default boolean isSystemSupportingDeepSleep() {
         //TODO should return by checking some kernel suspend control sysfs, bug: 32061842
-        return false;
+        return SystemProperties.getBoolean("persist.car.lpm", false);
     }
 
     default List<ProcessInfo> getRunningProcesses() {
