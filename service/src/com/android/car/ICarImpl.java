@@ -81,6 +81,7 @@ public class ICarImpl extends ICar.Stub {
     private final CarDiagnosticService mCarDiagnosticService;
     private final CarStorageMonitoringService mCarStorageMonitoringService;
     private final CarConfigurationService mCarConfigurationService;
+    private final AirplaneModeService mAirplaneModeService;
 
     private final CarUserManagerHelper mUserManagerHelper;
     private CarUserService mCarUserService;
@@ -142,6 +143,7 @@ public class ICarImpl extends ICar.Stub {
         mCarConfigurationService =
                 new CarConfigurationService(serviceContext, new JsonReaderImpl());
         mUserManagerHelper = new CarUserManagerHelper(serviceContext);
+        mAirplaneModeService = new AirplaneModeService(mContext, mCarPowerManagementService);
 
         // Be careful with order. Service depending on other service should be inited later.
         List<CarServiceBase> allServices = new ArrayList<>();
@@ -167,6 +169,7 @@ public class ICarImpl extends ICar.Stub {
         allServices.add(mCarConfigurationService);
         allServices.add(mVmsSubscriberService);
         allServices.add(mVmsPublisherService);
+        allServices.add(mAirplaneModeService);
 
         if (mUserManagerHelper.isHeadlessSystemUser()) {
             mCarUserService = new CarUserService(serviceContext, mUserManagerHelper);

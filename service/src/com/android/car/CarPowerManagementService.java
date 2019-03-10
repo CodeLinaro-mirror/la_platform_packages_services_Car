@@ -287,6 +287,10 @@ public class CarPowerManagementService extends ICarPower.Stub implements CarServ
         }
     }
 
+    public boolean isCarPowerManagerEnabled() {
+        return PowerHalService.isCarPowerManagerEnabled();
+    }
+
     @Override
     public void dump(PrintWriter writer) {
         writer.println("*PowerManagementService*");
