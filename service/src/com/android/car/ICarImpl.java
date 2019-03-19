@@ -44,6 +44,7 @@ import com.android.car.pm.CarPackageManagerService;
 import com.android.car.systeminterface.SystemInterface;
 import com.android.car.trust.CarTrustAgentEnrollmentService;
 import com.android.car.user.CarUserService;
+import com.android.car.vms.VmsClientManager;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.car.ICarServiceHelper;
 
@@ -85,11 +86,12 @@ public class ICarImpl extends ICar.Stub {
     private final CarStorageMonitoringService mCarStorageMonitoringService;
     private final CarConfigurationService mCarConfigurationService;
     private final CarTrustAgentEnrollmentService mCarTrustAgentEnrollmentService;
-
+    private final CarMediaService mCarMediaService;
     private final CarUserManagerHelper mUserManagerHelper;
-    private CarUserService mCarUserService;
-    private VmsSubscriberService mVmsSubscriberService;
-    private VmsPublisherService mVmsPublisherService;
+    private final CarUserService mCarUserService;
+    private final VmsClientManager mVmsClientManager;
+    private final VmsSubscriberService mVmsSubscriberService;
+    private final VmsPublisherService mVmsPublisherService;
 
     private final CarServiceBase[] mAllServices;
 
@@ -114,6 +116,7 @@ public class ICarImpl extends ICar.Stub {
         mHal = new VehicleHal(vehicle);
         mVehicleInterfaceName = vehicleInterfaceName;
         mUserManagerHelper = new CarUserManagerHelper(serviceContext);
+        mCarUserService = new CarUserService(serviceContext, mUserManagerHelper);
         mSystemActivityMonitoringService = new SystemActivityMonitoringService(serviceContext);
         mCarPowerManagementService = new CarPowerManagementService(mContext, mHal.getPowerHal(),
                 systemInterface);
@@ -138,19 +141,26 @@ public class ICarImpl extends ICar.Stub {
                 mAppFocusService, mCarInputService);
         mSystemStateControllerService = new SystemStateControllerService(
                 serviceContext, mCarAudioService, this);
+        mVmsClientManager = new VmsClientManager(serviceContext, mUserManagerHelper);
         mVmsSubscriberService = new VmsSubscriberService(serviceContext, mHal.getVmsHal());
-        mVmsPublisherService = new VmsPublisherService(serviceContext, mHal.getVmsHal());
+        mVmsPublisherService = new VmsPublisherService(serviceContext, mVmsClientManager,
+                mHal.getVmsHal());
         mCarDiagnosticService = new CarDiagnosticService(serviceContext, mHal.getDiagnosticHal());
         mCarStorageMonitoringService = new CarStorageMonitoringService(serviceContext,
                 systemInterface);
         mCarConfigurationService =
                 new CarConfigurationService(serviceContext, new JsonReaderImpl());
-        mCarLocationService = new CarLocationService(
-                mContext, mCarPropertyService, mUserManagerHelper);
+        mCarLocationService = new CarLocationService(mContext, mCarPropertyService,
+                mUserManagerHelper);
         mCarTrustAgentEnrollmentService = new CarTrustAgentEnrollmentService(serviceContext);
+        mCarMediaService = new CarMediaService(serviceContext);
+
+        CarLocalServices.addService(CarUserService.class, mCarUserService);
+        CarLocalServices.addService(SystemInterface.class, mSystemInterface);
 
         // Be careful with order. Service depending on other service should be inited later.
         List<CarServiceBase> allServices = new ArrayList<>();
+        allServices.add(mCarUserService);
         allServices.add(mSystemActivityMonitoringService);
         allServices.add(mCarPowerManagementService);
         allServices.add(mCarPropertyService);
@@ -170,12 +180,11 @@ public class ICarImpl extends ICar.Stub {
         allServices.add(mCarDiagnosticService);
         allServices.add(mCarStorageMonitoringService);
         allServices.add(mCarConfigurationService);
+        allServices.add(mVmsClientManager);
         allServices.add(mVmsSubscriberService);
         allServices.add(mVmsPublisherService);
         allServices.add(mCarTrustAgentEnrollmentService);
-        if (mUserManagerHelper.isHeadlessSystemUser()) {
-            allServices.add(new CarUserService(serviceContext, mUserManagerHelper));
-        }
+        allServices.add(mCarMediaService);
         allServices.add(mCarLocationService);
         mAllServices = allServices.toArray(new CarServiceBase[allServices.size()]);
     }
@@ -199,6 +208,7 @@ public class ICarImpl extends ICar.Stub {
             mAllServices[i].release();
         }
         mHal.release();
+        CarLocalServices.removeAllServices();
     }
 
     void vehicleHalReconnected(IVehicle vehicle) {
@@ -218,6 +228,15 @@ public class ICarImpl extends ICar.Stub {
             mICarServiceHelper = ICarServiceHelper.Stub.asInterface(helper);
             mSystemInterface.setCarServiceHelper(mICarServiceHelper);
         }
+    }
+
+    @Override
+    public void setUserLockStatus(int userHandle, int unlocked) {
+        int uid = Binder.getCallingUid();
+        if (uid != Process.SYSTEM_UID) {
+            throw new SecurityException("Only allowed from system");
+        }
+        mCarUserService.setUserLockStatus(userHandle, unlocked == 1);
     }
 
     @Override
@@ -280,6 +299,8 @@ public class ICarImpl extends ICar.Stub {
             case Car.CAR_TRUST_AGENT_ENROLLMENT_SERVICE:
                 assertTrustAgentEnrollmentPermission(mContext);
                 return mCarTrustAgentEnrollmentService;
+            case Car.CAR_MEDIA_SERVICE:
+                return mCarMediaService;
             default:
                 Log.w(CarLog.TAG_SERVICE, "getCarService for unknown service:" + serviceName);
                 return null;
@@ -462,13 +483,13 @@ public class ICarImpl extends ICar.Stub {
             pw.println("\tday-night-mode [day|night|sensor]");
             pw.println("\t  Force into day/night mode or restore to auto.");
             pw.println("\tinject-vhal-event property [zone] data(can be comma separated list)");
-            pw.println("\t  Inject a vehicle property for testing");
+            pw.println("\t  Inject a vehicle property for testing.");
             pw.println("\tdisable-uxr true|false");
             pw.println("\t  Disable UX restrictions and App blocking.");
             pw.println("\tgarage-mode [on|off|query]");
             pw.println("\t  Force into garage mode or check status.");
             pw.println("\tget-do-activities pkgname");
-            pw.println("\t Get Distraction Optimized activities in given package");
+            pw.println("\t  Get Distraction Optimized activities in given package.");
         }
 
         public void exec(String[] args, PrintWriter writer) {
@@ -478,23 +499,23 @@ public class ICarImpl extends ICar.Stub {
                     dumpHelp(writer);
                     break;
                 case COMMAND_DAY_NIGHT_MODE: {
-                    String value = args.length < 1 ? "" : args[1];
+                    String value = args.length < 2 ? "" : args[1];
                     forceDayNightMode(value, writer);
                     break;
                 }
                 case COMMAND_GARAGE_MODE: {
-                    String value = args.length < 1 ? "" : args[1];
+                    String value = args.length < 2 ? "" : args[1];
                     forceGarageMode(value, writer);
                     break;
                 }
                 case COMMAND_INJECT_VHAL_EVENT:
                     String zone = PARAM_VEHICLE_PROPERTY_AREA_GLOBAL;
                     String data;
-                    if (args.length < 3) {
+                    if (args.length != 3 && args.length != 4) {
                         writer.println("Incorrect number of arguments.");
                         dumpHelp(writer);
                         break;
-                    } else if (args.length > 3) {
+                    } else if (args.length == 4) {
                         // Zoned
                         zone = args[2];
                         data = args[3];
@@ -505,7 +526,7 @@ public class ICarImpl extends ICar.Stub {
                     injectVhalEvent(args[1], zone, data, writer);
                     break;
                 case COMMAND_ENABLE_UXR:
-                    if (args.length < 2) {
+                    if (args.length != 2) {
                         writer.println("Incorrect number of arguments");
                         dumpHelp(writer);
                         break;
@@ -516,7 +537,7 @@ public class ICarImpl extends ICar.Stub {
                     }
                     break;
                 case COMMAND_GET_DO_ACTIVITIES:
-                    if (args.length < 2) {
+                    if (args.length != 2) {
                         writer.println("Incorrect number of arguments");
                         dumpHelp(writer);
                         break;
@@ -537,7 +558,7 @@ public class ICarImpl extends ICar.Stub {
                     }
                     break;
                 default:
-                    writer.println("Unknown command.");
+                    writer.println("Unknown command: \"" + arg + "\"");
                     dumpHelp(writer);
             }
         }

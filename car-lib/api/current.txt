@@ -9,7 +9,7 @@ package android.car {
     method @Nullable public static android.car.Car createCar(android.content.Context, @Nullable android.os.Handler);
     method public void disconnect();
     method public int getCarConnectionType();
-    method @Nullable public Object getCarManager(String) throws android.car.CarNotConnectedException;
+    method @Nullable public Object getCarManager(String);
     method public boolean isConnected();
     method public boolean isConnecting();
     field public static final String APP_FOCUS_SERVICE = "app_focus";
@@ -26,11 +26,16 @@ package android.car {
     field public static final String PERMISSION_CAR_CONTROL_AUDIO_VOLUME = "android.car.permission.CAR_CONTROL_AUDIO_VOLUME";
     field public static final String PERMISSION_CAR_INFO = "android.car.permission.CAR_INFO";
     field public static final String PERMISSION_CAR_NAVIGATION_MANAGER = "android.car.permission.CAR_NAVIGATION_MANAGER";
+    field public static final String PERMISSION_CONTROL_DISPLAY_UNITS = "android.car.permission.CONTROL_CAR_DISPLAY_UNITS";
+    field public static final String PERMISSION_CONTROL_INTERIOR_LIGHTS = "android.car.permission.CONTROL_CAR_INTERIOR_LIGHTS";
     field public static final String PERMISSION_ENERGY = "android.car.permission.CAR_ENERGY";
     field public static final String PERMISSION_ENERGY_PORTS = "android.car.permission.CAR_ENERGY_PORTS";
     field public static final String PERMISSION_EXTERIOR_ENVIRONMENT = "android.car.permission.CAR_EXTERIOR_ENVIRONMENT";
     field public static final String PERMISSION_IDENTIFICATION = "android.car.permission.CAR_IDENTIFICATION";
     field public static final String PERMISSION_POWERTRAIN = "android.car.permission.CAR_POWERTRAIN";
+    field public static final String PERMISSION_READ_DISPLAY_UNITS = "android.car.permission.READ_CAR_DISPLAY_UNITS";
+    field public static final String PERMISSION_READ_INTERIOR_LIGHTS = "android.car.permission.READ_CAR_INTERIOR_LIGHTS";
+    field public static final String PERMISSION_READ_STEERING_STATE = "android.car.permission.READ_CAR_STEERING";
     field public static final String PERMISSION_SPEED = "android.car.permission.CAR_SPEED";
     field public static final String SENSOR_SERVICE = "sensor";
     field public static final int VERSION = 3; // 0x3
@@ -39,11 +44,11 @@ package android.car {
   public final class CarAppFocusManager {
     method public void abandonAppFocus(android.car.CarAppFocusManager.OnAppFocusOwnershipCallback, int);
     method public void abandonAppFocus(android.car.CarAppFocusManager.OnAppFocusOwnershipCallback);
-    method public void addFocusListener(android.car.CarAppFocusManager.OnAppFocusChangedListener, int) throws android.car.CarNotConnectedException;
-    method public boolean isOwningFocus(android.car.CarAppFocusManager.OnAppFocusOwnershipCallback, int) throws android.car.CarNotConnectedException;
+    method public void addFocusListener(android.car.CarAppFocusManager.OnAppFocusChangedListener, int);
+    method public boolean isOwningFocus(android.car.CarAppFocusManager.OnAppFocusOwnershipCallback, int);
     method public void removeFocusListener(android.car.CarAppFocusManager.OnAppFocusChangedListener, int);
     method public void removeFocusListener(android.car.CarAppFocusManager.OnAppFocusChangedListener);
-    method public int requestAppFocus(int, android.car.CarAppFocusManager.OnAppFocusOwnershipCallback) throws android.car.CarNotConnectedException, java.lang.SecurityException;
+    method public int requestAppFocus(int, android.car.CarAppFocusManager.OnAppFocusOwnershipCallback);
     field public static final int APP_FOCUS_REQUEST_FAILED = 0; // 0x0
     field public static final int APP_FOCUS_REQUEST_SUCCEEDED = 1; // 0x1
     field public static final int APP_FOCUS_TYPE_NAVIGATION = 1; // 0x1
@@ -60,21 +65,21 @@ package android.car {
   }
 
   public final class CarInfoManager {
-    method public float getEvBatteryCapacity() throws android.car.CarNotConnectedException;
-    method public int[] getEvConnectorTypes() throws android.car.CarNotConnectedException;
-    method public float getFuelCapacity() throws android.car.CarNotConnectedException;
-    method public int[] getFuelTypes() throws android.car.CarNotConnectedException;
-    method @Nullable public String getManufacturer() throws android.car.CarNotConnectedException;
-    method @Nullable public String getModel() throws android.car.CarNotConnectedException;
-    method @Nullable public String getModelYear() throws android.car.CarNotConnectedException;
-    method public String getVehicleId() throws android.car.CarNotConnectedException;
+    method public float getEvBatteryCapacity();
+    method public int[] getEvConnectorTypes();
+    method public float getFuelCapacity();
+    method public int[] getFuelTypes();
+    method @Nullable public String getManufacturer();
+    method @Nullable public String getModel();
+    method @Nullable public String getModelYear();
+    method public String getVehicleId();
   }
 
-  public class CarNotConnectedException extends java.lang.Exception {
-    ctor public CarNotConnectedException();
-    ctor public CarNotConnectedException(String);
-    ctor public CarNotConnectedException(String, Throwable);
-    ctor public CarNotConnectedException(Exception);
+  @Deprecated public class CarNotConnectedException extends java.lang.RuntimeException {
+    ctor @Deprecated public CarNotConnectedException();
+    ctor @Deprecated public CarNotConnectedException(String);
+    ctor @Deprecated public CarNotConnectedException(String, Throwable);
+    ctor @Deprecated public CarNotConnectedException(Exception);
   }
 
   public final class VehiclePropertyIds {
@@ -84,8 +89,11 @@ package android.car {
     field public static final int AP_POWER_BOOTUP_REASON = 289409538; // 0x11400a02
     field public static final int AP_POWER_STATE_REPORT = 289475073; // 0x11410a01
     field public static final int AP_POWER_STATE_REQ = 289475072; // 0x11410a00
+    field public static final int CABIN_LIGHTS_STATE = 289410817; // 0x11400f01
+    field public static final int CABIN_LIGHTS_SWITCH = 289410818; // 0x11400f02
     field public static final int CURRENT_GEAR = 289408001; // 0x11400401
     field public static final int DISPLAY_BRIGHTNESS = 289409539; // 0x11400a03
+    field public static final int DISTANCE_DISPLAY_UNITS = 289408512; // 0x11400600
     field public static final int DOOR_LOCK = 371198722; // 0x16200b02
     field public static final int DOOR_MOVE = 373295873; // 0x16400b01
     field public static final int DOOR_POS = 373295872; // 0x16400b00
@@ -94,6 +102,7 @@ package android.car {
     field public static final int ENGINE_OIL_TEMP = 291504900; // 0x11600304
     field public static final int ENGINE_RPM = 291504901; // 0x11600305
     field public static final int ENV_OUTSIDE_TEMPERATURE = 291505923; // 0x11600703
+    field public static final int EV_BATTERY_DISPLAY_UNITS = 289408515; // 0x11400603
     field public static final int EV_BATTERY_INSTANTANEOUS_CHARGE_RATE = 291504908; // 0x1160030c
     field public static final int EV_BATTERY_LEVEL = 291504905; // 0x11600309
     field public static final int EV_CHARGE_PORT_CONNECTED = 287310603; // 0x1120030b
@@ -103,6 +112,7 @@ package android.car {
     field public static final int FUEL_DOOR_OPEN = 287310600; // 0x11200308
     field public static final int FUEL_LEVEL = 291504903; // 0x11600307
     field public static final int FUEL_LEVEL_LOW = 287310853; // 0x11200405
+    field public static final int FUEL_VOLUME_DISPLAY_UNITS = 289408513; // 0x11400601
     field public static final int GEAR_SELECTION = 289408000; // 0x11400400
     field public static final int HAZARD_LIGHTS_STATE = 289410563; // 0x11400e03
     field public static final int HAZARD_LIGHTS_SWITCH = 289410579; // 0x11400e13
@@ -158,8 +168,12 @@ package android.car {
     field public static final int PARKING_BRAKE_AUTO_APPLY = 287310851; // 0x11200403
     field public static final int PARKING_BRAKE_ON = 287310850; // 0x11200402
     field public static final int PERF_ODOMETER = 291504644; // 0x11600204
+    field public static final int PERF_STEERING_ANGLE = 291504649; // 0x11600209
     field public static final int PERF_VEHICLE_SPEED = 291504647; // 0x11600207
+    field public static final int PERF_VEHICLE_SPEED_DISPLAY = 291504648; // 0x11600208
     field public static final int RANGE_REMAINING = 291504904; // 0x11600308
+    field public static final int READING_LIGHTS_STATE = 356519683; // 0x15400f03
+    field public static final int READING_LIGHTS_SWITCH = 356519684; // 0x15400f04
     field public static final int SEAT_BACKREST_ANGLE_1_MOVE = 356518792; // 0x15400b88
     field public static final int SEAT_BACKREST_ANGLE_1_POS = 356518791; // 0x15400b87
     field public static final int SEAT_BACKREST_ANGLE_2_MOVE = 356518794; // 0x15400b8a
@@ -185,9 +199,11 @@ package android.car {
     field public static final int SEAT_LUMBAR_SIDE_SUPPORT_POS = 356518803; // 0x15400b93
     field public static final int SEAT_MEMORY_SELECT = 356518784; // 0x15400b80
     field public static final int SEAT_MEMORY_SET = 356518785; // 0x15400b81
+    field public static final int SEAT_OCCUPANCY = 356518832; // 0x15400bb0
     field public static final int SEAT_TILT_MOVE = 356518800; // 0x15400b90
     field public static final int SEAT_TILT_POS = 356518799; // 0x15400b8f
     field public static final int TIRE_PRESSURE = 392168201; // 0x17600309
+    field public static final int TIRE_PRESSURE_DISPLAY_UNITS = 289408514; // 0x11400602
     field public static final int TRACTION_CONTROL_ACTIVE = 287310859; // 0x1120040b
     field public static final int TURN_SIGNAL_STATE = 289408008; // 0x11400408
     field public static final int VEHICLE_MAP_SERVICE = 299895808; // 0x11e00c00
@@ -199,116 +215,11 @@ package android.car {
 
 }
 
-package android.car.app.menu {
-
-  public abstract class CarMenuCallbacks {
-    ctor public CarMenuCallbacks();
-    method public abstract android.car.app.menu.RootMenu getRootMenu(android.os.Bundle);
-    method public abstract void onCarMenuClosed();
-    method public abstract void onCarMenuClosing();
-    method public abstract void onCarMenuOpened();
-    method public abstract void onCarMenuOpening();
-    method public abstract void onItemClicked(String);
-    method public abstract boolean onItemLongClicked(String);
-    method public abstract boolean onMenuClicked();
-    method public abstract void subscribe(String, android.car.app.menu.SubscriptionCallbacks);
-    method public abstract void unsubscribe(String, android.car.app.menu.SubscriptionCallbacks);
-  }
-
-  public class CarMenuConstants {
-    ctor public CarMenuConstants();
-  }
-
-  public static class CarMenuConstants.MenuItemConstants {
-    ctor public CarMenuConstants.MenuItemConstants();
-    field public static final int FLAG_BROWSABLE = 1; // 0x1
-    field public static final int FLAG_FIRSTITEM = 2; // 0x2
-    field public static final String KEY_EMPTY_PLACEHOLDER = "android.car.app.menu.empty_placeholder";
-    field public static final String KEY_FLAGS = "android.car.app.menu.flags";
-    field public static final String KEY_ID = "android.car.app.menu.id";
-    field public static final String KEY_LEFTICON = "android.car.app.menu.leftIcon";
-    field public static final String KEY_REMOTEVIEWS = "android.car.app.menu.remoteViews";
-    field public static final String KEY_RIGHTICON = "android.car.app.menu.rightIcon";
-    field public static final String KEY_RIGHTTEXT = "android.car.app.menu.rightText";
-    field public static final String KEY_TEXT = "android.car.app.menu.text";
-    field public static final String KEY_TITLE = "android.car.app.menu.title";
-    field public static final String KEY_WIDGET = "android.car.app.menu.widget";
-    field public static final String KEY_WIDGET_STATE = "android.car.app.menu.widget_state";
-    field public static final int WIDGET_CHECKBOX = 1; // 0x1
-    field public static final int WIDGET_TEXT_VIEW = 2; // 0x2
-  }
-
-  @java.lang.annotation.Retention(java.lang.annotation.RetentionPolicy.SOURCE) @IntDef(flag=true, value={android.car.app.menu.CarMenuConstants.MenuItemConstants.FLAG_BROWSABLE, android.car.app.menu.CarMenuConstants.MenuItemConstants.FLAG_FIRSTITEM}) public static @interface CarMenuConstants.MenuItemConstants.MenuItemFlags {
-  }
-
-  @java.lang.annotation.Retention(java.lang.annotation.RetentionPolicy.SOURCE) @IntDef({android.car.app.menu.CarMenuConstants.MenuItemConstants.WIDGET_CHECKBOX, android.car.app.menu.CarMenuConstants.MenuItemConstants.WIDGET_TEXT_VIEW}) public static @interface CarMenuConstants.MenuItemConstants.WidgetTypes {
-  }
-
-  public abstract class CarUiEntry {
-    ctor public CarUiEntry(android.content.Context, android.content.Context);
-    method public abstract void closeDrawer();
-    method public abstract android.view.View getContentView();
-    method public abstract int getFragmentContainerId();
-    method public abstract CharSequence getSearchBoxText();
-    method public abstract void hideMenuButton();
-    method public abstract void hideTitle();
-    method public abstract void onPause();
-    method public abstract void onRestoreInstanceState(android.os.Bundle);
-    method public abstract void onResume();
-    method public abstract void onSaveInstanceState(android.os.Bundle);
-    method public abstract void onStart();
-    method public abstract void onStop();
-    method public abstract void openDrawer();
-    method public abstract void restoreMenuDrawable();
-    method public abstract void setAutoLightDarkMode();
-    method public abstract void setBackground(android.graphics.Bitmap);
-    method public abstract void setCarMenuCallbacks(android.car.app.menu.CarMenuCallbacks);
-    method public abstract void setDarkMode();
-    method public abstract void setLightMode();
-    method public abstract void setMenuButtonBitmap(android.graphics.Bitmap);
-    method public abstract void setMenuButtonColor(int);
-    method public abstract void setScrimColor(int);
-    method public abstract void setSearchBoxColors(int, int, int, int);
-    method public abstract void setSearchBoxEditListener(android.car.app.menu.SearchBoxEditListener);
-    method public abstract void setSearchBoxEndView(android.view.View);
-    method public abstract void setTitle(CharSequence);
-    method public abstract void showMenu(String, String);
-    method public abstract void showSearchBox(android.view.View.OnClickListener);
-    method public abstract void showTitle();
-    method public abstract void showToast(String, long);
-    method public abstract android.widget.EditText startInput(String, android.view.View.OnClickListener);
-    method public abstract void stopInput();
-    field protected final android.content.Context mAppContext;
-    field protected final android.content.Context mUiLibContext;
-  }
-
-  public class RootMenu {
-    ctor public RootMenu(String);
-    ctor public RootMenu(String, android.os.Bundle);
-    method public android.os.Bundle getBundle();
-    method public String getId();
-  }
-
-  public abstract class SearchBoxEditListener {
-    ctor public SearchBoxEditListener();
-    method public abstract void onEdit(String);
-    method public abstract void onSearch(String);
-  }
-
-  public abstract class SubscriptionCallbacks {
-    ctor public SubscriptionCallbacks();
-    method public abstract void onChildChanged(String, android.os.Bundle);
-    method public abstract void onChildrenLoaded(String, java.util.List<android.os.Bundle>);
-    method public abstract void onError(String);
-  }
-
-}
-
 package android.car.content.pm {
 
   public final class CarPackageManager {
-    method public boolean isActivityDistractionOptimized(String, String) throws android.car.CarNotConnectedException;
-    method public boolean isServiceDistractionOptimized(String, String) throws android.car.CarNotConnectedException;
+    method public boolean isActivityDistractionOptimized(String, String);
+    method public boolean isServiceDistractionOptimized(String, String);
   }
 
 }
@@ -352,9 +263,9 @@ package android.car.drivingstate {
   }
 
   public final class CarUxRestrictionsManager {
-    method @Nullable public android.car.drivingstate.CarUxRestrictions getCurrentCarUxRestrictions() throws android.car.CarNotConnectedException;
-    method public void registerListener(@NonNull android.car.drivingstate.CarUxRestrictionsManager.OnUxRestrictionsChangedListener) throws android.car.CarNotConnectedException, java.lang.IllegalArgumentException;
-    method public void unregisterListener() throws android.car.CarNotConnectedException;
+    method @Nullable public android.car.drivingstate.CarUxRestrictions getCurrentCarUxRestrictions();
+    method public void registerListener(@NonNull android.car.drivingstate.CarUxRestrictionsManager.OnUxRestrictionsChangedListener);
+    method public void unregisterListener();
   }
 
   public static interface CarUxRestrictionsManager.OnUxRestrictionsChangedListener {
@@ -408,12 +319,12 @@ package android.car.hardware {
   }
 
   public final class CarSensorManager {
-    method public android.car.hardware.CarSensorEvent getLatestSensorEvent(int) throws android.car.CarNotConnectedException;
-    method public java.util.List<android.car.hardware.CarPropertyConfig> getPropertyList() throws android.car.CarNotConnectedException;
-    method public int[] getSupportedSensors() throws android.car.CarNotConnectedException;
-    method public boolean isSensorSupported(int) throws android.car.CarNotConnectedException;
+    method public android.car.hardware.CarSensorEvent getLatestSensorEvent(int);
+    method public java.util.List<android.car.hardware.CarPropertyConfig> getPropertyList();
+    method public int[] getSupportedSensors();
+    method public boolean isSensorSupported(int);
     method public static boolean isSensorSupported(int[], int);
-    method @RequiresPermission(anyOf={android.car.Car.PERMISSION_SPEED, "android.car.permission.CAR_ENGINE_DETAILED", "android.car.permission.CAR_MILEAGE", android.car.Car.PERMISSION_ENERGY, android.car.Car.PERMISSION_POWERTRAIN, android.car.Car.PERMISSION_EXTERIOR_ENVIRONMENT, "android.car.permission.CAR_DYNAMICS_STATE", android.car.Car.PERMISSION_ENERGY_PORTS}, conditional=true) public boolean registerListener(android.car.hardware.CarSensorManager.OnSensorChangedListener, int, int) throws android.car.CarNotConnectedException, java.lang.IllegalArgumentException;
+    method @RequiresPermission(anyOf={android.car.Car.PERMISSION_SPEED, "android.car.permission.CAR_ENGINE_DETAILED", "android.car.permission.CAR_MILEAGE", android.car.Car.PERMISSION_ENERGY, android.car.Car.PERMISSION_POWERTRAIN, android.car.Car.PERMISSION_EXTERIOR_ENVIRONMENT, "android.car.permission.CAR_DYNAMICS_STATE", android.car.Car.PERMISSION_ENERGY_PORTS}, conditional=true) public boolean registerListener(android.car.hardware.CarSensorManager.OnSensorChangedListener, int, int);
     method public void unregisterListener(android.car.hardware.CarSensorManager.OnSensorChangedListener);
     method public void unregisterListener(android.car.hardware.CarSensorManager.OnSensorChangedListener, int);
     field public static final int SENSOR_RATE_FAST = 10; // 0xa
@@ -448,26 +359,26 @@ package android.car.hardware {
 package android.car.media {
 
   public final class CarAudioManager {
-    method @RequiresPermission(android.car.Car.PERMISSION_CAR_CONTROL_AUDIO_SETTINGS) public android.car.media.CarAudioPatchHandle createAudioPatch(String, int, int) throws android.car.CarNotConnectedException;
-    method @RequiresPermission(android.car.Car.PERMISSION_CAR_CONTROL_AUDIO_SETTINGS) @NonNull public String[] getExternalSources() throws android.car.CarNotConnectedException;
-    method public int getGroupMaxVolume(int) throws android.car.CarNotConnectedException;
-    method @RequiresPermission(android.car.Car.PERMISSION_CAR_CONTROL_AUDIO_VOLUME) public int getGroupMaxVolume(int, int) throws android.car.CarNotConnectedException;
-    method public int getGroupMinVolume(int) throws android.car.CarNotConnectedException;
-    method @RequiresPermission(android.car.Car.PERMISSION_CAR_CONTROL_AUDIO_VOLUME) public int getGroupMinVolume(int, int) throws android.car.CarNotConnectedException;
-    method public int getGroupVolume(int) throws android.car.CarNotConnectedException;
-    method @RequiresPermission(android.car.Car.PERMISSION_CAR_CONTROL_AUDIO_VOLUME) public int getGroupVolume(int, int) throws android.car.CarNotConnectedException;
-    method @NonNull public int[] getUsagesForVolumeGroupId(int) throws android.car.CarNotConnectedException;
-    method @RequiresPermission(android.car.Car.PERMISSION_CAR_CONTROL_AUDIO_VOLUME) @NonNull public int[] getUsagesForVolumeGroupId(int, int) throws android.car.CarNotConnectedException;
-    method public int getVolumeGroupCount() throws android.car.CarNotConnectedException;
-    method @RequiresPermission(android.car.Car.PERMISSION_CAR_CONTROL_AUDIO_VOLUME) public int getVolumeGroupCount(int) throws android.car.CarNotConnectedException;
-    method public int getVolumeGroupIdForUsage(int) throws android.car.CarNotConnectedException;
-    method @RequiresPermission(android.car.Car.PERMISSION_CAR_CONTROL_AUDIO_VOLUME) public int getVolumeGroupIdForUsage(int, int) throws android.car.CarNotConnectedException;
+    method @RequiresPermission(android.car.Car.PERMISSION_CAR_CONTROL_AUDIO_SETTINGS) public android.car.media.CarAudioPatchHandle createAudioPatch(String, int, int);
+    method @RequiresPermission(android.car.Car.PERMISSION_CAR_CONTROL_AUDIO_SETTINGS) @NonNull public String[] getExternalSources();
+    method public int getGroupMaxVolume(int);
+    method @RequiresPermission(android.car.Car.PERMISSION_CAR_CONTROL_AUDIO_VOLUME) public int getGroupMaxVolume(int, int);
+    method public int getGroupMinVolume(int);
+    method @RequiresPermission(android.car.Car.PERMISSION_CAR_CONTROL_AUDIO_VOLUME) public int getGroupMinVolume(int, int);
+    method public int getGroupVolume(int);
+    method @RequiresPermission(android.car.Car.PERMISSION_CAR_CONTROL_AUDIO_VOLUME) public int getGroupVolume(int, int);
+    method @NonNull public int[] getUsagesForVolumeGroupId(int);
+    method @RequiresPermission(android.car.Car.PERMISSION_CAR_CONTROL_AUDIO_VOLUME) @NonNull public int[] getUsagesForVolumeGroupId(int, int);
+    method public int getVolumeGroupCount();
+    method @RequiresPermission(android.car.Car.PERMISSION_CAR_CONTROL_AUDIO_VOLUME) public int getVolumeGroupCount(int);
+    method public int getVolumeGroupIdForUsage(int);
+    method @RequiresPermission(android.car.Car.PERMISSION_CAR_CONTROL_AUDIO_VOLUME) public int getVolumeGroupIdForUsage(int, int);
     method public void registerCarVolumeCallback(@NonNull android.car.media.CarAudioManager.CarVolumeCallback);
-    method @RequiresPermission(android.car.Car.PERMISSION_CAR_CONTROL_AUDIO_SETTINGS) public void releaseAudioPatch(android.car.media.CarAudioPatchHandle) throws android.car.CarNotConnectedException;
-    method @RequiresPermission(android.car.Car.PERMISSION_CAR_CONTROL_AUDIO_VOLUME) public void setBalanceTowardRight(float) throws android.car.CarNotConnectedException;
-    method @RequiresPermission(android.car.Car.PERMISSION_CAR_CONTROL_AUDIO_VOLUME) public void setFadeTowardFront(float) throws android.car.CarNotConnectedException;
-    method public void setGroupVolume(int, int, int) throws android.car.CarNotConnectedException;
-    method @RequiresPermission(android.car.Car.PERMISSION_CAR_CONTROL_AUDIO_VOLUME) public void setGroupVolume(int, int, int, int) throws android.car.CarNotConnectedException;
+    method @RequiresPermission(android.car.Car.PERMISSION_CAR_CONTROL_AUDIO_SETTINGS) public void releaseAudioPatch(android.car.media.CarAudioPatchHandle);
+    method @RequiresPermission(android.car.Car.PERMISSION_CAR_CONTROL_AUDIO_VOLUME) public void setBalanceTowardRight(float);
+    method @RequiresPermission(android.car.Car.PERMISSION_CAR_CONTROL_AUDIO_VOLUME) public void setFadeTowardFront(float);
+    method public void setGroupVolume(int, int, int);
+    method @RequiresPermission(android.car.Car.PERMISSION_CAR_CONTROL_AUDIO_VOLUME) public void setGroupVolume(int, int, int, int);
     method public void unregisterCarVolumeCallback(@NonNull android.car.media.CarAudioManager.CarVolumeCallback);
     field public static final int PRIMARY_AUDIO_ZONE = 0; // 0x0
   }
@@ -490,8 +401,8 @@ package android.car.media {
 package android.car.navigation {
 
   public final class CarNavigationStatusManager {
-    method public android.car.navigation.CarNavigationInstrumentCluster getInstrumentClusterInfo() throws android.car.CarNotConnectedException;
-    method public void sendEvent(int, android.os.Bundle) throws android.car.CarNotConnectedException;
+    method public android.car.navigation.CarNavigationInstrumentCluster getInstrumentClusterInfo();
+    method public void sendEvent(int, android.os.Bundle);
   }
 
 }
@@ -499,7 +410,7 @@ package android.car.navigation {
 package android.car.settings {
 
   public class CarConfigurationManager {
-    method public android.car.settings.SpeedBumpConfiguration getSpeedBumpConfiguration() throws android.car.CarNotConnectedException;
+    method public android.car.settings.SpeedBumpConfiguration getSpeedBumpConfiguration();
   }
 
   public class CarSettings {
