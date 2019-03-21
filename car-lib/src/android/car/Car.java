@@ -34,6 +34,7 @@ import android.car.hardware.hvac.CarHvacManager;
 import android.car.hardware.power.CarPowerManager;
 import android.car.hardware.property.CarPropertyManager;
 import android.car.media.CarAudioManager;
+import android.car.media.CarMediaManager;
 import android.car.navigation.CarNavigationStatusManager;
 import android.car.settings.CarConfigurationManager;
 import android.car.storagemonitoring.CarStorageMonitoringManager;
@@ -172,6 +173,12 @@ public final class Car {
     public static final String CAR_CONFIGURATION_SERVICE = "configuration";
 
     /**
+     * Service name for {@link android.car.media.CarMediaManager}
+     * @hide
+     */
+    public static final String CAR_MEDIA_SERVICE = "car_media";
+
+    /**
      * @hide
      */
     @SystemApi
@@ -218,12 +225,18 @@ public final class Car {
     /** Permission necessary to access car's fuel door and ev charge port. */
     public static final String PERMISSION_ENERGY_PORTS = "android.car.permission.CAR_ENERGY_PORTS";
 
-    /** Permission necessary to read car's lights information.
+    /** Permission necessary to read car's exterior lights information.
      *  @hide
      */
     @SystemApi
     public static final String PERMISSION_EXTERIOR_LIGHTS =
             "android.car.permission.CAR_EXTERIOR_LIGHTS";
+
+    /**
+     * Permission necessary to read car's interior lights information.
+     */
+    public static final String PERMISSION_READ_INTERIOR_LIGHTS =
+            "android.car.permission.READ_CAR_INTERIOR_LIGHTS";
 
     /** Permission necessary to control car's exterior lights.
      *  @hide
@@ -231,6 +244,12 @@ public final class Car {
     @SystemApi
     public static final String PERMISSION_CONTROL_EXTERIOR_LIGHTS =
             "android.car.permission.CONTROL_CAR_EXTERIOR_LIGHTS";
+
+    /**
+     * Permission necessary to control car's interior lights.
+     */
+    public static final String PERMISSION_CONTROL_INTERIOR_LIGHTS =
+            "android.car.permission.CONTROL_CAR_INTERIOR_LIGHTS";
 
     /** Permission necessary to access car's powertrain information.*/
     public static final String PERMISSION_POWERTRAIN = "android.car.permission.CAR_POWERTRAIN";
@@ -308,6 +327,25 @@ public final class Car {
      */
     @SystemApi
     public static final String PERMISSION_TIRES = "android.car.permission.CAR_TIRES";
+
+    /**
+     * Permission necessary to access car's steering angle information.
+     */
+    public static final String PERMISSION_READ_STEERING_STATE =
+            "android.car.permission.READ_CAR_STEERING";
+
+    /**
+     * Permission necessary to read and write display units for distance, fuel volume, tire pressure
+     * and ev battery.
+     */
+    public static final String PERMISSION_READ_DISPLAY_UNITS =
+            "android.car.permission.READ_CAR_DISPLAY_UNITS";
+    /**
+     * Permission necessary to control display units for distance, fuel volume, tire pressure
+     * and ev battery.
+     */
+    public static final String PERMISSION_CONTROL_DISPLAY_UNITS =
+            "android.car.permission.CONTROL_CAR_DISPLAY_UNITS";
 
     /**
      * Permission necessary to control car's door.
@@ -456,14 +494,6 @@ public final class Car {
     @IntDef({CONNECTION_TYPE_EMBEDDED})
     @Retention(RetentionPolicy.SOURCE)
     public @interface ConnectionType {}
-
-    /**
-     * CarXyzService throws IllegalStateException with this message is re-thrown as
-     * {@link CarNotConnectedException}.
-     *
-     * @hide
-     */
-    public static final String CAR_NOT_CONNECTED_EXCEPTION_MSG = "CarNotConnected";
 
     /**
      * Activity Action: Provide media playing through a media template app.
@@ -750,10 +780,9 @@ public final class Car {
      * SensorManagerService sensorManagerService = car.getCarManager(Car.SENSOR_SERVICE);
      * @param serviceName Name of service that should be created like {@link #SENSOR_SERVICE}.
      * @return Matching service manager or null if there is no such service.
-     * @throws CarNotConnectedException if the connection to the car service has been lost.
      */
     @Nullable
-    public Object getCarManager(String serviceName) throws CarNotConnectedException {
+    public Object getCarManager(String serviceName) {
         CarManagerBase manager;
         ICar service = getICarOrThrow();
         synchronized (mCarManagerLock) {
@@ -775,7 +804,7 @@ public final class Car {
                     }
                     mServiceMap.put(serviceName, manager);
                 } catch (RemoteException e) {
-                    handleRemoteException(e);
+                    throw e.rethrowFromSystemServer();
                 }
             }
         }
@@ -791,39 +820,8 @@ public final class Car {
         return CONNECTION_TYPE_EMBEDDED;
     }
 
-    /**
-     * IllegalStateException from XyzCarService with special message is re-thrown as a different
-     * exception. If the IllegalStateException is not understood then this message will throw the
-     * original exception.
-     *
-     * @param e exception from XyzCarService.
-     * @throws CarNotConnectedException if the connection to the car service has been lost.
-     * @hide
-     */
-    public static void checkCarNotConnectedExceptionFromCarService(
-            IllegalStateException e) throws CarNotConnectedException, IllegalStateException {
-        String message = e.getMessage();
-        if (CAR_NOT_CONNECTED_EXCEPTION_MSG.equals(message)) {
-            throw new CarNotConnectedException();
-        } else {
-            throw e;
-        }
-    }
-
-    /** @hide */
-    public static void hideCarNotConnectedExceptionFromCarService(
-            IllegalStateException e) throws IllegalStateException {
-        String message = e.getMessage();
-        if (CAR_NOT_CONNECTED_EXCEPTION_MSG.equals(message)) {
-            return; //ignore
-        } else {
-            throw e;
-        }
-    }
-
     @Nullable
-    private CarManagerBase createCarManager(String serviceName, IBinder binder)
-            throws CarNotConnectedException {
+    private CarManagerBase createCarManager(String serviceName, IBinder binder) {
         CarManagerBase manager = null;
         switch (serviceName) {
             case AUDIO_SERVICE:
@@ -895,6 +893,9 @@ public final class Car {
             case CAR_TRUST_AGENT_ENROLLMENT_SERVICE:
                 manager = new CarTrustAgentEnrollmentManager(binder, mContext, mEventHandler);
                 break;
+            case CAR_MEDIA_SERVICE:
+                manager = new CarMediaManager(binder);
+                break;
             default:
                 break;
         }
@@ -926,11 +927,6 @@ public final class Car {
             throw new IllegalStateException("not connected");
         }
         return mService;
-    }
-
-    private void handleRemoteException(RemoteException e) {
-        Log.w(CarLibLog.TAG_CAR, "RemoteException", e);
-        disconnect();
     }
 
     private void tearDownCarManagers() {
