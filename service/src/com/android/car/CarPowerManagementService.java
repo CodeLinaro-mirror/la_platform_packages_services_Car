@@ -16,6 +16,7 @@
 package com.android.car;
 
 import android.car.Car;
+import android.car.hardware.power.CarPowerManager;
 import android.car.hardware.power.CarPowerManager.CarPowerStateListener;
 import android.car.hardware.power.ICarPower;
 import android.car.hardware.power.ICarPowerStateListener;
@@ -124,7 +125,7 @@ public class CarPowerManagementService extends ICarPower.Stub implements CarServ
     private HandlerThread mHandlerThread;
     @GuardedBy("this")
     private PowerHandler mHandler;
-    private int mBootReason;
+    private int mBootReason = CarPowerManager.BOOT_REASON_USER_POWER_ON;
     private boolean mShutdownOnNextSuspend = false;
 
     // TODO:  Make this OEM configurable.

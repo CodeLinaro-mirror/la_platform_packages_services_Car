@@ -22,6 +22,7 @@ import static android.hardware.automotive.vehicle.V2_0.VehicleProperty.AP_POWER_
 import static android.hardware.automotive.vehicle.V2_0.VehicleProperty.DISPLAY_BRIGHTNESS;
 
 import android.annotation.Nullable;
+import android.car.hardware.power.CarPowerManager;
 import android.hardware.automotive.vehicle.V2_0.VehicleApPowerBootupReason;
 import android.hardware.automotive.vehicle.V2_0.VehicleApPowerStateConfigFlag;
 import android.hardware.automotive.vehicle.V2_0.VehicleApPowerStateReport;
@@ -346,7 +347,7 @@ public class PowerHalService extends HalServiceBase {
                 case AP_POWER_BOOTUP_REASON:
                     int reason = v.value.int32Values.get(0);
                     Log.i(CarLog.TAG_POWER, "Received AP_POWER_BOOTUP_REASON=" + reason);
-                    listener.onBootReasonReceived(reason);
+                    listener.onBootReasonReceived(mapBootReason(reason));
                     break;
                 case AP_POWER_STATE_REQ:
                     int state = v.value.int32Values.get(VehicleApPowerStateReqIndex.STATE);
@@ -375,6 +376,23 @@ public class PowerHalService extends HalServiceBase {
                 }
                     break;
             }
+        }
+    }
+
+    private int mapBootReason(int bootReason) {
+        switch (bootReason) {
+            case BOOT_REASON_USER_POWER_ON:
+                return CarPowerManager.BOOT_REASON_USER_POWER_ON;
+
+            case BOOT_REASON_USER_UNLOCK:
+                return CarPowerManager.BOOT_REASON_DOOR_UNLOCK;
+
+            case BOOT_REASON_TIMER:
+                return CarPowerManager.BOOT_REASON_TIMER;
+
+            default:
+                // unknown boot reason
+                return 0;
         }
     }
 
