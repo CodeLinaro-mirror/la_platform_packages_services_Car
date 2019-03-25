@@ -19,7 +19,6 @@ package android.car.hardware.power;
 import android.annotation.SystemApi;
 import android.car.Car;
 import android.car.CarManagerBase;
-import android.car.CarNotConnectedException;
 import android.content.Context;
 import android.os.Handler;
 import android.os.IBinder;
@@ -38,35 +37,15 @@ import java.util.concurrent.CompletableFuture;
 public class CarPowerManager implements CarManagerBase {
     private final static boolean DBG = false;
     private final static String TAG = "CarPowerManager";
-    private CarPowerStateListener mListener;
-    private final ICarPower mService;
-    private CompletableFuture<Void> mFuture;
 
+    private final Object mLock = new Object();
+    private final ICarPower mService;
+
+    private CarPowerStateListener mListener;
+    private CompletableFuture<Void> mFuture;
     @GuardedBy("mLock")
     private ICarPowerStateListener mListenerToService;
 
-    private final Object mLock = new Object();
-
-    /**
-     * Deleted! Don't use.
-     */
-    public static final int BOOT_REASON_USER_POWER_ON = 1;
-    /**
-     * Deleted! Don't use.
-     */
-    public static final int BOOT_REASON_DOOR_UNLOCK = 2;
-    /**
-     * Deleted! Don't use.
-     */
-    public static final int BOOT_REASON_TIMER = 3;
-    /**
-     * Deleted! Don't use.
-     */
-    public static final int BOOT_REASON_DOOR_OPEN = 4;
-    /**
-     * Deleted! Don't use.
-     */
-    public static final int BOOT_REASON_REMOTE_START = 5;
 
     /**
      *  Applications set a {@link CarPowerStateListener} for power state event updates.
@@ -78,44 +57,41 @@ public class CarPowerManager implements CarManagerBase {
          */
 
         /**
-         * Shutdown is cancelled, return to normal state.
-         */
-        int SHUTDOWN_CANCELLED = 0;
-        /**
-         * Enter shutdown state.  CPMS is switching to WAIT_FOR_FINISHED state.
-         */
-        int SHUTDOWN_ENTER = 1;
-        /**
          * Android is up, but vendor is controlling the audio / display
          * @hide
          */
-        int WAIT_FOR_VHAL = 2;
+        int WAIT_FOR_VHAL = 1;
         /**
          * Enter suspend state.  CPMS is switching to WAIT_FOR_FINISHED state.
          * @hide
          */
-        int SUSPEND_ENTER = 3;
+        int SUSPEND_ENTER = 2;
         /**
          * Wake up from suspend.
          * @hide
          */
-        int SUSPEND_EXIT = 4;
+        int SUSPEND_EXIT = 3;
+        /**
+         * Enter shutdown state.  CPMS is switching to WAIT_FOR_FINISHED state.
+         * @hide
+         */
+        int SHUTDOWN_ENTER = 5;
         /**
          * On state
          * @hide
          */
-        int ON = 5;
+        int ON = 6;
         /**
          * State where system is getting ready for shutdown or suspend.  Application is expected to
          * cleanup and be ready to suspend
          * @hide
          */
-        int SHUTDOWN_PREPARE = 6;
-        
+        int SHUTDOWN_PREPARE = 7;
         /**
-         * Deleted! Don't use.
+         * Shutdown is cancelled, return to normal state.
+         * @hide
          */
-        void onStateChanged(int state);
+        int SHUTDOWN_CANCELLED = 8;
 
         /**
          *  Called when power state changes
@@ -143,29 +119,25 @@ public class CarPowerManager implements CarManagerBase {
 
     /**
      * Request power manager to shutdown in lieu of suspend at the next opportunity.
-     * @throws CarNotConnectedException
      * @hide
      */
-    public void requestShutdownOnNextSuspend() throws CarNotConnectedException {
+    public void requestShutdownOnNextSuspend() {
         try {
             mService.requestShutdownOnNextSuspend();
         } catch (RemoteException e) {
-            Log.e(TAG, "Exception in requestShutdownOnNextSuspend", e);
-            throw new CarNotConnectedException(e);
+            throw e.rethrowFromSystemServer();
         }
     }
 
     /**
      * Schedule next wake up time in CarPowerManagementSystem
-     * @throws CarNotConnectedException
      * @hide
      */
-    public void scheduleNextWakeupTime(int seconds) throws CarNotConnectedException {
+    public void scheduleNextWakeupTime(int seconds) {
         try {
             mService.scheduleNextWakeupTime(seconds);
         } catch (RemoteException e) {
-            Log.e(TAG, "Exception while scheduling next wakeup time", e);
-            throw new CarNotConnectedException(e);
+            throw e.rethrowFromSystemServer();
         }
     }
 
@@ -178,12 +150,17 @@ public class CarPowerManager implements CarManagerBase {
      * {@link #SHUTDOWN_ENTER} or {@link #SUSPEND_ENTER} state transition.
      *
      * @param listener
-     * @throws CarNotConnectedException, IllegalStateException
+     * @throws IllegalStateException
      * @hide
      */
-    public void setListener(CarPowerStateListener listener) throws
-            CarNotConnectedException, IllegalStateException {
+    public void setListener(CarPowerStateListener listener) {
         synchronized(mLock) {
+            if (mListener == null) {
+                // Update listener
+                mListener = listener;
+            } else {
+                throw new IllegalStateException("Listener must be cleared first");
+            }
             if (mListenerToService == null) {
                 ICarPowerStateListener listenerToService = new ICarPowerStateListener.Stub() {
                     @Override
@@ -194,18 +171,9 @@ public class CarPowerManager implements CarManagerBase {
                 try {
                     mService.registerListener(listenerToService);
                     mListenerToService = listenerToService;
-                } catch (RemoteException ex) {
-                    Log.e(TAG, "Could not connect: ", ex);
-                    throw new CarNotConnectedException(ex);
-                } catch (IllegalStateException ex) {
-                    Car.checkCarNotConnectedExceptionFromCarService(ex);
+                } catch (RemoteException e) {
+                    throw e.rethrowFromSystemServer();
                 }
-            }
-            if (mListener == null) {
-                // Update listener
-                mListener = listener;
-            } else {
-                throw new IllegalStateException("Listener must be cleared first");
             }
         }
     }
@@ -230,11 +198,8 @@ public class CarPowerManager implements CarManagerBase {
 
         try {
             mService.unregisterListener(listenerToService);
-        } catch (RemoteException ex) {
-            Log.e(TAG, "Failed to unregister listener", ex);
-            //ignore
-        } catch (IllegalStateException ex) {
-            Car.hideCarNotConnectedExceptionFromCarService(ex);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
         }
     }
 
@@ -257,7 +222,7 @@ public class CarPowerManager implements CarManagerBase {
                 try {
                     mService.finished(mListenerToService, token);
                 } catch (RemoteException e) {
-                    Log.e(TAG, "RemoteException while calling CPMS.finished()", e);
+                    throw e.rethrowFromSystemServer();
                 }
             });
         }

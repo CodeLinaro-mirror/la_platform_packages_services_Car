@@ -18,7 +18,6 @@ package com.android.car.garagemode;
 
 import android.app.job.JobScheduler;
 import android.car.Car;
-import android.car.CarNotConnectedException;
 import android.car.hardware.power.CarPowerManager;
 import android.car.hardware.power.CarPowerManager.CarPowerStateListener;
 import android.content.ComponentName;
@@ -48,12 +47,8 @@ public class Controller implements CarPowerStateListener {
         @Override
         public void onServiceConnected(ComponentName name, IBinder service) {
             LOG.i("Car is now connected, getting CarPowerManager service");
-            try {
-                mCarPowerManager = (CarPowerManager) mCar.getCarManager(Car.POWER_SERVICE);
-                mCarPowerManager.setListener(Controller.this);
-            } catch (CarNotConnectedException e) {
-                LOG.e("Failed to get CarPowerManager instance", e);
-            }
+            mCarPowerManager = (CarPowerManager) mCar.getCarManager(Car.POWER_SERVICE);
+            mCarPowerManager.setListener(Controller.this);
         }
 
         @Override
@@ -90,12 +85,6 @@ public class Controller implements CarPowerStateListener {
         } else {
             mCar = car;
         }
-    }
-
-    @Override
-    public void onStateChanged(int state) {
-        throw new UnsupportedOperationException(
-                "Should not be here. This API obsolete and is not used.");
     }
 
     @Override
@@ -189,11 +178,7 @@ public class Controller implements CarPowerStateListener {
             return;
         }
         int seconds = mWakeupPolicy.getNextWakeUpInterval();
-        try {
-            mCarPowerManager.scheduleNextWakeupTime(seconds);
-        } catch (CarNotConnectedException e) {
-            LOG.e("Car is not connected.", e);
-        }
+        mCarPowerManager.scheduleNextWakeupTime(seconds);
     }
 
     private void handleSuspendExit() {
