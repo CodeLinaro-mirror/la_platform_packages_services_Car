@@ -12,10 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-service com.android.car.powertestservice /system/bin/com.android.car.powertestservice
-    class core
-    user system
-    group system
+# service com.android.car.powertestservice /system/bin/com.android.car.powertestservice
+#     class core
+#     user system
+#     group system
 
-on boot && property:boot.car_service_created=1
-    start com.android.car.powertestservice
+# on boot && property:boot.car_service_created=1
+#    start com.android.car.powertestservice
