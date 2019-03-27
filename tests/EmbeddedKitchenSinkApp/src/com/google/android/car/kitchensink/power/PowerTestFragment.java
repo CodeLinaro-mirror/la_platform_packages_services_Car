@@ -16,7 +16,6 @@
 
 package com.google.android.car.kitchensink.power;
 
-import android.car.CarNotConnectedException;
 import android.car.hardware.power.CarPowerManager;
 import android.content.Context;
 import android.os.Bundle;
@@ -34,28 +33,17 @@ import androidx.fragment.app.Fragment;
 import com.google.android.car.kitchensink.KitchenSinkActivity;
 import com.google.android.car.kitchensink.R;
 
-import java.util.concurrent.CompletableFuture;
-
 public class PowerTestFragment extends Fragment {
     private final boolean DBG = false;
     private final String TAG = "PowerTestFragment";
     private CarPowerManager mCarPowerManager;
 
     private final CarPowerManager.CarPowerStateListener mPowerListener =
-            new CarPowerManager.CarPowerStateListener() {
-                @Override
-                public void onStateChanged(int state) {
-                    throw new UnsupportedOperationException(
-                            "Should not be here. This API obsolete and is not used.");
+            (state, future) -> {
+                if (future != null) {
+                    future.complete(null);
                 }
-
-                @Override
-                public void onStateChanged(int state, CompletableFuture<Void> future) {
-                    if (future != null) {
-                        future.complete(null);
-                    }
-                    Log.i(TAG, "onStateChanged() state = " + state);
-                }
+                Log.i(TAG, "onStateChanged() state = " + state);
             };
 
     @Override
@@ -64,8 +52,6 @@ public class PowerTestFragment extends Fragment {
             mCarPowerManager = ((KitchenSinkActivity) getActivity()).getPowerManager();
             try {
                 mCarPowerManager.setListener(mPowerListener);
-            } catch (CarNotConnectedException e) {
-                Log.e(TAG, "Car is not connected!");
             } catch (IllegalStateException e) {
                 Log.e(TAG, "CarPowerManager listener was not cleared");
             }
@@ -102,11 +88,7 @@ public class PowerTestFragment extends Fragment {
     }
 
     private void requestShutdownBtn(View v) {
-        try {
-            mCarPowerManager.requestShutdownOnNextSuspend();
-        } catch (CarNotConnectedException e) {
-            Log.e(TAG, "Failed to set requestShutdownOnNextSuspend()", e);
-        }
+        mCarPowerManager.requestShutdownOnNextSuspend();
     }
 
     private void shutdownBtn(View v) {

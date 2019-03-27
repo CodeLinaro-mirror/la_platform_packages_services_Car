@@ -515,13 +515,28 @@ public class ConnectivityFragment extends Fragment {
     }
 
     private void updateApState() {
-        String apState = sWifiApStates.get(mWifiManager.getWifiApState(), "?");
-        String staState = sWifiStaStates.get(mWifiManager.getWifiState(), "?");
+        int apState = mWifiManager.getWifiApState();
+        String apStateTmp = sWifiApStates.get(apState, "?");
+        final String staStateStr = sWifiStaStates.get(mWifiManager.getWifiState(), "?");
 
+        WifiConfiguration config = mWifiManager.getWifiApConfiguration();
+        if (config != null && config.SSID != null && apState == WifiManager.WIFI_AP_STATE_ENABLED) {
+            apStateTmp += " (" + config.SSID + "/" + config.preSharedKey + ")";
+        }
+
+        final String apStateStr = apStateTmp;
         mTetheringStatusPolled.post(() -> {
-            mTetheringStatusPolled.setText(apState);
-            mWifiStatusPolled.setText(staState);
+            mTetheringStatusPolled.setText(apStateStr);
+            mWifiStatusPolled.setText(staStateStr);
         });
+    }
+
+    private void setTetheringStatus(String status) {
+        mTetheringStatus.post(() -> mTetheringStatus.setText(status));
+    }
+
+    private void setLocalOnlyStatus(String status) {
+        mLocalOnlyStatus.post(() -> mLocalOnlyStatus.setText(status));
     }
 
     public void showToast(String text) {
@@ -540,68 +555,76 @@ public class ConnectivityFragment extends Fragment {
     }
 
     private void startTethering() {
-        mTetheringStatus.setText("starting...");
+        setTetheringStatus("starting...");
 
-        mConnectivityManager.startTethering(ConnectivityManager.TETHERING_WIFI, false,
+        ConnectivityManager.OnStartTetheringCallback cb =
                 new ConnectivityManager.OnStartTetheringCallback() {
-                public void onTetheringStarted() {
-                    mTetheringStatus.setText("started");
-                }
+            public void onTetheringStarted() {
+                setTetheringStatus("started");
+            }
 
-                public void onTetheringFailed() {
-                    mTetheringStatus.setText("failed");
-                }
-            });
+            public void onTetheringFailed() {
+                setTetheringStatus("failed");
+            }
+        };
+
+        mConnectivityManager.startTethering(ConnectivityManager.TETHERING_WIFI, false, cb);
     }
 
     private void stopTethering() {
-        mTetheringStatus.setText("stopping...");
+        setTetheringStatus("stopping...");
         mConnectivityManager.stopTethering(ConnectivityManager.TETHERING_WIFI);
-        mTetheringStatus.setText("stopped");
+        setTetheringStatus("stopped");
     }
 
     private WifiManager.LocalOnlyHotspotReservation mLocalOnlyReservation;
 
     private void startLocalOnly() {
-        mLocalOnlyStatus.setText("starting...");
+        setLocalOnlyStatus("starting...");
 
         UserHandle user = Process.myUserHandle();
         if (!mLocationManager.isLocationEnabledForUser(user)) {
-            mLocalOnlyStatus.setText("enabling location...");
+            setLocalOnlyStatus("enabling location...");
             mLocationManager.setLocationEnabledForUser(true, user);
-            mLocalOnlyStatus.setText("location enabled; starting...");
+            setLocalOnlyStatus("location enabled; starting...");
         }
 
-        mWifiManager.startLocalOnlyHotspot(new WifiManager.LocalOnlyHotspotCallback() {
+        WifiManager.LocalOnlyHotspotCallback cb = new WifiManager.LocalOnlyHotspotCallback() {
             public void onStarted(WifiManager.LocalOnlyHotspotReservation reservation) {
                 mLocalOnlyReservation = reservation;
                 WifiConfiguration config = reservation.getWifiConfiguration();
-                mLocalOnlyStatus.setText("started ("
+                setLocalOnlyStatus("started ("
                         + config.SSID + "/" + config.preSharedKey + ")");
             };
 
             public void onStopped() {
-                mLocalOnlyStatus.setText("stopped");
+                setLocalOnlyStatus("stopped");
             };
 
             public void onFailed(int reason) {
-                mLocalOnlyStatus.setText("failed " + reason);
+                setLocalOnlyStatus("failed " + reason);
             };
-        }, null);
+        };
+
+        try {
+            mWifiManager.startLocalOnlyHotspot(cb, null);
+        } catch (IllegalStateException ex) {
+            setLocalOnlyStatus(ex.getMessage());
+        }
     }
 
     private void stopLocalOnly() {
-        mLocalOnlyStatus.setText("stopping...");
+        setLocalOnlyStatus("stopping...");
 
         WifiManager.LocalOnlyHotspotReservation reservation = mLocalOnlyReservation;
         mLocalOnlyReservation = null;
 
         if (reservation == null) {
-            mLocalOnlyStatus.setText("no reservation");
+            setLocalOnlyStatus("no reservation");
             return;
         }
 
         reservation.close();
-        mLocalOnlyStatus.setText("stopped");
+        setLocalOnlyStatus("stopped");
     }
 }
