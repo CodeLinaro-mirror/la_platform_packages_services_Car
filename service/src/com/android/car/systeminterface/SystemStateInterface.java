@@ -46,6 +46,7 @@ public interface SystemStateInterface {
     void shutdown();
     boolean enterDeepSleep(int sleepDurationSec);
     void scheduleActionForBootCompleted(Runnable action, Duration delay);
+    boolean isInteractive();
 
     default boolean isWakeupCausedByTimer() {
         //TODO bug: 32061842, check wake up reason and do necessary operation information should
@@ -71,6 +72,8 @@ public interface SystemStateInterface {
     class DefaultImpl implements SystemStateInterface {
         private final static Duration MIN_BOOT_COMPLETE_ACTION_DELAY = Duration.ofSeconds(10);
         private final static int SUSPEND_TRY_TIMEOUT_MS = 1000;
+        private final static int WAIT_INTERACTIVE_TIMEOUT_MS = 4 * 1000;
+        private final static int POLL_INTERACTIVE_SLEEP_MS = 1000;
 
         private ICarServiceHelper mICarServiceHelper;
         private final Context mContext;
@@ -133,6 +136,36 @@ public interface SystemStateInterface {
         @Override
         public void setCarServiceHelper(ICarServiceHelper helper) {
             mICarServiceHelper = helper;
+        }
+
+        @Override
+        public boolean isInteractive() {
+            return mPowerManager.isInteractive();
+        }
+
+        @Override
+        public boolean isWakeupCausedByTimer() {
+            // [FIXME] Currently, there isn't API to check wakeup source of
+            // RTC alarm. Instead, the enhancement is to check the wakeup
+            // source of power button. If system wake up due to power button,
+            // the device is in an interactive state.
+            return !checkInteractive();
+        }
+
+        private boolean checkInteractive() {
+            final long endTime = SystemClock.elapsedRealtime() + WAIT_INTERACTIVE_TIMEOUT_MS;
+            long delay = endTime - SystemClock.elapsedRealtime();
+            while (delay > 0) {
+                if (isInteractive()) {
+                    Log.i(TAG, "interactive");
+                    return true;
+                }
+
+                SystemClock.sleep(POLL_INTERACTIVE_SLEEP_MS);
+                delay = endTime - SystemClock.elapsedRealtime();
+            }
+            Log.i(TAG, "non-interactive");
+            return false;
         }
     }
 }

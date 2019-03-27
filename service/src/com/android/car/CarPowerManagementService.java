@@ -127,11 +127,13 @@ public class CarPowerManagementService extends ICarPower.Stub implements CarServ
     private PowerHandler mHandler;
     private int mBootReason = CarPowerManager.BOOT_REASON_USER_POWER_ON;
     private boolean mShutdownOnNextSuspend = false;
+    private int mDeepSleepRetryCount = 0;
 
     // TODO:  Make this OEM configurable.
     private final static int APP_EXTEND_MAX_MS = 5000;
     private final static int SHUTDOWN_POLLING_INTERVAL_MS = 2000;
     private final static int SHUTDOWN_EXTEND_MAX_MS = 5000;
+    private final static int MAX_DEEP_SLEEP_RETRY_COUNT = 50;
 
     private class PowerManagerCallbackList extends RemoteCallbackList<ICarPowerStateListener> {
         /**
@@ -485,6 +487,8 @@ public class CarPowerManagementService extends ICarPower.Stub implements CarServ
     }
 
     private void doHandleDeepSleep() {
+        boolean result = false;
+        boolean isRetryAllowed = false;
         // keep holding partial wakelock to prevent entering sleep before enterDeepSleep call
         // enterDeepSleep should force sleep entry even if wake lock is kept.
         mSystemInterface.switchToPartialWakeLock();
@@ -505,10 +509,16 @@ public class CarPowerManagementService extends ICarPower.Stub implements CarServ
         Log.i(CarLog.TAG_POWER, "Release all wakelock before deep sleep");
         mSystemInterface.releaseAllWakeLocks();
 
-        if (mSystemInterface.enterDeepSleep(wakeupTimeSec) == false) {
-            // System did not suspend.  Need to shutdown
-            // TODO:  Shutdown gracefully
-            Log.e(CarLog.TAG_POWER, "Sleep did not succeed.  Need to shutdown");
+        if (!mSystemInterface.isInteractive()) {
+            result = mSystemInterface.enterDeepSleep(wakeupTimeSec);
+            if (result == false) {
+                // System did not suspend.  Need to shutdown
+                // TODO:  Shutdown gracefully
+                Log.e(CarLog.TAG_POWER, "Sleep did not succeed.  Need to shutdown");
+            }
+            isRetryAllowed = verifyDeepSleepRetryAllowed(result);
+        } else {
+            Log.w(CarLog.TAG_POWER, "System is interactive when to enter deep sleep");
         }
         mHal.sendSleepExit();
         for (PowerServiceEventListener listener : mListeners) {
@@ -527,7 +537,12 @@ public class CarPowerManagementService extends ICarPower.Stub implements CarServ
         }
         mPowerManagerListeners.finishBroadcast();
 
-        if (mSystemInterface.isWakeupCausedByTimer()) {
+        if (!mSystemInterface.isInteractive() &&
+                ((result && mSystemInterface.isWakeupCausedByTimer()) ||
+                isRetryAllowed)) {
+            // keep holding partial wakelock to prevent entering sleep before enterDeepSleep call
+            Log.i(CarLog.TAG_POWER, "acquire partial wakelock");
+            mSystemInterface.switchToPartialWakeLock();
             doHandlePreprocessing(false /*shuttingDown*/);
         } else {
             PowerState currentState = mHal.getCurrentPowerState();
@@ -702,6 +717,20 @@ public class CarPowerManagementService extends ICarPower.Stub implements CarServ
                 // All apps are ready to shutdown/suspend.
                 Log.i(CarLog.TAG_POWER, "Apps are finished, call notifyPowerEventProcessingCompletion");
                 notifyPowerEventProcessingCompletion(null);
+            }
+        }
+    }
+
+    private boolean verifyDeepSleepRetryAllowed(boolean result) {
+        if (result) {
+            mDeepSleepRetryCount = 0;
+            return false;
+        } else {
+            if (mDeepSleepRetryCount++ < MAX_DEEP_SLEEP_RETRY_COUNT) {
+                return true;
+            } else {
+                Log.e(CarLog.TAG_POWER, "Exceed max deep sleep retry count " + MAX_DEEP_SLEEP_RETRY_COUNT);
+                return false;
             }
         }
     }
