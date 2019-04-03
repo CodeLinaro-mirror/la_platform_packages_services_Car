@@ -59,7 +59,7 @@ private:
 
     static bool qualifyCaptureDevice(const char* deviceName);
     static CameraRecord* findCameraById(const std::string& cameraId);
-
+    static void enumerateDevices();
 
     // NOTE:  All members values are static so that all clients operate on the same state
     //        That is to say, this is effectively a singleton despite the fact that HIDL
@@ -69,11 +69,7 @@ private:
     //        using them.
     static std::list<CameraRecord> sCameraList;
 
-    static wp<EvsGlDisplay>          sActiveDisplay; // Weak pointer. Object destructs if client dies.
-
-    void enumerateDevices();
-
-    unsigned max_retry;
+    static wp<EvsGlDisplay>        sActiveDisplay; // Weak pointer. Object destructs if client dies.
 };
 
 } // namespace implementation
