@@ -123,9 +123,20 @@ public class BluetoothAutoConnectStateMachine extends StateMachine {
                     BluetoothDeviceConnectionPolicy.ConnectionParams params =
                             (BluetoothDeviceConnectionPolicy.ConnectionParams) msg.obj;
                     BluetoothDevice device = params.getBluetoothDevice();
-                    // After pairing/disconnect, always try to connect to both PBAP and MAP
+
+                    BluetoothDevicesInfo info = mPolicy.getBluetoothDevicesInfo(BluetoothProfile.HEADSET_CLIENT);
+                    int state = info.getCurrentConnectionStateLocked(device);
+                    if (state == BluetoothProfile.STATE_DISCONNECTED) {
+                        if (DBG) {
+                            Log.d(TAG, "no action due to device disconnected"
+                                + Utils.getDeviceDebugInfo(device));
+                        }
+                        break;
+                    }
+
+                    // After pairing, always try to connect to both PBAP and MAP
                     if (DBG) {
-                        Log.d(TAG, "try to connect to PBAP/MAP after pairing or disconnect: "
+                        Log.d(TAG, "try to connect to PBAP/MAP after pairing: "
                                 + Utils.getDeviceDebugInfo(device));
                     }
                     mPolicy.connectToDeviceOnProfile(BluetoothProfile.PBAP_CLIENT, device);
