@@ -119,6 +119,16 @@
         android:label="@string/car_permission_label_projection"
         android:description="@string/car_permission_desc_projection" />
     <permission
+            android:name="android.car.permission.ACCESS_CAR_PROJECTION_STATUS"
+            android:protectionLevel="system|signature"
+            android:label="@string/car_permission_label_access_projection_status"
+            android:description="@string/car_permission_desc_access_projection_status" />
+    <permission
+            android:name="android.car.permission.BIND_PROJECTION_SERVICE"
+            android:protectionLevel="signature"
+            android:label="@string/car_permission_label_bind_projection_service"
+            android:description="@string/car_permission_desc_bind_projection_service" />
+    <permission
         android:name="android.car.permission.CAR_MOCK_VEHICLE_HAL"
         android:protectionLevel="system|signature"
         android:label="@string/car_permission_label_mock_vehicle_hal"
@@ -178,6 +188,11 @@
       android:protectionLevel="system|signature"
       android:label="@string/car_permission_label_diag_clear"
       android:description="@string/car_permission_desc_diag_clear" />
+    <permission
+        android:name="android.car.permission.BIND_VMS_CLIENT"
+        android:protectionLevel="signature"
+        android:label="@string/car_permission_label_bind_vms_client"
+        android:description="@string/car_permission_desc_bind_vms_client" />
     <permission
         android:name="android.car.permission.VMS_PUBLISHER"
         android:protectionLevel="system|signature"
