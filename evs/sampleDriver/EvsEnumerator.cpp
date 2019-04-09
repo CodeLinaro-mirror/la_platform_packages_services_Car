@@ -35,9 +35,10 @@ namespace implementation {
 std::list<EvsEnumerator::CameraRecord>   EvsEnumerator::sCameraList;
 wp<EvsGlDisplay>                           EvsEnumerator::sActiveDisplay;
 
+// Number of trials to open the camera.
+static const unsigned int kMaxRetry = 3;
 
-EvsEnumerator::EvsEnumerator()
-: max_retry(3) {
+EvsEnumerator::EvsEnumerator() {
     ALOGD("EvsEnumerator created");
 
     enumerateDevices();
@@ -80,6 +81,21 @@ void EvsEnumerator::enumerateDevices() {
 Return<void> EvsEnumerator::getCameraList(getCameraList_cb _hidl_cb)  {
     ALOGD("getCameraList");
 
+    if (sCameraList.size() < 1) {
+        // WAR: this assumes that the device has at least one compatible camera and
+        // therefore keeps trying until it succeeds to open.
+        // TODO: this is required for external USB camera so would be better to
+        // subscribe hot-plug event.
+        unsigned tries = 0;
+        ALOGI("No camera is available; enumerate devices again.");
+        while (sCameraList.size() < 1 && tries++ < kMaxRetry) {
+            enumerateDevices();
+
+            // TODO: remove this.
+            usleep(5000);
+        }
+    }
+
     const unsigned numCameras = sCameraList.size();
 
     // Build up a packed array of CameraDesc for return
@@ -104,19 +120,6 @@ Return<sp<IEvsCamera>> EvsEnumerator::openCamera(const hidl_string& cameraId) {
 
     // Is this a recognized camera id?
     CameraRecord *pRecord = findCameraById(cameraId);
-    // WAR: this assumes that the device has at least one compatible camera and
-    // therefore keeps trying until it succeeds to open.
-    // TODO: this is required for external USB camera so would be better to
-    // subscribe hot-plug event.
-    unsigned tries = 0;
-    while (!pRecord && tries++ < max_retry) {
-        ALOGI("Requested camera %s not found, enumerate again, %d", cameraId.c_str(), tries);
-        enumerateDevices();
-        pRecord = findCameraById(cameraId);
-
-        // TODO: remove this.
-        usleep(1000);
-    }
 
     // Has this camera already been instantiated by another caller?
     sp<EvsV4lCamera> pActiveCamera = pRecord->activeInstance.promote();
@@ -257,17 +260,11 @@ bool EvsEnumerator::qualifyCaptureDevice(const char* deviceName) {
     // Enumerate the available capture formats (if any)
     v4l2_fmtdesc formatDescription;
     formatDescription.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-    union {
-        uint32_t format;
-        uint8_t  c[4];
-    } str;
     bool found = false;
     for (int i=0; !found; i++) {
         formatDescription.index = i;
         if (ioctl(fd, VIDIOC_ENUM_FMT, &formatDescription) == 0) {
-            str.format = formatDescription.pixelformat;
-            ALOGI("FORMAT %c%c%c%c (0x%X), type 0x%X, desc %s, flags 0x%X",
-                  str.c[0], str.c[1], str.c[2], str.c[3],
+            ALOGI("FORMAT 0x%X, type 0x%X, desc %s, flags 0x%X",
                   formatDescription.pixelformat, formatDescription.type,
                   formatDescription.description, formatDescription.flags);
             switch (formatDescription.pixelformat)
@@ -286,12 +283,11 @@ bool EvsEnumerator::qualifyCaptureDevice(const char* deviceName) {
                     break;
             }
         } else {
-            // No more formats available
+            // No more formats available.
             break;
         }
     }
 
-    // If we get here, we didn't find a usable output format
     return found;
 }
 
