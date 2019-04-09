@@ -21,6 +21,7 @@ import android.os.Bundle;
 import android.view.ContextThemeWrapper;
 import android.widget.Button;
 import android.widget.TextView;
+import android.widget.Toast;
 
 
 /**
@@ -35,10 +36,14 @@ public class DialogSamples extends AbstractSampleActivity {
         setContentView(R.layout.dialog_samples);
 
         Button mShowDialogBT = findViewById(R.id.showDialogBT);
+        Button mShowDialogOnlyPositiveBT = findViewById(R.id.showDialogOnlyPositiveBT);
         Button mShowDialogWithCheckboxBT = findViewById(R.id.showDialogWithCheckboxBT);
         setupBackgroundColorControls(R.id.dialogLayout);
         mShowDialogBT.setOnClickListener(v -> openDialog(false));
+        mShowDialogOnlyPositiveBT.setOnClickListener(v -> openDialogWithOnlyPositiveButton());
         mShowDialogWithCheckboxBT.setOnClickListener(v -> openDialog(true));
+        Button mShowToast = findViewById(R.id.showToast);
+        mShowToast.setOnClickListener(v -> showToast());
     }
 
 
@@ -67,5 +72,20 @@ public class DialogSamples extends AbstractSampleActivity {
                 (dialog, which) -> {
                 });
         builder.show();
+    }
+
+    private void openDialogWithOnlyPositiveButton() {
+        AlertDialog.Builder builder = new AlertDialog.Builder(
+                new ContextThemeWrapper(this, R.style.Theme_Testing_Dialog_Alert));
+        builder.setTitle("Standard Alert Dialog")
+                .setMessage("With a message to show.");
+        builder.setPositiveButton("OK", (dialoginterface, i) -> {
+        });
+        builder.show();
+    }
+
+    private void showToast() {
+        Toast.makeText(this, "Toast message looks like this",
+                Toast.LENGTH_LONG).show();
     }
 }

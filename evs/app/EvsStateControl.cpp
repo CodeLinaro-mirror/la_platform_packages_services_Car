@@ -21,6 +21,8 @@
 #include <string.h>
 
 #include <log/log.h>
+#include <inttypes.h>
+#include <utils/SystemClock.h>
 
 
 // TODO:  Seems like it'd be nice if the Vehicle HAL provided such helpers (but how & where?)
@@ -289,7 +291,15 @@ bool EvsStateControl::configureEvsPipeline(State desiredState) {
     }
 
     // Do we need a new direct view renderer?
-    if (mCameraList[desiredState].size() > 1 || desiredState == PARKING) {
+    if (mCameraList[desiredState].size() == 1) {
+        // We have a camera assigned to this state for direct view
+        mCurrentRenderer = std::make_unique<RenderDirectView>(mEvs,
+                                                              mCameraList[desiredState][0]);
+        if (!mCurrentRenderer) {
+            ALOGE("Failed to construct direct renderer.  Skipping state change.");
+            return false;
+        }
+    } else if (mCameraList[desiredState].size() > 1 || desiredState == PARKING) {
         // TODO:  DO we want other kinds of compound view or else sequentially selected views?
         mCurrentRenderer = std::make_unique<RenderTopView>(mEvs,
                                                            mCameraList[desiredState],
@@ -298,14 +308,9 @@ bool EvsStateControl::configureEvsPipeline(State desiredState) {
             ALOGE("Failed to construct top view renderer.  Skipping state change.");
             return false;
         }
-    } else if (mCameraList[desiredState].size() == 1) {
-        // We have a camera assigned to this state for direct view
-        mCurrentRenderer = std::make_unique<RenderDirectView>(mEvs,
-                                                              mCameraList[desiredState][0]);
-        if (!mCurrentRenderer) {
-            ALOGE("Failed to construct direct renderer.  Skipping state change.");
-            return false;
-        }
+    } else {
+        ALOGD("Unsupported, desiredState %d has %u cameras.",
+              desiredState, static_cast<unsigned int>(mCameraList[desiredState].size()));
     }
 
     // Now set the display state based on whether we have a video feed to show
@@ -314,14 +319,14 @@ bool EvsStateControl::configureEvsPipeline(State desiredState) {
         mDisplay->setDisplayState(DisplayState::NOT_VISIBLE);
     } else {
         // Start the camera stream
-        ALOGD("Starting camera stream");
+        ALOGD("EvsStartCameraStreamTiming start time: %" PRId64 "ms", android::elapsedRealtime());
         if (!mCurrentRenderer->activate()) {
             ALOGE("New renderer failed to activate");
             return false;
         }
 
         // Activate the display
-        ALOGD("Arming the display");
+        ALOGD("EvsActivateDisplayTiming start time: %" PRId64 "ms", android::elapsedRealtime());
         Return<EvsResult> result = mDisplay->setDisplayState(DisplayState::VISIBLE_ON_NEXT_FRAME);
         if (result != EvsResult::OK) {
             ALOGE("setDisplayState returned an error (%d)", (EvsResult)result);
