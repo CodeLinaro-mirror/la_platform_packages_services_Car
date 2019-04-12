@@ -30,11 +30,11 @@ interface ICarTrustAgentEnrollment {
     void startEnrollmentAdvertising();
     void stopEnrollmentAdvertising();
     void initiateEnrollmentHandshake(in BluetoothDevice device);
-    void enrollmentHandshakeAccepted();
+    void enrollmentHandshakeAccepted(in BluetoothDevice device);
     void terminateEnrollmentHandshake();
-    void activateToken(in long handle);
-    void revokeTrust(in long handle);
-    int[] getEnrollmentHandlesForUser(in int uid);
+    boolean isEscrowTokenActive(in long handle, int uid);
+    void removeEscrowToken(in long handle, int uid);
+    long[] getEnrollmentHandlesForUser(in int uid);
     void registerEnrollmentCallback(in ICarTrustAgentEnrollmentCallback callback);
     void unregisterEnrollmentCallback(in ICarTrustAgentEnrollmentCallback callback);
     void registerBleCallback(in ICarTrustAgentBleCallback callback);

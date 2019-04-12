@@ -24,15 +24,12 @@ import android.car.vms.VmsLayersOffering;
 import android.car.vms.VmsSubscriptionState;
 import android.content.Context;
 import android.os.Binder;
-import android.os.Handler;
 import android.os.IBinder;
-import android.os.Message;
 import android.os.RemoteException;
 import android.util.ArrayMap;
 import android.util.Log;
 
-import com.android.car.hal.VmsHalService;
-import com.android.car.hal.VmsHalService.VmsHalPublisherListener;
+import com.android.car.vms.VmsBrokerService;
 import com.android.car.vms.VmsClientManager;
 
 import java.io.PrintWriter;
@@ -45,154 +42,161 @@ import java.util.Set;
  * Binds to publishers and configures them to use this service.
  * Notifies publishers of subscription changes.
  */
-public class VmsPublisherService extends IVmsPublisherService.Stub implements CarServiceBase {
+public class VmsPublisherService implements CarServiceBase, VmsClientManager.ConnectionListener {
     private static final boolean DBG = true;
     private static final String TAG = "VmsPublisherService";
 
-    private static final int MSG_HAL_SUBSCRIPTION_CHANGED = 1;
-
     private final Context mContext;
     private final VmsClientManager mClientManager;
-    private final VmsListener mClientListener = new VmsListener();
-    private final VmsHalService mHal;
-    private final VmsHalPublisherListener mHalPublisherListener;
-    private final Map<String, IVmsPublisherClient> mPublisherMap = Collections.synchronizedMap(
+    private final VmsBrokerService mBrokerService;
+    private final Map<String, PublisherProxy> mPublisherProxies = Collections.synchronizedMap(
             new ArrayMap<>());
-    private final Handler mHandler = new EventHandler();
 
-    public VmsPublisherService(Context context, VmsClientManager clientManager, VmsHalService hal) {
+    public VmsPublisherService(
+            Context context,
+            VmsBrokerService brokerService,
+            VmsClientManager clientManager) {
         mContext = context;
         mClientManager = clientManager;
-        mHal = hal;
-        mHalPublisherListener = subscriptionState -> mHandler.sendMessage(
-                mHandler.obtainMessage(MSG_HAL_SUBSCRIPTION_CHANGED, subscriptionState));
+        mBrokerService = brokerService;
     }
 
     @Override
     public void init() {
-        mClientManager.registerConnectionListener(mClientListener);
-        mHal.addPublisherListener(mHalPublisherListener);
-        mHal.signalPublisherServiceIsReady();
+        mClientManager.registerConnectionListener(this);
     }
 
     @Override
     public void release() {
-        mClientManager.unregisterConnectionListener(mClientListener);
-        mHal.removePublisherListener(mHalPublisherListener);
-        mPublisherMap.clear();
+        mClientManager.unregisterConnectionListener(this);
+        mPublisherProxies.values().forEach(PublisherProxy::unregister);
+        mPublisherProxies.clear();
     }
 
     @Override
     public void dump(PrintWriter writer) {
         writer.println("*" + getClass().getSimpleName() + "*");
-        writer.println("mPublisherMap:" + mPublisherMap.keySet());
+        writer.println("mPublisherProxies:" + mPublisherProxies.keySet());
     }
 
-    /* Called in arbitrary binder thread */
     @Override
-    public void setLayersOffering(IBinder token, VmsLayersOffering offering) {
-        mHal.setPublisherLayersOffering(token, offering);
+    public void onClientConnected(String publisherName, IBinder binder) {
+        if (DBG) Log.d(TAG, "onClientConnected: " + publisherName);
+        IBinder publisherToken = new Binder();
+        IVmsPublisherClient publisherClient = IVmsPublisherClient.Stub.asInterface(binder);
+
+        PublisherProxy publisherProxy = new PublisherProxy(publisherName, publisherToken,
+                publisherClient);
+        publisherProxy.register();
+        try {
+            publisherClient.setVmsPublisherService(publisherToken, publisherProxy);
+        } catch (RemoteException e) {
+            Log.e(TAG, "unable to configure publisher: " + publisherName, e);
+            return;
+        }
+
+        PublisherProxy existingProxy = mPublisherProxies.put(publisherName, publisherProxy);
+        if (existingProxy != null) {
+            existingProxy.unregister();
+        }
     }
 
-    /* Called in arbitrary binder thread */
     @Override
-    public void publish(IBinder token, VmsLayer layer, int publisherId, byte[] payload) {
-        if (DBG) {
-            Log.d(TAG, "Publishing for layer: " + layer);
+    public void onClientDisconnected(String publisherName) {
+        if (DBG) Log.d(TAG, "onClientDisconnected: " + publisherName);
+        PublisherProxy proxy = mPublisherProxies.remove(publisherName);
+        if (proxy != null) {
+            proxy.unregister();
         }
-        ICarImpl.assertVmsPublisherPermission(mContext);
+    }
 
-        // Send the message to application listeners.
-        Set<IVmsSubscriberClient> listeners =
-                mHal.getSubscribersForLayerFromPublisher(layer, publisherId);
+    private class PublisherProxy extends IVmsPublisherService.Stub implements
+            VmsBrokerService.PublisherListener {
+        private final String mName;
+        private final IBinder mToken;
+        private final IVmsPublisherClient mPublisherClient;
+        private boolean mConnected;
 
-        if (DBG) {
-            Log.d(TAG, "Number of subscribed apps: " + listeners.size());
+        PublisherProxy(String name, IBinder token,
+                IVmsPublisherClient publisherClient) {
+            this.mName = name;
+            this.mToken = token;
+            this.mPublisherClient = publisherClient;
         }
-        for (IVmsSubscriberClient listener : listeners) {
-            try {
-                listener.onVmsMessageReceived(layer, payload);
-            } catch (RemoteException ex) {
-                Log.e(TAG, "unable to publish to listener: " + listener);
+
+        void register() {
+            if (DBG) Log.d(TAG, "register: " + mName);
+            mConnected = true;
+            mBrokerService.addPublisherListener(this);
+        }
+
+        void unregister() {
+            if (DBG) Log.d(TAG, "unregister: " + mName);
+            mConnected = false;
+            mBrokerService.removePublisherListener(this);
+            mBrokerService.removeDeadPublisher(mToken);
+        }
+
+        @Override
+        public void setLayersOffering(IBinder token, VmsLayersOffering offering) {
+            assertPermission(token);
+            mBrokerService.setPublisherLayersOffering(token, offering);
+        }
+
+        @Override
+        public void publish(IBinder token, VmsLayer layer, int publisherId, byte[] payload) {
+            assertPermission(token);
+            if (DBG) {
+                Log.d(TAG, String.format("Publishing to %s as %d (%s)", layer, publisherId, mName));
             }
-        }
 
-        // Send the message to HAL
-        if (mHal.isHalSubscribed(layer)) {
-            Log.d(TAG, "HAL is subscribed");
-            mHal.setDataMessage(layer, payload);
-        } else {
-            Log.d(TAG, "HAL is NOT subscribed");
-        }
-    }
+            // Send the message to subscribers
+            Set<IVmsSubscriberClient> listeners =
+                    mBrokerService.getSubscribersForLayerFromPublisher(layer, publisherId);
 
-    /* Called in arbitrary binder thread */
-    @Override
-    public VmsSubscriptionState getSubscriptions() {
-        ICarImpl.assertVmsPublisherPermission(mContext);
-        return mHal.getSubscriptionState();
-    }
-
-    /* Called in arbitrary binder thread */
-    @Override
-    public int getPublisherId(byte[] publisherInfo) {
-        ICarImpl.assertVmsPublisherPermission(mContext);
-        return mHal.getPublisherId(publisherInfo);
-    }
-
-    /**
-     * This method is only invoked by VmsHalService.notifyPublishers which is synchronized.
-     * Therefore this method only sees a non-decreasing sequence.
-     */
-    private void handleHalSubscriptionChanged(VmsSubscriptionState subscriptionState) {
-        // Send the message to application listeners.
-        synchronized (mPublisherMap) {
-            for (IVmsPublisherClient client : mPublisherMap.values()) {
+            if (DBG) Log.d(TAG, String.format("Number of subscribers: %d", listeners.size()));
+            for (IVmsSubscriberClient listener : listeners) {
                 try {
-                    client.onVmsSubscriptionChange(subscriptionState);
+                    listener.onVmsMessageReceived(layer, payload);
                 } catch (RemoteException ex) {
-                    Log.e(TAG, "unable to send notification to: " + client, ex);
+                    Log.e(TAG, String.format("Unable to publish to listener: %s", listener));
                 }
             }
         }
-    }
 
-    private class VmsListener implements VmsClientManager.ConnectionListener {
-        /**
-         * Once the manager binds to a publisher client, the client's binder is added to
-         * {@code mPublisherMap} and the client is configured to use this service.
-         */
         @Override
-        public void onClientConnected(String publisherName, IBinder binder) {
-            if (DBG) Log.d(TAG, "onClientConnected: " + publisherName);
-            IVmsPublisherClient service = IVmsPublisherClient.Stub.asInterface(binder);
-            mPublisherMap.put(publisherName, service);
+        public VmsSubscriptionState getSubscriptions() {
+            assertPermission();
+            return mBrokerService.getSubscriptionState();
+        }
+
+        @Override
+        public int getPublisherId(byte[] publisherInfo) {
+            assertPermission();
+            return mBrokerService.getPublisherId(publisherInfo);
+        }
+
+        @Override
+        public void onSubscriptionChange(VmsSubscriptionState subscriptionState) {
             try {
-                service.setVmsPublisherService(new Binder(), VmsPublisherService.this);
+                mPublisherClient.onVmsSubscriptionChange(subscriptionState);
             } catch (RemoteException e) {
-                Log.e(TAG, "unable to configure publisher: " + publisherName, e);
+                Log.e(TAG, String.format("Unable to send subscription state to: %s", mName), e);
             }
         }
 
-        /**
-         * Removes disconnected clients from {@code mPublisherMap}.
-         */
-        @Override
-        public void onClientDisconnected(String publisherName) {
-            if (DBG) Log.d(TAG, "onClientDisconnected: " + publisherName);
-            mPublisherMap.remove(publisherName);
-        }
-    }
-
-    private class EventHandler extends Handler {
-        @Override
-        public void handleMessage(Message msg) {
-            switch (msg.what) {
-                case MSG_HAL_SUBSCRIPTION_CHANGED:
-                    handleHalSubscriptionChanged((VmsSubscriptionState) msg.obj);
-                    return;
+        private void assertPermission(IBinder publisherToken) {
+            if (mToken != publisherToken) {
+                throw new SecurityException("Invalid publisher token");
             }
-            super.handleMessage(msg);
+            assertPermission();
+        }
+
+        private void assertPermission() {
+            if (!mConnected) {
+                throw new SecurityException("Publisher has been disconnected");
+            }
+            ICarImpl.assertVmsPublisherPermission(mContext);
         }
     }
 }
