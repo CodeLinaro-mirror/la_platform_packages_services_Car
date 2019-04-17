@@ -33,6 +33,7 @@ import android.car.hardware.cabin.CarCabinManager;
 import android.car.hardware.hvac.CarHvacManager;
 import android.car.hardware.power.CarPowerManager;
 import android.car.hardware.property.CarPropertyManager;
+import android.car.hardware.property.ICarProperty;
 import android.car.media.CarAudioManager;
 import android.car.media.CarMediaManager;
 import android.car.navigation.CarNavigationStatusManager;
@@ -66,15 +67,6 @@ import java.util.HashMap;
  *   Calling this API on a device with no such feature will lead to an exception.
  */
 public final class Car {
-
-    /**
-     * Represent the version of Car API. This is only updated when there is API change.
-     * 1 : N
-     * 2 : O
-     * 3 : O-MR1
-     */
-    public static final int VERSION = 3;
-
     /** Service name for {@link CarSensorManager}, to be used in {@link #getCarManager(String)}. */
     public static final String SENSOR_SERVICE = "sensor";
 
@@ -400,6 +392,14 @@ public final class Car {
      */
     @SystemApi
     public static final String PERMISSION_CAR_PROJECTION = "android.car.permission.CAR_PROJECTION";
+
+    /**
+     * Permission necessary to access projection status.
+     * @hide
+     */
+    @SystemApi
+    public static final String PERMISSION_CAR_PROJECTION_STATUS =
+            "android.car.permission.ACCESS_CAR_PROJECTION_STATUS";
 
     /**
      * Permission necessary to mock vehicle hal for testing.
@@ -858,8 +858,8 @@ public final class Car {
                 manager = new CarProjectionManager(binder, mEventHandler);
                 break;
             case PROPERTY_SERVICE:
-                manager = new CarPropertyManager(binder, mEventHandler, false,
-                                                 "CarPropertyManager");
+                manager = new CarPropertyManager(ICarProperty.Stub.asInterface(binder),
+                    mEventHandler);
                 break;
             case VENDOR_EXTENSION_SERVICE:
                 manager = new CarVendorExtensionManager(binder, mEventHandler);
