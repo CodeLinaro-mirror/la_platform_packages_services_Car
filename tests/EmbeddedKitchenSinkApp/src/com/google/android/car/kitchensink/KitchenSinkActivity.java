@@ -18,12 +18,12 @@ package com.google.android.car.kitchensink;
 
 import android.car.Car;
 import android.car.CarAppFocusManager;
-import android.car.CarNotConnectedException;
 import android.car.hardware.CarSensorManager;
 import android.car.hardware.hvac.CarHvacManager;
 import android.car.hardware.power.CarPowerManager;
 import android.car.hardware.property.CarPropertyManager;
 import android.content.ComponentName;
+import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
@@ -32,12 +32,16 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.util.Log;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.Button;
+import android.widget.TextView;
 
-import androidx.car.drawer.CarDrawerAdapter;
-import androidx.car.drawer.DrawerItemViewHolder;
 import androidx.fragment.app.Fragment;
-
-import com.android.car.apps.common.DrawerActivity;
+import androidx.fragment.app.FragmentActivity;
+import androidx.recyclerview.widget.GridLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 
 import com.google.android.car.kitchensink.activityview.ActivityViewTestFragment;
 import com.google.android.car.kitchensink.alertdialog.AlertDialogTestFragment;
@@ -58,8 +62,8 @@ import com.google.android.car.kitchensink.orientation.OrientationTestFragment;
 import com.google.android.car.kitchensink.power.PowerTestFragment;
 import com.google.android.car.kitchensink.property.PropertyTestFragment;
 import com.google.android.car.kitchensink.sensor.SensorsTestFragment;
-import com.google.android.car.kitchensink.setting.CarServiceSettingsActivity;
 import com.google.android.car.kitchensink.storagelifetime.StorageLifetimeFragment;
+import com.google.android.car.kitchensink.storagevolumes.StorageVolumesFragment;
 import com.google.android.car.kitchensink.touch.TouchTestFragment;
 import com.google.android.car.kitchensink.users.UsersFragment;
 import com.google.android.car.kitchensink.vhal.VehicleHalFragment;
@@ -69,9 +73,11 @@ import com.google.android.car.kitchensink.weblinks.WebLinksTestFragment;
 import java.util.Arrays;
 import java.util.List;
 
-
-public class KitchenSinkActivity extends DrawerActivity {
+public class KitchenSinkActivity extends FragmentActivity {
     private static final String TAG = "KitchenSinkActivity";
+    private RecyclerView mMenu;
+    private Button mMenuButton;
+    private View mKitchenContent;
 
     private interface ClickHandler {
         void onClick();
@@ -97,6 +103,7 @@ public class KitchenSinkActivity extends DrawerActivity {
 
         @Override
         public void onClick() {
+            toggleMenuVisibility();
             mClickHandler.onClick();
         }
     }
@@ -140,6 +147,7 @@ public class KitchenSinkActivity extends DrawerActivity {
             Fragment fragment = mFragment.getFragment();
             if (fragment != null) {
                 KitchenSinkActivity.this.showFragment(fragment);
+                toggleMenuVisibility();
             } else {
                 Log.e(TAG, "cannot show fragment for " + getText());
             }
@@ -153,11 +161,6 @@ public class KitchenSinkActivity extends DrawerActivity {
             new FragmentMenuEntry("audio", AudioTestFragment.class),
             new FragmentMenuEntry("bluetooth headset", BluetoothHeadsetFragment.class),
             new FragmentMenuEntry("bluetooth messaging test", MapMceTestFragment.class),
-            new OnClickMenuEntry("car service settings", () -> {
-                Intent intent = new Intent(KitchenSinkActivity.this,
-                        CarServiceSettingsActivity.class);
-                startActivity(intent);
-            }),
             new FragmentMenuEntry("carboard", KeyboardTestFragment.class),
             new FragmentMenuEntry("connectivity", ConnectivityFragment.class),
             new FragmentMenuEntry("cubes test", CubesTestFragment.class),
@@ -172,12 +175,12 @@ public class KitchenSinkActivity extends DrawerActivity {
             new FragmentMenuEntry("property test", PropertyTestFragment.class),
             new FragmentMenuEntry("sensors", SensorsTestFragment.class),
             new FragmentMenuEntry("storage lifetime", StorageLifetimeFragment.class),
+            new FragmentMenuEntry("storage volumes", StorageVolumesFragment.class),
             new FragmentMenuEntry("touch test", TouchTestFragment.class),
             new FragmentMenuEntry("users", UsersFragment.class),
             new FragmentMenuEntry("volume test", VolumeTestFragment.class),
             new FragmentMenuEntry("vehicle hal", VehicleHalFragment.class),
-            new FragmentMenuEntry("web links", WebLinksTestFragment.class),
-            new OnClickMenuEntry("quit", KitchenSinkActivity.this::finish)
+            new FragmentMenuEntry("web links", WebLinksTestFragment.class)
     );
 
     private Car mCarApi;
@@ -204,17 +207,50 @@ public class KitchenSinkActivity extends DrawerActivity {
         return mSensorManager;
     }
 
+    /* Open any tab directly:
+     * adb shell am force-stop com.google.android.car.kitchensink
+     * adb shell am start -n com.google.android.car.kitchensink/.KitchenSinkActivity \
+     *     --es "select" "connectivity"
+     */
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        Log.i(TAG, "onNewIntent");
+        Bundle extras = intent.getExtras();
+        String select = (extras == null) ? null : extras.getString("select");
+        if (select != null) {
+            mMenuEntries.stream().filter(me -> select.equals(me.getText()))
+                    .findAny().ifPresent(me -> me.onClick());
+        }
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        setContentView(R.layout.kitchen_content);
+        setContentView(R.layout.kitchen_activity);
 
         // Connection to Car Service does not work for non-automotive yet.
         if (getPackageManager().hasSystemFeature(PackageManager.FEATURE_AUTOMOTIVE)) {
             initCarApi();
         }
+
+        mKitchenContent = findViewById(R.id.kitchen_content);
+
+        mMenu = findViewById(R.id.menu);
+        mMenu.setAdapter(new MenuAdapter(this));
+        mMenu.setLayoutManager(new GridLayoutManager(this, 3));
+
+        mMenuButton = findViewById(R.id.menu_button);
+        mMenuButton.setOnClickListener(view -> toggleMenuVisibility());
         Log.i(TAG, "onCreate");
-        getDrawerController().setRootAdapter(new DrawerAdapter());
+        onNewIntent(getIntent());
+    }
+
+    private void toggleMenuVisibility() {
+        boolean menuVisible = mMenu.getVisibility() == View.VISIBLE;
+        mMenu.setVisibility(menuVisible ? View.GONE : View.VISIBLE);
+        mKitchenContent.setVisibility(menuVisible ? View.VISIBLE : View.GONE);
+        mMenuButton.setText(menuVisible ? "Show KitchenSink Menu" : "Hide KitchenSink Menu");
     }
 
     private void initCarApi() {
@@ -276,21 +312,17 @@ public class KitchenSinkActivity extends DrawerActivity {
         public void onServiceConnected(ComponentName name, IBinder service) {
             Log.d(TAG, "Connected to Car Service");
             synchronized (mPropertyManagerReady) {
-                try {
-                    mHvacManager = (CarHvacManager) mCarApi.getCarManager(
-                            android.car.Car.HVAC_SERVICE);
-                    mPowerManager = (CarPowerManager) mCarApi.getCarManager(
-                            android.car.Car.POWER_SERVICE);
-                    mPropertyManager = (CarPropertyManager) mCarApi.getCarManager(
-                            android.car.Car.PROPERTY_SERVICE);
-                    mSensorManager = (CarSensorManager) mCarApi.getCarManager(
-                            android.car.Car.SENSOR_SERVICE);
-                    mCarAppFocusManager =
-                            (CarAppFocusManager) mCarApi.getCarManager(Car.APP_FOCUS_SERVICE);
-                    mPropertyManagerReady.notifyAll();
-                } catch (CarNotConnectedException e) {
-                    Log.e(TAG, "Car is not connected!", e);
-                }
+                mHvacManager = (CarHvacManager) mCarApi.getCarManager(
+                        android.car.Car.HVAC_SERVICE);
+                mPowerManager = (CarPowerManager) mCarApi.getCarManager(
+                        android.car.Car.POWER_SERVICE);
+                mPropertyManager = (CarPropertyManager) mCarApi.getCarManager(
+                        android.car.Car.PROPERTY_SERVICE);
+                mSensorManager = (CarSensorManager) mCarApi.getCarManager(
+                        android.car.Car.SENSOR_SERVICE);
+                mCarAppFocusManager =
+                        (CarAppFocusManager) mCarApi.getCarManager(Car.APP_FOCUS_SERVICE);
+                mPropertyManagerReady.notifyAll();
             }
         }
 
@@ -304,33 +336,38 @@ public class KitchenSinkActivity extends DrawerActivity {
         return mCarApi;
     }
 
-    private final class DrawerAdapter extends CarDrawerAdapter {
+    private final class MenuAdapter extends RecyclerView.Adapter<ItemViewHolder> {
 
-        public DrawerAdapter() {
-            super(KitchenSinkActivity.this, true /* showDisabledOnListOnEmpty */);
-            setTitle(getString(R.string.app_title));
+        private final LayoutInflater mLayoutInflator;
+
+        MenuAdapter(Context context) {
+            mLayoutInflator = LayoutInflater.from(context);
         }
 
         @Override
-        protected int getActualItemCount() {
+        public ItemViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
+            View view = mLayoutInflator.inflate(R.layout.menu_item, parent, false);
+            return new ItemViewHolder(view);
+        }
+
+        @Override
+        public void onBindViewHolder(ItemViewHolder holder, int position) {
+            holder.mTitle.setText(mMenuEntries.get(position).getText());
+            holder.mTitle.setOnClickListener(v -> mMenuEntries.get(position).onClick());
+        }
+
+        @Override
+        public int getItemCount() {
             return mMenuEntries.size();
         }
+    }
 
-        @Override
-        protected void populateViewHolder(DrawerItemViewHolder holder, int position) {
-            holder.getTitleView().setText(mMenuEntries.get(position).getText());
-            holder.itemView.setOnClickListener(v -> onItemClick(holder.getAdapterPosition()));
-        }
+    private final class ItemViewHolder extends RecyclerView.ViewHolder {
+        TextView mTitle;
 
-        private void onItemClick(int position) {
-            if ((position < 0) || (position >= mMenuEntries.size())) {
-                Log.wtf(TAG, "Unknown menu item: " + position);
-                return;
-            }
-
-            mMenuEntries.get(position).onClick();
-
-            getDrawerController().closeDrawer();
+        ItemViewHolder(View itemView) {
+            super(itemView);
+            mTitle = itemView.findViewById(R.id.title);
         }
     }
 

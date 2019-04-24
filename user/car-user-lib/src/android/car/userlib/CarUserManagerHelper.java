@@ -19,6 +19,7 @@ package android.car.userlib;
 import android.Manifest;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
+import android.annotation.SystemApi;
 import android.app.ActivityManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -33,6 +34,7 @@ import android.os.UserHandle;
 import android.os.UserManager;
 import android.provider.Settings;
 import android.sysprop.CarProperties;
+import android.telephony.TelephonyManager;
 import android.text.TextUtils;
 import android.util.Log;
 
@@ -42,6 +44,7 @@ import com.android.internal.util.UserIcons;
 import com.google.android.collect.Sets;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
@@ -59,12 +62,13 @@ import java.util.Set;
 public class CarUserManagerHelper {
     private static final String TAG = "CarUserManagerHelper";
 
+    private static final int BOOT_USER_NOT_FOUND = -1;
+
     /**
      * Default set of restrictions for Non-Admin users.
      */
     private static final Set<String> DEFAULT_NON_ADMIN_RESTRICTIONS = Sets.newArraySet(
-            UserManager.DISALLOW_FACTORY_RESET,
-            UserManager.DISALLOW_RUN_IN_BACKGROUND
+            UserManager.DISALLOW_FACTORY_RESET
     );
 
     /**
@@ -165,17 +169,6 @@ public class CarUserManagerHelper {
     }
 
     /**
-     * Set default boot into user.
-     *
-     * @param userId default user id to boot into.
-     */
-    public void setDefaultBootUser(int userId) {
-        Settings.Global.putInt(
-                mContext.getContentResolver(),
-                Settings.Global.DEFAULT_USER_ID_TO_BOOT_INTO, userId);
-    }
-
-    /**
      * Set last active user.
      *
      * @param userId last active user id.
@@ -190,7 +183,7 @@ public class CarUserManagerHelper {
      *
      * @param userId last active user id.
      * @param skipGlobalSetting whether to skip set the global settings value.
-     * @deprecated Use {@link #setDefaultBootUser(int)} instead.
+     * @deprecated Use {@link #setLastActiveUser(int)} instead.
      */
     @Deprecated
     public void setLastActiveUser(int userId, boolean skipGlobalSetting) {
@@ -198,18 +191,6 @@ public class CarUserManagerHelper {
             Settings.Global.putInt(
                     mContext.getContentResolver(), Settings.Global.LAST_ACTIVE_USER_ID, userId);
         }
-    }
-
-    /**
-     * Get user id for the default boot into user.
-     *
-     * @return user id of the default boot into user
-     */
-    public int getDefaultBootUser() {
-        // Make user 10 the original default boot user.
-        return Settings.Global.getInt(
-            mContext.getContentResolver(), Settings.Global.DEFAULT_USER_ID_TO_BOOT_INTO,
-            /* default user id= */ 10);
     }
 
     /**
@@ -224,36 +205,64 @@ public class CarUserManagerHelper {
     }
 
     /**
-     * Get user id for the initial user to boot into. This is only applicable for headless
-     * system user model.
+     * Gets the user id for the initial user to boot into. This is only applicable for headless
+     * system user model. This method checks for a system property and will only work for system
+     * apps.
      *
-     * <p>If failed to retrieve the id stored in global settings or the retrieved id does not
-     * exist on device, then return the user with smallest user id.
+     * This method checks for the initial user via three mechanisms in this order:
+     * <ol>
+     *     <li>Check for a boot user override via {@link KEY_BOOT_USER_OVERRIDE_ID}</li>
+     *     <li>Check for the last active user in the system</li>
+     *     <li>Fallback to the smallest user id that is not {@link UserHandle.USER_SYSTEM}</li>
+     * </ol>
      *
-     * @return user id of the last active user or the smallest user id on the device.
+     * If any step fails to retrieve the stored id or the retrieved id does not exist on device,
+     * then it will move onto the next step.
+     *
+     * @return user id of the initial user to boot into on the device.
      */
+    @SystemApi
     public int getInitialUser() {
-        int lastActiveUserId = getLastActiveUser();
+        List<Integer> allUsers = userInfoListToUserIdList(getAllPersistentUsers());
 
-        boolean isUserExist = false;
-        List<UserInfo> allUsers = getAllPersistentUsers();
-        int smallestUserId = Integer.MAX_VALUE;
-        for (UserInfo user : allUsers) {
-            if (user.id == lastActiveUserId) {
-                isUserExist = true;
+        int bootUserOverride = CarProperties.boot_user_override_id().orElse(BOOT_USER_NOT_FOUND);
+
+        // If an override user is present and a real user, return it
+        if (bootUserOverride != BOOT_USER_NOT_FOUND
+                && allUsers.contains(bootUserOverride)) {
+            if (Log.isLoggable(TAG, Log.DEBUG)) {
+                Log.d(TAG, "Boot user id override found for initial user, user id: "
+                        + bootUserOverride);
             }
-            smallestUserId = Math.min(user.id, smallestUserId);
+            return bootUserOverride;
         }
 
-        // If the last active user is system user or the user id doesn't exist on device,
-        // return the smallest id or all users.
-        if (lastActiveUserId == UserHandle.USER_SYSTEM || !isUserExist) {
-            Log.e(TAG, "Can't get last active user id or the user no longer exist, user id: ."
-                    + lastActiveUserId);
-            lastActiveUserId = smallestUserId;
+        // If the last active user is not the SYSTEM user and is a real user, return it
+        int lastActiveUser = getLastActiveUser();
+        if (lastActiveUser != UserHandle.USER_SYSTEM
+                && allUsers.contains(lastActiveUser)) {
+            if (Log.isLoggable(TAG, Log.DEBUG)) {
+                Log.d(TAG, "Last active user loaded for initial user, user id: "
+                        + lastActiveUser);
+            }
+            return lastActiveUser;
         }
 
-        return lastActiveUserId;
+        // If all else fails, return the smallest user id
+        int returnId = Collections.min(allUsers);
+        if (Log.isLoggable(TAG, Log.DEBUG)) {
+            Log.d(TAG, "Saved ids were invalid. Returning smallest user id, user id: "
+                    + returnId);
+        }
+        return returnId;
+    }
+
+    private List<Integer> userInfoListToUserIdList(List<UserInfo> allUsers) {
+        ArrayList<Integer> list = new ArrayList<>(allUsers.size());
+        for (UserInfo userInfo : allUsers) {
+            list.add(userInfo.id);
+        }
+        return list;
     }
 
     /**
@@ -517,16 +526,6 @@ public class CarUserManagerHelper {
     }
 
     /**
-     * Checks whether the user is default user.
-     *
-     * @param userInfo User to check against system user.
-     * @return {@code true} if is default user, {@code false} otherwise.
-     */
-    public boolean isDefaultUser(UserInfo userInfo) {
-        return userInfo.id == getDefaultBootUser();
-    }
-
-    /**
      * Checks whether the user is last active user.
      *
      * @param userInfo User to check against last active user.
@@ -638,10 +637,17 @@ public class CarUserManagerHelper {
     }
 
     /**
-     * Checks if the foreground user can switch to other users.
+     * Returns whether the foreground user can switch to other users.
+     *
+     * <p>For instance switching users is not allowed if the current user is in a phone call,
+     * or {@link #{UserManager.DISALLOW_USER_SWITCH} is set.
      */
     public boolean canForegroundUserSwitchUsers() {
-        return !foregroundUserHasUserRestriction(UserManager.DISALLOW_USER_SWITCH);
+        boolean inIdleCallState = TelephonyManager.getDefault().getCallState()
+                == TelephonyManager.CALL_STATE_IDLE;
+        boolean disallowUserSwitching =
+                foregroundUserHasUserRestriction(UserManager.DISALLOW_USER_SWITCH);
+        return (inIdleCallState && !disallowUserSwitching);
     }
 
     // Current process user information accessors
@@ -719,10 +725,17 @@ public class CarUserManagerHelper {
     }
 
     /**
-     * Checks if the user running the current process is allowed to switch to another user.
+     * Returns whether the current process user can switch to other users.
+     *
+     * <p>For instance switching users is not allowed if the user is in a phone call,
+     * or {@link #{UserManager.DISALLOW_USER_SWITCH} is set.
      */
     public boolean canCurrentProcessSwitchUsers() {
-        return !isCurrentProcessUserHasRestriction(UserManager.DISALLOW_USER_SWITCH);
+        boolean inIdleCallState = TelephonyManager.getDefault().getCallState()
+                == TelephonyManager.CALL_STATE_IDLE;
+        boolean disallowUserSwitching =
+                isCurrentProcessUserHasRestriction(UserManager.DISALLOW_USER_SWITCH);
+        return (inIdleCallState && !disallowUserSwitching);
     }
 
     /**
@@ -782,8 +795,6 @@ public class CarUserManagerHelper {
         }
         assignDefaultIcon(user);
 
-        // Set disallow background run for admin users, users will be killed when switched away.
-        setUserRestriction(user, UserManager.DISALLOW_RUN_IN_BACKGROUND, /* enable= */ true);
         return user;
     }
 

@@ -21,7 +21,6 @@ import static java.lang.Integer.toHexString;
 import android.Manifest;
 import android.annotation.Nullable;
 import android.car.Car;
-import android.car.CarNotConnectedException;
 import android.car.hardware.CarSensorConfig;
 import android.car.hardware.CarSensorEvent;
 import android.car.hardware.CarSensorManager;
@@ -29,6 +28,7 @@ import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.text.TextUtils;
+import android.text.method.ScrollingMovementMethod;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -107,7 +107,9 @@ public class SensorsTestFragment extends Fragment {
         mActivity = (KitchenSinkActivity) getHost();
 
         mSensorInfo = (TextView) view.findViewById(R.id.sensor_info);
+        mSensorInfo.setMovementMethod(new ScrollingMovementMethod());
         mLocationInfo = (TextView) view.findViewById(R.id.location_info);
+        mLocationInfo.setMovementMethod(new ScrollingMovementMethod());
         mAccelInfo = (TextView) view.findViewById(R.id.accel_info);
         mGyroInfo = (TextView) view.findViewById(R.id.gyro_info);
         mMagInfo = (TextView) view.findViewById(R.id.mag_info);
@@ -148,8 +150,6 @@ public class SensorsTestFragment extends Fragment {
                 mCarSensorManager.registerListener(mOnSensorChangedListener, sensor,
                         CarSensorManager.SENSOR_RATE_NORMAL);
             }
-        } catch (CarNotConnectedException e) {
-            Log.e(TAG, "Car not connected or not supported", e);
         } catch (Exception e) {
             Log.e(TAG, "initSensors() exception caught SensorManager: ", e);
         }
@@ -282,18 +282,14 @@ public class SensorsTestFragment extends Fragment {
                                 mNaString));
                         }
                         // Get the config data
-                        try {
-                            CarSensorConfig c = mCarSensorManager.getSensorConfig(
+                        CarSensorConfig c = mCarSensorManager.getSensorConfig(
                                 CarSensorManager.SENSOR_TYPE_WHEEL_TICK_DISTANCE);
-                            summary.add(getContext().getString(R.string.sensor_wheel_ticks_cfg,
+                        summary.add(getContext().getString(R.string.sensor_wheel_ticks_cfg,
                                 c.getInt(CarSensorConfig.WHEEL_TICK_DISTANCE_SUPPORTED_WHEELS),
                                 c.getInt(CarSensorConfig.WHEEL_TICK_DISTANCE_FRONT_LEFT_UM_PER_TICK),
                                 c.getInt(CarSensorConfig.WHEEL_TICK_DISTANCE_FRONT_RIGHT_UM_PER_TICK),
                                 c.getInt(CarSensorConfig.WHEEL_TICK_DISTANCE_REAR_LEFT_UM_PER_TICK),
                                 c.getInt(CarSensorConfig.WHEEL_TICK_DISTANCE_REAR_RIGHT_UM_PER_TICK)));
-                        } catch (CarNotConnectedException e) {
-                            Log.e(TAG, "Car not connected or not supported", e);
-                        }
                         break;
                     case CarSensorManager.SENSOR_TYPE_ABS_ACTIVE:
                         summary.add(getContext().getString(R.string.sensor_abs_is_active,

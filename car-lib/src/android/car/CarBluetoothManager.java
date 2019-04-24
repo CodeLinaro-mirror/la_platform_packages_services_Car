@@ -22,7 +22,6 @@ import android.bluetooth.BluetoothDevice;
 import android.content.Context;
 import android.os.IBinder;
 import android.os.RemoteException;
-import android.util.Log;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -61,12 +60,11 @@ public final class CarBluetoothManager implements CarManagerBase {
      */
     @RequiresPermission(Manifest.permission.BLUETOOTH_ADMIN)
     public void setBluetoothDeviceConnectionPriority(BluetoothDevice deviceToSet, int profileToSet,
-            @PriorityType int priorityToSet) throws CarNotConnectedException {
+            @PriorityType int priorityToSet) {
         try {
             mService.setBluetoothDeviceConnectionPriority(deviceToSet, profileToSet, priorityToSet);
         } catch (RemoteException e) {
-            Log.e(CarLibLog.TAG_CAR, "setBluetoothDeviceConnectionPriority failed", e);
-            throw new CarNotConnectedException(e);
+            throw e.rethrowFromSystemServer();
         }
     }
 
@@ -79,12 +77,11 @@ public final class CarBluetoothManager implements CarManagerBase {
      */
     @RequiresPermission(Manifest.permission.BLUETOOTH_ADMIN)
     public void clearBluetoothDeviceConnectionPriority(int profileToClear,
-            @PriorityType int priorityToClear) throws CarNotConnectedException {
+            @PriorityType int priorityToClear) {
         try {
             mService.clearBluetoothDeviceConnectionPriority(profileToClear, priorityToClear);
         } catch (RemoteException e) {
-            Log.e(CarLibLog.TAG_CAR, "clearBluetoothDeviceConnectionPriority failed", e);
-            throw new CarNotConnectedException(e);
+            throw e.rethrowFromSystemServer();
         }
     }
 
@@ -98,13 +95,11 @@ public final class CarBluetoothManager implements CarManagerBase {
      * @hide
      */
     @RequiresPermission(Manifest.permission.BLUETOOTH_ADMIN)
-    public boolean isPriorityDevicePresent(int profile, @PriorityType int priorityToCheck)
-            throws CarNotConnectedException {
+    public boolean isPriorityDevicePresent(int profile, @PriorityType int priorityToCheck) {
         try {
             return mService.isPriorityDevicePresent(profile, priorityToCheck);
         } catch (RemoteException e) {
-            Log.e(CarLibLog.TAG_CAR, "isPrioritySet failed", e);
-            throw new CarNotConnectedException(e);
+            throw e.rethrowFromSystemServer();
         }
     }
 
@@ -118,58 +113,14 @@ public final class CarBluetoothManager implements CarManagerBase {
      * @hide
      */
     @RequiresPermission(Manifest.permission.BLUETOOTH_ADMIN)
-    public String getDeviceNameWithPriority(int profile, @PriorityType int priorityToCheck)
-            throws CarNotConnectedException {
+    public String getDeviceNameWithPriority(int profile, @PriorityType int priorityToCheck) {
         try {
             return mService.getDeviceNameWithPriority(profile, priorityToCheck);
         } catch (RemoteException e) {
-            Log.e(CarLibLog.TAG_CAR, "getDeviceNameWithPriority failed", e);
-            throw new CarNotConnectedException(e);
+            throw e.rethrowFromSystemServer();
         }
     }
 
-    /**
-     * Request to disconnect the given profile on the given device, and prevent it from reconnecting
-     * until either the request is released, or the process owning the given token dies.
-     *
-     * @param device The device on which to disconnect a profile.
-     * @param profile The {@link android.bluetooth.BluetoothProfile} to disconnect.
-     * @param token A {@link IBinder} to be used as an identity for the request. If the process
-     *     owning the token dies, the request will automatically be released.
-     * @return True if the profile was successfully disconnected, false if an error occurred.
-     */
-    @RequiresPermission(Manifest.permission.BLUETOOTH_ADMIN)
-    public boolean requestTemporaryProfileDisconnect(
-            BluetoothDevice device, int profile, IBinder token) throws CarNotConnectedException {
-        try {
-            return mService.requestTemporaryDisconnect(device, profile, token);
-        } catch (RemoteException e) {
-            Log.e(CarLibLog.TAG_CAR, "requestTemporaryDisconnect failed", e);
-            throw new CarNotConnectedException(e);
-        }
-    }
-
-    /**
-     * Undo a previous call to {@link #requestTemporaryProfileDisconnect} with the same parameters,
-     * and reconnect the profile if no other requests are active.
-     *
-     * @param device The device on which to release the disconnect request.
-     * @param profile The profile on which to release the disconnect request.
-     * @param token The token provided in the original call to
-     *              {@link #requestTemporaryProfileDisconnect}.
-     *
-     * @return True if the request was released, false if an error occurred.
-     */
-    @RequiresPermission(Manifest.permission.BLUETOOTH_ADMIN)
-    public boolean releaseTemporaryProfileDisconnect(
-            BluetoothDevice device, int profile, IBinder token) throws CarNotConnectedException {
-        try {
-            return mService.releaseTemporaryDisconnect(device, profile, token);
-        } catch (RemoteException e) {
-            Log.e(CarLibLog.TAG_CAR, "requestTemporaryDisconnect failed", e);
-            throw new CarNotConnectedException(e);
-        }
-    }
 
     /** @hide */
     public CarBluetoothManager(IBinder service, Context context) {

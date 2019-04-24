@@ -18,6 +18,8 @@ package com.android.car.user;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.never;
@@ -73,6 +75,9 @@ public class CarUserServiceTest {
 
     private static final String DEFAULT_ADMIN_NAME = "defaultName";
 
+    private boolean mUser0TaskExecuted;
+
+
     /**
      * Initialize all of the objects with the @Mock annotation.
      */
@@ -102,10 +107,9 @@ public class CarUserServiceTest {
         mCarUserService.init();
         verify(mMockContext).registerReceiver(eq(mCarUserService), argument.capture());
         IntentFilter intentFilter = argument.getValue();
-        assertThat(intentFilter.countActions()).isEqualTo(2);
+        assertThat(intentFilter.countActions()).isEqualTo(1);
 
-        assertThat(intentFilter.getAction(0)).isEqualTo(Intent.ACTION_LOCKED_BOOT_COMPLETED);
-        assertThat(intentFilter.getAction(1)).isEqualTo(Intent.ACTION_USER_SWITCHED);
+        assertThat(intentFilter.getAction(0)).isEqualTo(Intent.ACTION_USER_SWITCHED);
     }
 
     /**
@@ -118,7 +122,7 @@ public class CarUserServiceTest {
     }
 
     /**
-     * Test that the {@link CarUserService} disable modify account for user 0 upon first run.
+     * Test that the {@link CarUserService} disable modify account for user 0 upon user 0 unlock.
      */
     @Test
     public void testDisableModifyAccountsForSystemUserOnFirstRun() {
@@ -127,8 +131,7 @@ public class CarUserServiceTest {
         systemUser.id = UserHandle.USER_SYSTEM;
         doReturn(systemUser).when(mCarUserManagerHelper).getSystemUserInfo();
 
-        mCarUserService.onReceive(mMockContext,
-                new Intent(Intent.ACTION_LOCKED_BOOT_COMPLETED));
+        mCarUserService.setUserLockStatus(UserHandle.USER_SYSTEM, true);
 
         verify(mCarUserManagerHelper)
                 .setUserRestriction(systemUser, UserManager.DISALLOW_MODIFY_ACCOUNTS, true);
@@ -146,8 +149,7 @@ public class CarUserServiceTest {
         doReturn(systemUser).when(mCarUserManagerHelper).getSystemUserInfo();
 
         putSettingsInt(CarSettings.Global.DEFAULT_USER_RESTRICTIONS_SET, 1);
-        mCarUserService.onReceive(mMockContext,
-                new Intent(Intent.ACTION_LOCKED_BOOT_COMPLETED));
+        mCarUserService.setUserLockStatus(UserHandle.USER_SYSTEM, true);
 
         verify(mCarUserManagerHelper, never())
                 .setUserRestriction(systemUser, UserManager.DISALLOW_MODIFY_ACCOUNTS, true);
@@ -158,8 +160,7 @@ public class CarUserServiceTest {
      */
     @Test
     public void testDisableLocationForSystemUserOnFirstRun() {
-        mCarUserService.onReceive(mMockContext,
-                new Intent(Intent.ACTION_LOCKED_BOOT_COMPLETED));
+        mCarUserService.setUserLockStatus(UserHandle.USER_SYSTEM, true);
 
         verify(mLocationManager).setLocationEnabledForUser(
                 /* enabled= */ false, UserHandle.of(UserHandle.USER_SYSTEM));
@@ -187,7 +188,7 @@ public class CarUserServiceTest {
      */
     @Test
     public void testInitializeGuestRestrictions_IfNotAlreadySet() {
-        mCarUserService.onReceive(mMockContext, new Intent(Intent.ACTION_LOCKED_BOOT_COMPLETED));
+        mCarUserService.setUserLockStatus(UserHandle.USER_SYSTEM, true);
         verify(mCarUserManagerHelper).initDefaultGuestRestrictions();
         assertThat(getSettingsInt(CarSettings.Global.DEFAULT_USER_RESTRICTIONS_SET)).isEqualTo(1);
     }
@@ -198,8 +199,29 @@ public class CarUserServiceTest {
     @Test
     public void test_DoesNotInitializeGuestRestrictions_IfAlreadySet() {
         putSettingsInt(CarSettings.Global.DEFAULT_USER_RESTRICTIONS_SET, 1);
-        mCarUserService.onReceive(mMockContext, new Intent(Intent.ACTION_LOCKED_BOOT_COMPLETED));
+        mCarUserService.setUserLockStatus(UserHandle.USER_SYSTEM, true);
         verify(mCarUserManagerHelper, never()).initDefaultGuestRestrictions();
+    }
+
+    @Test
+    public void testRunOnUser0UnlockImmediate() {
+        mUser0TaskExecuted = false;
+        mCarUserService.setUserLockStatus(UserHandle.USER_SYSTEM, true);
+        mCarUserService.runOnUser0Unlock(() -> {
+            mUser0TaskExecuted = true;
+        });
+        assertTrue(mUser0TaskExecuted);
+    }
+
+    @Test
+    public void testRunOnUser0UnlockLater() {
+        mUser0TaskExecuted = false;
+        mCarUserService.runOnUser0Unlock(() -> {
+            mUser0TaskExecuted = true;
+        });
+        assertFalse(mUser0TaskExecuted);
+        mCarUserService.setUserLockStatus(UserHandle.USER_SYSTEM, true);
+        assertTrue(mUser0TaskExecuted);
     }
 
     private void putSettingsInt(String key, int value) {

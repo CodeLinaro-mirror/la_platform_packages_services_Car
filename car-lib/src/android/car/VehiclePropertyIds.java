@@ -19,7 +19,7 @@ package android.car;
 /**
  * Copy from android.hardware.automotive.vehicle-V2.0-java_gen_java/gen/android/hardware/automotive
  * /vehicle/V2_0. Need to update this file when vehicle propertyId is changed in VHAL.
- * Use it as PorpertyId in getProperty() and setProperty() in
+ * Use it as PropertyId in getProperty() and setProperty() in
  * {@link android.car.hardware.property.CarPropertyManager}
  */
 public final class VehiclePropertyIds {
@@ -79,6 +79,19 @@ public final class VehiclePropertyIds {
      * Speed of the vehicle
      */
     public static final int PERF_VEHICLE_SPEED = 291504647;
+    /**
+     * Speed of the vehicle for displays
+     *
+     * Some cars display a slightly slower speed than the actual speed. This is
+     * usually displayed on the speedometer.
+     */
+    public static final int PERF_VEHICLE_SPEED_DISPLAY = 291504648;
+    /**
+     * Steering angle of the vehicle
+     *
+     * Angle is in degrees. Left is negative.
+     */
+    public static final int PERF_STEERING_ANGLE = 291504649;
     /**
      * Temperature of engine coolant
      */
@@ -265,6 +278,26 @@ public final class VehiclePropertyIds {
      * Seat ventilation
      */
     public static final int HVAC_SEAT_VENTILATION = 356517139;
+    /**
+     * Distance units for display
+     */
+    public static final int DISTANCE_DISPLAY_UNITS = 289408512;
+    /**
+     * Fuel volume units for display
+     */
+    public static final int FUEL_VOLUME_DISPLAY_UNITS = 289408513;
+    /**
+     * Tire pressure units for display
+     */
+    public static final int TIRE_PRESSURE_DISPLAY_UNITS = 289408514;
+    /**
+     * EV battery units for display
+     */
+    public static final int EV_BATTERY_DISPLAY_UNITS = 289408515;
+    /**
+     * Fuel consumption units for display
+     */
+    public static final int FUEL_CONSUMPTION_UNITS_DISTANCE_OVER_VOLUME = 287311364;
     /**
      * Outside temperature
      */
@@ -461,6 +494,10 @@ public final class VehiclePropertyIds {
      */
     public static final int SEAT_HEADREST_FORE_AFT_MOVE = 356518810;
     /**
+     * Seat Occupancy
+     */
+    public static final int SEAT_OCCUPANCY = 356518832;
+    /**
      * Window Position
      */
     public static final int WINDOW_POS = 322964416;
@@ -532,6 +569,22 @@ public final class VehiclePropertyIds {
      * Hazard light switch
      */
     public static final int HAZARD_LIGHTS_SWITCH = 289410579;
+    /**
+     * Cabin lights
+     */
+    public static final int CABIN_LIGHTS_STATE = 289410817;
+    /**
+     * Cabin lights switch
+     */
+    public static final int CABIN_LIGHTS_SWITCH = 289410818;
+    /**
+     * Reading lights
+     */
+    public static final int READING_LIGHTS_STATE = 356519683;
+    /**
+     * Reading lights switch
+     */
+    public static final int READING_LIGHTS_SWITCH = 356519684;
 
     /**
      * @param o Integer
@@ -579,6 +632,12 @@ public final class VehiclePropertyIds {
         }
         if (o == PERF_VEHICLE_SPEED) {
             return "PERF_VEHICLE_SPEED";
+        }
+        if (o == PERF_VEHICLE_SPEED_DISPLAY) {
+            return "PERF_VEHICLE_SPEED_DISPLAY";
+        }
+        if (o == PERF_STEERING_ANGLE) {
+            return "PERF__STEERING_ANGLE";
         }
         if (o == ENGINE_COOLANT_TEMP) {
             return "ENGINE_COOLANT_TEMP";
@@ -709,6 +768,21 @@ public final class VehiclePropertyIds {
         if (o == HVAC_SEAT_VENTILATION) {
             return "HVAC_SEAT_VENTILATION";
         }
+        if (o == DISTANCE_DISPLAY_UNITS) {
+            return "DISTANCE_DISPLAY_UNITS";
+        }
+        if (o == FUEL_VOLUME_DISPLAY_UNITS) {
+            return "FUEL_VOLUME_DISPLAY_UNITS";
+        }
+        if (o == TIRE_PRESSURE_DISPLAY_UNITS) {
+            return "TIRE_PRESSURE_DISPLAY_UNITS";
+        }
+        if (o == EV_BATTERY_DISPLAY_UNITS) {
+            return "EV_BATTERY_DISPLAY_UNITS";
+        }
+        if (o == FUEL_CONSUMPTION_UNITS_DISTANCE_OVER_VOLUME) {
+            return "FUEL_CONSUMPTION_UNITS_DISTANCE_OVER_VOLUME";
+        }
         if (o == ENV_OUTSIDE_TEMPERATURE) {
             return "ENV_OUTSIDE_TEMPERATURE";
         }
@@ -835,6 +909,9 @@ public final class VehiclePropertyIds {
         if (o == SEAT_HEADREST_FORE_AFT_MOVE) {
             return "SEAT_HEADREST_FORE_AFT_MOVE";
         }
+        if (o == SEAT_OCCUPANCY) {
+            return "SEAT_OCCUPANCY";
+        }
         if (o == WINDOW_POS) {
             return "WINDOW_POS";
         }
@@ -882,6 +959,18 @@ public final class VehiclePropertyIds {
         }
         if (o == HAZARD_LIGHTS_SWITCH) {
             return "HAZARD_LIGHTS_SWITCH";
+        }
+        if (o == CABIN_LIGHTS_STATE) {
+            return "CABIN_LIGHTS_STATE";
+        }
+        if (o == CABIN_LIGHTS_SWITCH) {
+            return "CABIN_LIGHTS_SWITCH";
+        }
+        if (o == READING_LIGHTS_STATE) {
+            return "READING_LIGHTS_STATE";
+        }
+        if (o == READING_LIGHTS_SWITCH) {
+            return "READING_LIGHTS_SWITCH";
         }
         return "0x" + Integer.toHexString(o);
     }

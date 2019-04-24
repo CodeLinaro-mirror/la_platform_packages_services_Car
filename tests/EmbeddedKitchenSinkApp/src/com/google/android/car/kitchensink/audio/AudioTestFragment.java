@@ -20,12 +20,12 @@ import android.car.Car;
 import android.car.CarAppFocusManager;
 import android.car.CarAppFocusManager.OnAppFocusChangedListener;
 import android.car.CarAppFocusManager.OnAppFocusOwnershipCallback;
-import android.car.CarNotConnectedException;
 import android.car.media.CarAudioManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.ServiceConnection;
 import android.media.AudioAttributes;
+import android.media.AudioFocusRequest;
 import android.media.AudioManager;
 import android.os.Bundle;
 import android.os.Handler;
@@ -101,30 +101,18 @@ public class AudioTestFragment extends Fragment {
         mCar = Car.createCar(mContext, new ServiceConnection() {
             @Override
             public void onServiceConnected(ComponentName name, IBinder service) {
-                try {
-                    mAppFocusManager =
-                            (CarAppFocusManager) mCar.getCarManager(Car.APP_FOCUS_SERVICE);
-                } catch (CarNotConnectedException e) {
-                    throw new RuntimeException("Failed to create app focus manager", e);
-                }
-                try {
-                    OnAppFocusChangedListener listener = new OnAppFocusChangedListener() {
-                        @Override
-                        public void onAppFocusChanged(int appType, boolean active) {
-                        }
-                    };
-                    mAppFocusManager.addFocusListener(listener,
-                            CarAppFocusManager.APP_FOCUS_TYPE_NAVIGATION);
-                    mAppFocusManager.addFocusListener(listener,
-                            CarAppFocusManager.APP_FOCUS_TYPE_VOICE_COMMAND);
-                } catch (CarNotConnectedException e) {
-                    Log.e(TAG, "Failed to register focus listener", e);
-                }
-                try {
-                    mCarAudioManager = (CarAudioManager) mCar.getCarManager(Car.AUDIO_SERVICE);
-                } catch (CarNotConnectedException e) {
-                    throw new RuntimeException("Failed to create audio manager", e);
-                }
+                mAppFocusManager =
+                        (CarAppFocusManager) mCar.getCarManager(Car.APP_FOCUS_SERVICE);
+                OnAppFocusChangedListener listener = new OnAppFocusChangedListener() {
+                    @Override
+                    public void onAppFocusChanged(int appType, boolean active) {
+                    }
+                };
+                mAppFocusManager.addFocusListener(listener,
+                        CarAppFocusManager.APP_FOCUS_TYPE_NAVIGATION);
+                mAppFocusManager.addFocusListener(listener,
+                        CarAppFocusManager.APP_FOCUS_TYPE_VOICE_COMMAND);
+                mCarAudioManager = (CarAudioManager) mCar.getCarManager(Car.AUDIO_SERVICE);
                 mMusicAudioAttrib = new AudioAttributes.Builder()
                         .setUsage(AudioAttributes.USAGE_MEDIA)
                         .build();
@@ -202,12 +190,8 @@ public class AudioTestFragment extends Fragment {
             if (DBG) {
                 Log.i(TAG, "Nav start");
             }
-            try {
-                mAppFocusManager.requestAppFocus(
-                        CarAppFocusManager.APP_FOCUS_TYPE_NAVIGATION, mOwnershipCallbacks);
-            } catch (CarNotConnectedException e) {
-                Log.e(TAG, "Failed to set active focus", e);
-            }
+            mAppFocusManager.requestAppFocus(
+                    CarAppFocusManager.APP_FOCUS_TYPE_NAVIGATION, mOwnershipCallbacks);
             if (!mNavGuidancePlayer.isPlaying()) {
                 mNavGuidancePlayer.start(true, false,
                         AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK,
@@ -223,12 +207,8 @@ public class AudioTestFragment extends Fragment {
             if (DBG) {
                 Log.i(TAG, "VR start");
             }
-            try {
-                mAppFocusManager.requestAppFocus(
-                        CarAppFocusManager.APP_FOCUS_TYPE_VOICE_COMMAND, mOwnershipCallbacks);
-            } catch (CarNotConnectedException e) {
-                Log.e(TAG, "Failed to set active focus", e);
-            }
+            mAppFocusManager.requestAppFocus(
+                    CarAppFocusManager.APP_FOCUS_TYPE_VOICE_COMMAND, mOwnershipCallbacks);
             if (!mVrPlayer.isPlaying()) {
                 mVrPlayer.start(true, false,
                         AudioManager.AUDIOFOCUS_GAIN_TRANSIENT,
@@ -307,14 +287,10 @@ public class AudioTestFragment extends Fragment {
         if (DBG) {
             Log.i(TAG, "Nav start");
         }
-        try {
-            mAppFocusManager.requestAppFocus(CarAppFocusManager.APP_FOCUS_TYPE_NAVIGATION,
-                    mOwnershipCallbacks);
-            mAudioManager.requestAudioFocus(mNavFocusListener, mNavAudioAttrib,
-                    AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK, 0);
-        } catch (CarNotConnectedException e) {
-            Log.e(TAG, "Failed to set active focus", e);
-        }
+        mAppFocusManager.requestAppFocus(CarAppFocusManager.APP_FOCUS_TYPE_NAVIGATION,
+                mOwnershipCallbacks);
+        mAudioManager.requestAudioFocus(mNavFocusListener, mNavAudioAttrib,
+                AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK, 0);
     }
 
     private void handleNavEnd() {
@@ -338,14 +314,10 @@ public class AudioTestFragment extends Fragment {
         if (DBG) {
             Log.i(TAG, "VR start");
         }
-        try {
-            mAppFocusManager.requestAppFocus(CarAppFocusManager.APP_FOCUS_TYPE_VOICE_COMMAND,
-                    mOwnershipCallbacks);
-            mAudioManager.requestAudioFocus(mVrFocusListener, mVrAudioAttrib,
-                    AudioManager.AUDIOFOCUS_GAIN_TRANSIENT, 0);
-        } catch (CarNotConnectedException e) {
-            Log.e(TAG, "Failed to set active focus", e);
-        }
+        mAppFocusManager.requestAppFocus(CarAppFocusManager.APP_FOCUS_TYPE_VOICE_COMMAND,
+                mOwnershipCallbacks);
+        mAudioManager.requestAudioFocus(mVrFocusListener, mVrAudioAttrib,
+                AudioManager.AUDIOFOCUS_GAIN_TRANSIENT, 0);
     }
 
     private void handleVrEnd() {
@@ -383,6 +355,7 @@ public class AudioTestFragment extends Fragment {
         private final RadioGroup mRequestSelection;
         private final TextView mText;
         private final AudioFocusListener mFocusListener;
+        private AudioFocusRequest mFocusRequest;
 
         public FocusHandler(RadioGroup radioGroup, Button requestButton, TextView text) {
             mText = text;
@@ -392,16 +365,32 @@ public class AudioTestFragment extends Fragment {
             mFocusListener = new AudioFocusListener();
             requestButton.setOnClickListener(v -> {
                 int selectedButtonId = mRequestSelection.getCheckedRadioButtonId();
-                int focusRequest = AudioManager.AUDIOFOCUS_GAIN;
-                if (selectedButtonId == R.id.focus_gain_transient_duck) {
-                    focusRequest = AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK;
-                } else if (selectedButtonId == R.id.focus_release) {
-                    mAudioManager.abandonAudioFocus(mFocusListener);
-                    setFocusText(AUDIO_FOCUS_STATE_RELEASED_UNKNOWN);
-                    return;
+                int focusRequest;
+                switch (selectedButtonId) {
+                    case R.id.focus_gain:
+                        focusRequest = AudioManager.AUDIOFOCUS_GAIN;
+                        break;
+                    case R.id.focus_gain_transient:
+                        focusRequest = AudioManager.AUDIOFOCUS_GAIN_TRANSIENT;
+                        break;
+                    case R.id.focus_gain_transient_duck:
+                        focusRequest = AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK;
+                        break;
+                    case R.id.focus_gain_transient_exclusive:
+                        focusRequest = AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE;
+                        break;
+                    case R.id.focus_release:
+                    default:
+                        abandonAudioFocus();
+                        return;
                 }
-                int ret = mAudioManager.requestAudioFocus(mFocusListener,
-                        AudioManager.STREAM_MUSIC, focusRequest);
+                mFocusRequest = new AudioFocusRequest.Builder(focusRequest)
+                        .setAudioAttributes(new AudioAttributes.Builder()
+                                .setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
+                                .build())
+                        .setOnAudioFocusChangeListener(mFocusListener)
+                        .build();
+                int ret = mAudioManager.requestAudioFocus(mFocusRequest);
                 Log.i(TAG, "requestAudioFocus returned " + ret);
                 if (ret == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
                     setFocusText(AUDIO_FOCUS_STATE_GAIN);
@@ -417,7 +406,8 @@ public class AudioTestFragment extends Fragment {
             if (DBG) {
                 Log.i(TAG, "abandonAudioFocus");
             }
-            mAudioManager.abandonAudioFocus(mFocusListener);
+            mAudioManager.abandonAudioFocusRequest(mFocusRequest);
+            mFocusRequest = null;
             setFocusText(AUDIO_FOCUS_STATE_RELEASED_UNKNOWN);
         }
 

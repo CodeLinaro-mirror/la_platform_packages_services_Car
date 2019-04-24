@@ -17,19 +17,19 @@
 package android.car.hardware;
 
 import android.annotation.IntDef;
+import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.car.Car;
-import android.car.CarApiUtil;
-import android.car.CarLibLog;
 import android.car.CarManagerBase;
-import android.car.CarNotConnectedException;
 import android.car.VehiclePropertyType;
 import android.car.hardware.property.CarPropertyManager;
+import android.car.hardware.property.CarPropertyManager.CarPropertyEventCallback;
+import android.car.hardware.property.ICarProperty;
 import android.content.Context;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
-import android.os.RemoteException;
 import android.util.ArraySet;
 import android.util.Log;
 
@@ -42,10 +42,11 @@ import java.util.List;
 
 
 /**
+ *  @deprecated Use {@link CarPropertyManager} instead.
  *  API for monitoring car sensor data.
  */
+@Deprecated
 public final class CarSensorManager implements CarManagerBase {
-    private static final  boolean DBG = false;
     private static final String TAG = "CarSensorManager";
     private final CarPropertyManager mCarPropertyMgr;
     /** @hide */
@@ -232,6 +233,8 @@ public final class CarSensorManager implements CarManagerBase {
             SENSOR_TYPE_ENGINE_OIL_LEVEL,
     }));
 
+    /** Read on_change type sensors */
+    public static final int SENSOR_RATE_ONCHANGE = 0;
     /** Read sensor in default normal rate set for each sensors. This is default rate. */
     public static final int SENSOR_RATE_NORMAL  = 1;
     public static final int SENSOR_RATE_UI = 5;
@@ -241,6 +244,7 @@ public final class CarSensorManager implements CarManagerBase {
 
     /** @hide */
     @IntDef({
+            SENSOR_RATE_ONCHANGE,
             SENSOR_RATE_NORMAL,
             SENSOR_RATE_UI,
             SENSOR_RATE_FAST,
@@ -268,8 +272,7 @@ public final class CarSensorManager implements CarManagerBase {
         void onSensorChanged(CarSensorEvent event);
     }
 
-    private static class CarPropertyEventListenerToBase implements
-            CarPropertyManager.CarPropertyEventListener{
+    private static class CarPropertyEventListenerToBase implements CarPropertyEventCallback {
         private final WeakReference<CarSensorManager> mManager;
         private final OnSensorChangedListener mListener;
         CarPropertyEventListenerToBase(CarSensorManager manager, OnSensorChangedListener listener) {
@@ -303,7 +306,8 @@ public final class CarSensorManager implements CarManagerBase {
     }
     /** @hide */
     public CarSensorManager(IBinder service, Context context, Handler handler) {
-        mCarPropertyMgr = new CarPropertyManager(service, handler, DBG, TAG);
+        ICarProperty mCarPropertyService = ICarProperty.Stub.asInterface(service);
+        mCarPropertyMgr = new CarPropertyManager(mCarPropertyService, handler);
     }
 
     /** @hide */
@@ -317,29 +321,25 @@ public final class CarSensorManager implements CarManagerBase {
 
     /**
      * Give the list of CarSensors available in the connected car.
-     * @return array of all sensor types supported.
-     * @throws CarNotConnectedException if the connection to the car service has been lost.
+     * @return array of all sensor types supported. Sensor types is the same as
+     * property id.
      */
-    public int[] getSupportedSensors() throws CarNotConnectedException {
-        try {
-            List<CarPropertyConfig> carPropertyConfigList = getPropertyList();
-            int[] supportedSensors = new int[carPropertyConfigList.size()];
-            for (int i = 0; i < supportedSensors.length; i++) {
-                supportedSensors[i] = carPropertyConfigList.get(i).getPropertyId();
-            }
-            return supportedSensors;
-        } catch (IllegalStateException e) {
-            CarApiUtil.checkCarNotConnectedExceptionFromCarService(e);
+    @NonNull
+    public int[] getSupportedSensors() {
+        List<CarPropertyConfig> carPropertyConfigList = getPropertyList();
+        int[] supportedSensors = new int[carPropertyConfigList.size()];
+        for (int i = 0; i < supportedSensors.length; i++) {
+            supportedSensors[i] = carPropertyConfigList.get(i).getPropertyId();
         }
-        return new int[0];
+        return supportedSensors;
     }
 
     /**
      * Get list of properties represented by CarSensorManager for this car.
-     * @return List of CarPropertyConfig objects available via Car Cabin Manager.
-     * @throws CarNotConnectedException if the connection to the car service has been lost.
+     * @return List of CarPropertyConfig objects available via Car Sensor Manager.
      */
-    public List<CarPropertyConfig> getPropertyList() throws CarNotConnectedException {
+    @NonNull
+    public List<CarPropertyConfig> getPropertyList() {
         return mCarPropertyMgr.getPropertyList(mSensorConfigIds);
     }
 
@@ -347,9 +347,8 @@ public final class CarSensorManager implements CarManagerBase {
      * Tells if given sensor is supported or not.
      * @param sensorType
      * @return true if the sensor is supported.
-     * @throws CarNotConnectedException if the connection to the car service has been lost.
      */
-    public boolean isSensorSupported(@SensorType int sensorType) throws CarNotConnectedException {
+    public boolean isSensorSupported(@SensorType int sensorType) {
         int[] sensors = getSupportedSensors();
         for (int sensorSupported: sensors) {
             if (sensorType == sensorSupported) {
@@ -363,7 +362,8 @@ public final class CarSensorManager implements CarManagerBase {
      * Check if given sensorList is including the sensorType.
      * @param sensorList
      * @param sensorType
-     * @return
+     * @return true if sensor is supported.
+     * @hide
      */
     public static boolean isSensorSupported(int[] sensorList, @SensorType int sensorType) {
         for (int sensorSupported: sensorList) {
@@ -404,7 +404,6 @@ public final class CarSensorManager implements CarManagerBase {
      *        for example {@link #SENSOR_TYPE_PARKING_BRAKE} will raise an event only when parking
      *        brake was engaged or disengaged.
      * @return if the sensor was successfully enabled.
-     * @throws CarNotConnectedException if the connection to the car service has been lost.
      * @throws IllegalArgumentException for wrong argument like wrong rate
      * @throws SecurityException if missing the appropriate permission
      */
@@ -412,10 +411,11 @@ public final class CarSensorManager implements CarManagerBase {
             Car.PERMISSION_MILEAGE, Car.PERMISSION_ENERGY, Car.PERMISSION_POWERTRAIN,
             Car.PERMISSION_EXTERIOR_ENVIRONMENT, Car.PERMISSION_CAR_DYNAMICS_STATE,
             Car.PERMISSION_ENERGY_PORTS}, conditional = true)
-    public boolean registerListener(OnSensorChangedListener listener, @SensorType int sensorType,
-            @SensorRate int rate) throws CarNotConnectedException, IllegalArgumentException {
+    public boolean registerListener(@NonNull OnSensorChangedListener listener,
+            @SensorType int sensorType, @SensorRate int rate) {
         if (rate != SENSOR_RATE_FASTEST && rate != SENSOR_RATE_NORMAL
-                && rate != SENSOR_RATE_UI && rate != SENSOR_RATE_FAST) {
+                && rate != SENSOR_RATE_UI && rate != SENSOR_RATE_FAST
+                && rate != SENSOR_RATE_ONCHANGE) {
             throw new IllegalArgumentException("wrong rate " + rate);
         }
         if (mListenerMap.get(listener) == null) {
@@ -423,7 +423,7 @@ public final class CarSensorManager implements CarManagerBase {
         } else {
             mCarPropertyEventListener = mListenerMap.get(listener);
         }
-        if (mCarPropertyMgr.registerListener(mCarPropertyEventListener, sensorType, rate)) {
+        if (mCarPropertyMgr.registerCallback(mCarPropertyEventListener, sensorType, rate)) {
             mListenerMap.put(listener, mCarPropertyEventListener);
             return true;
         } else {
@@ -432,29 +432,30 @@ public final class CarSensorManager implements CarManagerBase {
     }
 
     /**
-     * Stop getting sensor update for the given listener. If there are multiple registrations for
-     * this listener, all listening will be stopped.
-     * @param listener
+     * Stop getting sensor update for the given listener.
+     * If there are multiple registrations for this listener, all listening will be stopped.
+     * @param listener Listener for car sensor data change.
      */
-    public void unregisterListener(OnSensorChangedListener listener) {
+    public void unregisterListener(@NonNull OnSensorChangedListener listener) {
         synchronized (mListenerMap) {
             mCarPropertyEventListener = mListenerMap.get(listener);
-            mCarPropertyMgr.unregisterListener(mCarPropertyEventListener);
+            mCarPropertyMgr.unregisterCallback(mCarPropertyEventListener);
             mListenerMap.remove(listener);
         }
     }
 
     /**
-     * Stop getting sensor update for the given listener and sensor. If the same listener is used
-     * for other sensors, those subscriptions will not be affected.
-     * @param listener
-     * @param sensorType
+     * Stop getting sensor update for the given listener and sensor.
+     * If the same listener is used for other sensors, those subscriptions will not be affected.
+     * @param listener Listener for car sensor data change.
+     * @param sensorType Property Id
      */
-    public void unregisterListener(OnSensorChangedListener listener, @SensorType int sensorType) {
+    public void unregisterListener(@NonNull OnSensorChangedListener listener,
+            @SensorType int sensorType) {
         synchronized (mListenerMap) {
             mCarPropertyEventListener = mListenerMap.get(listener);
         }
-        mCarPropertyMgr.unregisterListener(mCarPropertyEventListener, sensorType);
+        mCarPropertyMgr.unregisterCallback(mCarPropertyEventListener, sensorType);
     }
 
     /**
@@ -463,25 +464,11 @@ public final class CarSensorManager implements CarManagerBase {
      * with null if there is no data available.
      * @param type A sensor to request
      * @return null if there was no sensor update since connected to the car.
-     * @throws CarNotConnectedException if the connection to the car service has been lost.
      */
-    public CarSensorEvent getLatestSensorEvent(@SensorType int type)
-            throws CarNotConnectedException {
-        try {
-            CarPropertyValue propertyValue = mCarPropertyMgr.getProperty(type, 0);
-            return createCarSensorEvent(propertyValue);
-        } catch (IllegalStateException e) {
-            CarApiUtil.checkCarNotConnectedExceptionFromCarService(e);
-        }
-        return null;
-    }
-
-    private void handleCarServiceRemoteExceptionAndThrow(RemoteException e)
-            throws CarNotConnectedException {
-        if (Log.isLoggable(CarLibLog.TAG_SENSOR, Log.INFO)) {
-            Log.i(CarLibLog.TAG_SENSOR, "RemoteException from car service:" + e.getMessage());
-        }
-        throw new CarNotConnectedException();
+    @Nullable
+    public CarSensorEvent getLatestSensorEvent(@SensorType int type) {
+        CarPropertyValue propertyValue = mCarPropertyMgr.getProperty(type, 0);
+        return createCarSensorEvent(propertyValue);
     }
 
     private CarSensorEvent createCarSensorEvent(CarPropertyValue propertyValue) {
@@ -526,11 +513,9 @@ public final class CarSensorManager implements CarManagerBase {
      *
      * @param sensor type to request
      * @return CarSensorConfig object
-     * @throws CarNotConnectedException if the connection to the car service has been lost.
      * @hide
      */
-    public CarSensorConfig getSensorConfig(@SensorType int type)
-            throws CarNotConnectedException {
+    public CarSensorConfig getSensorConfig(@SensorType int type) {
         Bundle b = null;
         switch (type) {
             case SENSOR_TYPE_WHEEL_TICK_DISTANCE:

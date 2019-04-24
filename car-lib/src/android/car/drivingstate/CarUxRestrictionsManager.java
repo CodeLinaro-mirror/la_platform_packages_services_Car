@@ -16,13 +16,12 @@
 
 package android.car.drivingstate;
 
+import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
-import android.annotation.TestApi;
 import android.car.Car;
 import android.car.CarManagerBase;
-import android.car.CarNotConnectedException;
 import android.content.Context;
 import android.os.Handler;
 import android.os.IBinder;
@@ -31,6 +30,8 @@ import android.os.Message;
 import android.os.RemoteException;
 import android.util.Log;
 
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.lang.ref.WeakReference;
 
 /**
@@ -42,6 +43,37 @@ public final class CarUxRestrictionsManager implements CarManagerBase {
     private static final boolean DBG = false;
     private static final boolean VDBG = false;
     private static final int MSG_HANDLE_UX_RESTRICTIONS_CHANGE = 0;
+
+    /**
+     * Baseline restriction mode is the default UX restrictions used for driving state.
+     *
+     * @hide
+     */
+    public static final int UX_RESTRICTION_MODE_BASELINE = 0;
+    /**
+     * Passenger restriction mode uses UX restrictions for {@link #UX_RESTRICTION_MODE_PASSENGER},
+     * set through {@link CarUxRestrictionsConfiguration.Builder.UxRestrictions#setMode(int)}.
+     *
+     * <p>If a new {@link CarUxRestrictions} is available upon mode transition, it'll be immediately
+     * dispatched to listeners.
+     *
+     * <p>If passenger mode restrictions is not configured for current driving state, it will fall
+     * back to {@link #UX_RESTRICTION_MODE_BASELINE}.
+     *
+     * <p>Caller are responsible for determining and executing the criteria for entering and exiting
+     * this mode. Exiting by setting mode to {@link #UX_RESTRICTION_MODE_BASELINE}.
+     *
+     * @hide
+     */
+    public static final int UX_RESTRICTION_MODE_PASSENGER = 1;
+
+    /** @hide */
+    @IntDef(prefix = { "UX_RESTRICTION_MODE_" }, value = {
+            UX_RESTRICTION_MODE_BASELINE,
+            UX_RESTRICTION_MODE_PASSENGER
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface UxRestrictionMode {}
 
     private final Context mContext;
     private final ICarUxRestrictionsManager mUxRService;
@@ -86,8 +118,7 @@ public final class CarUxRestrictionsManager implements CarManagerBase {
      *
      * @param listener {@link OnUxRestrictionsChangedListener}
      */
-    public synchronized void registerListener(@NonNull OnUxRestrictionsChangedListener listener)
-            throws CarNotConnectedException, IllegalArgumentException {
+    public synchronized void registerListener(@NonNull OnUxRestrictionsChangedListener listener) {
         if (listener == null) {
             if (VDBG) {
                 Log.v(TAG, "registerListener(): null listener");
@@ -109,11 +140,68 @@ public final class CarUxRestrictionsManager implements CarManagerBase {
             // register to the Service to listen for changes.
             mUxRService.registerUxRestrictionsChangeListener(mListenerToService);
         } catch (RemoteException e) {
-            Log.e(TAG, "Could not register a listener to CarUxRestrictionsManagerService " + e);
-            throw new CarNotConnectedException(e);
-        } catch (IllegalStateException e) {
-            Log.e(TAG, "Could not register a listener to CarUxRestrictionsManagerService " + e);
-            Car.checkCarNotConnectedExceptionFromCarService(e);
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Unregister the registered {@link OnUxRestrictionsChangedListener}
+     */
+    public synchronized void unregisterListener() {
+        if (mUxRListener == null) {
+            if (DBG) {
+                Log.d(TAG, "Listener was not previously registered");
+            }
+            return;
+        }
+        try {
+            mUxRService.unregisterUxRestrictionsChangeListener(mListenerToService);
+            mUxRListener = null;
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Get the current UX restrictions {@link CarUxRestrictions} in place.
+     *
+     * @return current UX restrictions that is in effect.
+     */
+    @Nullable
+    public CarUxRestrictions getCurrentCarUxRestrictions() {
+        try {
+            return mUxRService.getCurrentUxRestrictions();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Sets restriction mode. Returns {@code true} if the operation succeeds.
+     *
+     * @hide
+     */
+    @RequiresPermission(value = Car.PERMISSION_CAR_UX_RESTRICTIONS_CONFIGURATION)
+    public boolean setRestrictionMode(@UxRestrictionMode int mode) {
+        try {
+            return mUxRService.setRestrictionMode(mode);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Returns the current restriction mode.
+     *
+     * @hide
+     */
+    @RequiresPermission(value = Car.PERMISSION_CAR_UX_RESTRICTIONS_CONFIGURATION)
+    @UxRestrictionMode
+    public int getRestrictionMode() {
+        try {
+            return mUxRService.getRestrictionMode();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
         }
     }
 
@@ -133,48 +221,11 @@ public final class CarUxRestrictionsManager implements CarManagerBase {
      */
     @RequiresPermission(value = Car.PERMISSION_CAR_UX_RESTRICTIONS_CONFIGURATION)
     public synchronized boolean saveUxRestrictionsConfigurationForNextBoot(
-            CarUxRestrictionsConfiguration config) throws CarNotConnectedException {
+            CarUxRestrictionsConfiguration config) {
         try {
             return mUxRService.saveUxRestrictionsConfigurationForNextBoot(config);
         } catch (RemoteException e) {
-            Log.e(TAG, "Could not save new UX restrictions configuration", e);
-            throw new CarNotConnectedException(e);
-        }
-    }
-
-    /**
-     * Unregister the registered {@link OnUxRestrictionsChangedListener}
-     */
-    public synchronized void unregisterListener()
-            throws CarNotConnectedException {
-        if (mUxRListener == null) {
-            if (DBG) {
-                Log.d(TAG, "Listener was not previously registered");
-            }
-            return;
-        }
-        try {
-            mUxRService.unregisterUxRestrictionsChangeListener(mListenerToService);
-            mUxRListener = null;
-        } catch (RemoteException e) {
-            Log.e(TAG, "Could not unregister listener from Driving State Service " + e);
-            throw new CarNotConnectedException(e);
-        }
-    }
-
-    /**
-     * Get the current UX restrictions {@link CarUxRestrictions} in place.
-     *
-     * @return current UX restrictions that is in effect.
-     */
-    @Nullable
-    public CarUxRestrictions getCurrentCarUxRestrictions()
-            throws CarNotConnectedException {
-        try {
-            return mUxRService.getCurrentUxRestrictions();
-        } catch (RemoteException e) {
-            Log.e(TAG, "Could not get current UX restrictions " + e);
-            throw new CarNotConnectedException(e);
+            throw e.rethrowFromSystemServer();
         }
     }
 
@@ -186,18 +237,14 @@ public final class CarUxRestrictionsManager implements CarManagerBase {
      * @return current staged configuration, {@code null} if it's not available
      *
      * @hide
-     *
      */
-    @TestApi
     @Nullable
     @RequiresPermission(value = Car.PERMISSION_CAR_UX_RESTRICTIONS_CONFIGURATION)
-    public synchronized CarUxRestrictionsConfiguration getStagedConfig()
-            throws CarNotConnectedException {
+    public synchronized CarUxRestrictionsConfiguration getStagedConfig() {
         try {
             return mUxRService.getStagedConfig();
         } catch (RemoteException e) {
-            Log.e(TAG, "Could not get staged UX restrictions staged configuration " + e);
-            throw new CarNotConnectedException(e);
+            throw e.rethrowFromSystemServer();
         }
     }
 
@@ -207,17 +254,27 @@ public final class CarUxRestrictionsManager implements CarManagerBase {
      * @return current prod configuration that is in effect.
      *
      * @hide
-     *
      */
-    @TestApi
     @RequiresPermission(value = Car.PERMISSION_CAR_UX_RESTRICTIONS_CONFIGURATION)
-    public synchronized CarUxRestrictionsConfiguration getConfig()
-            throws CarNotConnectedException {
+    public synchronized CarUxRestrictionsConfiguration getConfig() {
         try {
             return mUxRService.getConfig();
         } catch (RemoteException e) {
-            Log.e(TAG, "Could not get production UX restrictions prod configuration" + e);
-            throw new CarNotConnectedException(e);
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * @hide
+     */
+    public static String modeToString(@UxRestrictionMode int mode) {
+        switch (mode) {
+            case UX_RESTRICTION_MODE_BASELINE:
+                return "baseline";
+            case UX_RESTRICTION_MODE_PASSENGER:
+                return "passenger";
+            default:
+                throw new IllegalArgumentException("Unrecognized restriction mode " + mode);
         }
     }
 

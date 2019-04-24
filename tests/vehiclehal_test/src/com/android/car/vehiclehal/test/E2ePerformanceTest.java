@@ -23,7 +23,6 @@ import static org.junit.Assert.fail;
 
 import android.annotation.Nullable;
 import android.car.Car;
-import android.car.CarNotConnectedException;
 import android.car.hardware.CarPropertyConfig;
 import android.car.hardware.CarSensorManager;
 import android.car.hardware.CarSensorManager.OnSensorChangedListener;
@@ -184,10 +183,10 @@ public class E2ePerformanceTest extends E2eCarTestBase {
 
 
         final int EXPECTED_INVOCATIONS = 1000;  // How many time get/set will be called.
-        final int EXPECTED_DURATION_MS = 2500;
+        final int EXPECTED_DURATION_MS = 3000;
         // This is a stress test and it can be flaky because it shares resources with all currently
         // running process. Let's have this number of attempt before giving up.
-        final int ATTEMPTS = 3;
+        final int ATTEMPTS = 5;
 
         for (int curAttempt = 0; curAttempt < ATTEMPTS; curAttempt++) {
             long missingInvocations = stressTestHvacProperties(mgr, cfg,
@@ -234,12 +233,8 @@ public class E2ePerformanceTest extends E2eCarTestBase {
 
         while (counter.getCount() > 0) {
             float actualValue;
-            try {
-                mgr.setFloatProperty(cfg.getPropertyId(), areaId, curValue);
-                actualValue = mgr.getFloatProperty(cfg.getPropertyId(), areaId);
-            } catch (CarNotConnectedException e) {
-                throw new RuntimeException(e);
-            }
+            mgr.setFloatProperty(cfg.getPropertyId(), areaId, curValue);
+            actualValue = mgr.getFloatProperty(cfg.getPropertyId(), areaId);
             assertEquals(curValue, actualValue, 0.001);
             curValue += 0.5;
             if (curValue > maxValue) {
@@ -251,9 +246,8 @@ public class E2ePerformanceTest extends E2eCarTestBase {
     }
 
     @Nullable
-    private <T> CarPropertyConfig<T> findHvacPropConfig(Class<T> clazz, int hvacPropId,
-                CarHvacManager mgr)
-            throws CarNotConnectedException {
+    private <T> CarPropertyConfig<T> findHvacPropConfig(
+            Class<T> clazz, int hvacPropId, CarHvacManager mgr) {
         for (CarPropertyConfig<?> cfg : mgr.getPropertyList()) {
             if (cfg.getPropertyId() == hvacPropId) {
                 return (CarPropertyConfig<T>) cfg;

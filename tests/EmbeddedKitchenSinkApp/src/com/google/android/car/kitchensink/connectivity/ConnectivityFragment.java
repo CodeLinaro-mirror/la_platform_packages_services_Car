@@ -18,7 +18,9 @@ package com.google.android.car.kitchensink.connectivity;
 
 import android.annotation.Nullable;
 import android.annotation.SuppressLint;
+import android.content.Context;
 import android.graphics.Color;
+import android.location.LocationManager;
 import android.net.ConnectivityManager;
 import android.net.ConnectivityManager.NetworkCallback;
 import android.net.LinkProperties;
@@ -26,8 +28,12 @@ import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.net.NetworkInfo;
 import android.net.NetworkRequest;
+import android.net.wifi.WifiConfiguration;
+import android.net.wifi.WifiManager;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.Process;
+import android.os.UserHandle;
 import android.util.Log;
 import android.util.SparseArray;
 import android.view.LayoutInflater;
@@ -44,6 +50,8 @@ import com.google.android.car.kitchensink.R;
 
 import java.net.NetworkInterface;
 import java.net.SocketException;
+import java.util.Timer;
+import java.util.TimerTask;
 
 @SuppressLint("SetTextI18n")
 public class ConnectivityFragment extends Fragment {
@@ -51,9 +59,18 @@ public class ConnectivityFragment extends Fragment {
     private final Handler mHandler = new Handler();
 
     private ConnectivityManager mConnectivityManager;
+    private WifiManager mWifiManager;
+    private LocationManager mLocationManager;
 
     // Sort out current Network objects (NetId -> Network)
     private SparseArray<Network> mNetworks = new SparseArray<Network>();
+
+    private TextView mWifiStatusPolled;
+    private TextView mTetheringStatus;
+    private TextView mTetheringStatusPolled;
+    private TextView mLocalOnlyStatus;
+
+    private Timer mWifiUpdater;
 
     /**
      * Create our own network callback object to use with NetworkRequests. Contains a reference to
@@ -263,6 +280,24 @@ public class ConnectivityFragment extends Fragment {
         sCapabilityNames.put(NetworkCapabilities.NET_CAPABILITY_XCAP, "[XCAP]");
     }
 
+    private static final SparseArray<String> sWifiStaStates = new SparseArray<>();
+    static {
+        sWifiStaStates.put(WifiManager.WIFI_STATE_DISABLING, "STA_DISABLING");
+        sWifiStaStates.put(WifiManager.WIFI_STATE_DISABLED, "STA_DISABLED");
+        sWifiStaStates.put(WifiManager.WIFI_STATE_ENABLING, "STA_ENABLING");
+        sWifiStaStates.put(WifiManager.WIFI_STATE_ENABLED, "STA_ENABLED");
+        sWifiStaStates.put(WifiManager.WIFI_STATE_UNKNOWN, "STA_UNKNOWN");
+    }
+
+    private static final SparseArray<String> sWifiApStates = new SparseArray<>();
+    static {
+        sWifiApStates.put(WifiManager.WIFI_AP_STATE_DISABLING, "AP_DISABLING");
+        sWifiApStates.put(WifiManager.WIFI_AP_STATE_DISABLED, "AP_DISABLED");
+        sWifiApStates.put(WifiManager.WIFI_AP_STATE_ENABLING, "AP_ENABLING");
+        sWifiApStates.put(WifiManager.WIFI_AP_STATE_ENABLED, "AP_ENABLED");
+        sWifiApStates.put(WifiManager.WIFI_AP_STATE_FAILED, "AP_FAILED");
+    }
+
     /**
      * Builds a string out of the possible transports that can be applied to a
      * NetworkCapabilities object.
@@ -418,7 +453,12 @@ public class ConnectivityFragment extends Fragment {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        mConnectivityManager = getActivity().getSystemService(ConnectivityManager.class);
+
+        Context ctx = getContext();
+        mConnectivityManager = ctx.getSystemService(ConnectivityManager.class);
+        mWifiManager = ctx.getSystemService(WifiManager.class);
+        mLocationManager = ctx.getSystemService(LocationManager.class);
+
         mConnectivityManager.addDefaultNetworkActiveListener(() -> refreshNetworks());
     }
 
@@ -440,6 +480,17 @@ public class ConnectivityFragment extends Fragment {
             mNetworkListRefresher.setRefreshing(false);
         });
 
+        view.findViewById(R.id.startWifi).setOnClickListener(v -> setWifiEnabled(true));
+        view.findViewById(R.id.stopWifi).setOnClickListener(v -> setWifiEnabled(false));
+        view.findViewById(R.id.startTethering).setOnClickListener(v -> startTethering());
+        view.findViewById(R.id.stopTethering).setOnClickListener(v -> stopTethering());
+        view.findViewById(R.id.startLocalOnly).setOnClickListener(v -> startLocalOnly());
+        view.findViewById(R.id.stopLocalOnly).setOnClickListener(v -> stopLocalOnly());
+        mWifiStatusPolled = (TextView) view.findViewById(R.id.wifiStatusPolled);
+        mTetheringStatus = (TextView) view.findViewById(R.id.tetheringStatus);
+        mTetheringStatusPolled = (TextView) view.findViewById(R.id.tetheringStatusPolled);
+        mLocalOnlyStatus = (TextView) view.findViewById(R.id.localOnlyStatus);
+
         return view;
     }
 
@@ -447,12 +498,45 @@ public class ConnectivityFragment extends Fragment {
     public void onResume() {
         super.onResume();
         refreshNetworks();
+        mWifiUpdater = new Timer();
+        mWifiUpdater.scheduleAtFixedRate(new TimerTask() {
+            public void run() {
+                updateApState();
+            }
+        }, 0, 500);
     }
 
     @Override
     public void onPause() {
         super.onPause();
         releaseAllNetworks();
+        mWifiUpdater.cancel();
+        mWifiUpdater = null;
+    }
+
+    private void updateApState() {
+        int apState = mWifiManager.getWifiApState();
+        String apStateTmp = sWifiApStates.get(apState, "?");
+        final String staStateStr = sWifiStaStates.get(mWifiManager.getWifiState(), "?");
+
+        WifiConfiguration config = mWifiManager.getWifiApConfiguration();
+        if (config != null && config.SSID != null && apState == WifiManager.WIFI_AP_STATE_ENABLED) {
+            apStateTmp += " (" + config.SSID + "/" + config.preSharedKey + ")";
+        }
+
+        final String apStateStr = apStateTmp;
+        mTetheringStatusPolled.post(() -> {
+            mTetheringStatusPolled.setText(apStateStr);
+            mWifiStatusPolled.setText(staStateStr);
+        });
+    }
+
+    private void setTetheringStatus(String status) {
+        mTetheringStatus.post(() -> mTetheringStatus.setText(status));
+    }
+
+    private void setLocalOnlyStatus(String status) {
+        mLocalOnlyStatus.post(() -> mLocalOnlyStatus.setText(status));
     }
 
     public void showToast(String text) {
@@ -464,5 +548,83 @@ public class ConnectivityFragment extends Fragment {
 
     private static boolean sameNetworkId(Network net1, Network net2) {
         return net1 != null && net2 != null && net1.netId == net2.netId;
+    }
+
+    private void setWifiEnabled(boolean enabled) {
+        mWifiManager.setWifiEnabled(enabled);
+    }
+
+    private void startTethering() {
+        setTetheringStatus("starting...");
+
+        ConnectivityManager.OnStartTetheringCallback cb =
+                new ConnectivityManager.OnStartTetheringCallback() {
+            public void onTetheringStarted() {
+                setTetheringStatus("started");
+            }
+
+            public void onTetheringFailed() {
+                setTetheringStatus("failed");
+            }
+        };
+
+        mConnectivityManager.startTethering(ConnectivityManager.TETHERING_WIFI, false, cb);
+    }
+
+    private void stopTethering() {
+        setTetheringStatus("stopping...");
+        mConnectivityManager.stopTethering(ConnectivityManager.TETHERING_WIFI);
+        setTetheringStatus("stopped");
+    }
+
+    private WifiManager.LocalOnlyHotspotReservation mLocalOnlyReservation;
+
+    private void startLocalOnly() {
+        setLocalOnlyStatus("starting...");
+
+        UserHandle user = Process.myUserHandle();
+        if (!mLocationManager.isLocationEnabledForUser(user)) {
+            setLocalOnlyStatus("enabling location...");
+            mLocationManager.setLocationEnabledForUser(true, user);
+            setLocalOnlyStatus("location enabled; starting...");
+        }
+
+        WifiManager.LocalOnlyHotspotCallback cb = new WifiManager.LocalOnlyHotspotCallback() {
+            public void onStarted(WifiManager.LocalOnlyHotspotReservation reservation) {
+                mLocalOnlyReservation = reservation;
+                WifiConfiguration config = reservation.getWifiConfiguration();
+                setLocalOnlyStatus("started ("
+                        + config.SSID + "/" + config.preSharedKey + ")");
+            };
+
+            public void onStopped() {
+                setLocalOnlyStatus("stopped");
+            };
+
+            public void onFailed(int reason) {
+                setLocalOnlyStatus("failed " + reason);
+            };
+        };
+
+        try {
+            mWifiManager.startLocalOnlyHotspot(cb, null);
+        } catch (IllegalStateException ex) {
+            setLocalOnlyStatus(ex.getMessage());
+        }
+    }
+
+    private void stopLocalOnly() {
+        setLocalOnlyStatus("stopping...");
+
+        WifiManager.LocalOnlyHotspotReservation reservation = mLocalOnlyReservation;
+        mLocalOnlyReservation = null;
+
+        if (reservation == null) {
+            setLocalOnlyStatus("no reservation");
+            return;
+        }
+
+        reservation.close();
+        setLocalOnlyStatus("stopped");
     }
 }

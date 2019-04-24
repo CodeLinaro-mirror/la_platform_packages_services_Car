@@ -17,18 +17,36 @@ package android.car.cluster.sample;
 
 import android.content.Context;
 import android.graphics.Bitmap;
+import android.graphics.drawable.BitmapDrawable;
+import android.os.Handler;
 import android.text.SpannableStringBuilder;
 import android.text.style.ImageSpan;
 import android.util.AttributeSet;
+import android.util.Log;
 import android.widget.TextView;
 
+import androidx.car.cluster.navigation.ImageReference;
 import androidx.car.cluster.navigation.RichText;
 import androidx.car.cluster.navigation.RichTextElement;
+
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 
 /**
  * View component that displays the Cue information on the instrument cluster display
  */
 public class CueView extends TextView {
+    private static final String TAG = "Cluster.CueView";
+
+    private String mImageSpanText;
+    private CompletableFuture<?> mFuture;
+    private Handler mHandler = new Handler();
+    private RichText mContent;
+
     public CueView(Context context) {
         super(context);
     }
@@ -39,34 +57,60 @@ public class CueView extends TextView {
 
     public CueView(Context context, AttributeSet attrs, int defStyle) {
         super(context, attrs, defStyle);
+        mImageSpanText = context.getString(R.string.span_image);
     }
 
-    public void setRichText(RichText richText) {
+    public void setRichText(RichText richText, ImageResolver imageResolver) {
         if (richText == null) {
             setText(null);
             return;
         }
 
+        if (mFuture != null && !Objects.equals(richText, mContent)) {
+            mFuture.cancel(true);
+        }
+
+        List<ImageReference> imageReferences = richText.getElements().stream()
+                .filter(element -> element.getImage() != null)
+                .map(element -> element.getImage())
+                .collect(Collectors.toList());
+        mFuture = imageResolver
+                .getBitmaps(imageReferences, 0, getLineHeight())
+                .thenAccept(bitmaps -> {
+                    mHandler.post(() -> update(richText, bitmaps));
+                    mFuture = null;
+                })
+                .exceptionally(ex -> {
+                    if (Log.isLoggable(TAG, Log.DEBUG)) {
+                        Log.d(TAG, "Unable to fetch images for cue: " + richText);
+                    }
+                    mHandler.post(() -> update(richText, Collections.emptyMap()));
+                    return null;
+                });
+        mContent = richText;
+    }
+
+    private void update(RichText richText, Map<ImageReference, Bitmap> bitmaps) {
         SpannableStringBuilder builder = new SpannableStringBuilder();
-        for (RichTextElement textElement : richText.getElements()) {
-            if (!textElement.getText().equals("")) {
-                builder.append(textElement.getText());
-            } else if (textElement.getImage() != null) {
+
+        for (RichTextElement element : richText.getElements()) {
+            if (builder.length() > 0) {
                 builder.append(" ");
-
-                Bitmap bitmap = ImageResolver.getInstance().getBitmap(mContext,
-                        textElement.getImage());
-
+            }
+            if (element.getImage() != null) {
+                Bitmap bitmap = bitmaps.get(element.getImage());
                 if (bitmap != null) {
-                    bitmap = Bitmap.createScaledBitmap(bitmap,
-                            (int) (((float) getLineHeight() / bitmap.getHeight())
-                                    * bitmap.getWidth()),
-                            getLineHeight(),
-                            true);
-
-                    int index = builder.length() - 1;
-                    builder.setSpan(new ImageSpan(mContext, bitmap), index, index + 1, 0);
+                    String imageText = element.getText().isEmpty() ? mImageSpanText :
+                            element.getText();
+                    int start = builder.length();
+                    int end = start + imageText.length();
+                    builder.append(imageText);
+                    BitmapDrawable drawable = new BitmapDrawable(getResources(), bitmap);
+                    drawable.setBounds(0, 0, bitmap.getWidth(), bitmap.getHeight());
+                    builder.setSpan(new ImageSpan(drawable), start, end, 0);
                 }
+            } else if (!element.getText().isEmpty()) {
+                builder.append(element.getText());
             }
         }
 
