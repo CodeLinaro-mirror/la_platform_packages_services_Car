@@ -36,6 +36,7 @@ import android.util.Slog;
 import android.util.TimingsTraceLog;
 
 import com.android.car.cluster.InstrumentClusterService;
+import com.android.car.garagemode.GarageModeService;
 import com.android.car.hal.VehicleHal;
 import com.android.car.internal.FeatureConfiguration;
 import com.android.car.pm.CarPackageManagerService;
@@ -123,8 +124,6 @@ public class ICarImpl extends ICar.Stub {
         mCarInputService = new CarInputService(serviceContext, mHal.getInputHal());
         mCarProjectionService = new CarProjectionService(serviceContext, mCarInputService);
         mGarageModeService = new GarageModeService(mContext, mCarPowerManagementService);
-        mCarLocationService = new CarLocationService(mContext, mCarPowerManagementService,
-                mCarPropertyService);
         mAppFocusService = new AppFocusService(serviceContext, mSystemActivityMonitoringService);
         mCarAudioService = new CarAudioService(serviceContext);
         mCarNightService = new CarNightService(serviceContext, mCarPropertyService);
@@ -144,6 +143,8 @@ public class ICarImpl extends ICar.Stub {
                 new CarConfigurationService(serviceContext, new JsonReaderImpl());
         mUserManagerHelper = new CarUserManagerHelper(serviceContext);
         mAirplaneModeService = new AirplaneModeService(mContext, mCarPowerManagementService);
+        mCarLocationService = new CarLocationService(mContext, mCarPowerManagementService,
+                mCarPropertyService, mUserManagerHelper);
 
         // Be careful with order. Service depending on other service should be inited later.
         List<CarServiceBase> allServices = new ArrayList<>();
@@ -154,7 +155,6 @@ public class ICarImpl extends ICar.Stub {
         allServices.add(mCarUXRestrictionsService);
         allServices.add(mCarPackageManagerService);
         allServices.add(mCarInputService);
-        allServices.add(mCarLocationService);
         allServices.add(mGarageModeService);
         allServices.add(mAppFocusService);
         allServices.add(mCarAudioService);
@@ -176,6 +176,7 @@ public class ICarImpl extends ICar.Stub {
             allServices.add(mCarUserService);
         }
 
+        allServices.add(mCarLocationService);
         mAllServices = allServices.toArray(new CarServiceBase[allServices.size()]);
     }
 
