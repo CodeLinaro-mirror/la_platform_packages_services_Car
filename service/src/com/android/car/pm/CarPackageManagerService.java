@@ -403,7 +403,10 @@ public class CarPackageManagerService extends ICarPackageManager.Stub implements
         pkgParseIntent.addDataScheme("package");
         mContext.registerReceiver(mPackageParsingEventReceiver, pkgParseIntent);
         try {
-            mCarUxRestrictionsService.registerUxRestrictionsChangeListener(mUxRestrictionsListener);
+            // TODO(128456985): register listener for each display in order to
+            // properly launch blocking screens.
+            mCarUxRestrictionsService.registerUxRestrictionsChangeListener(
+                    mUxRestrictionsListener, Display.DEFAULT_DISPLAY);
         } catch (IllegalArgumentException e) {
             // can happen while mocking is going on while init is still done.
             Log.w(CarLog.TAG_PACKAGE, "sensor subscription failed", e);
@@ -1049,6 +1052,10 @@ public class CarPackageManagerService extends ICarPackageManager.Stub implements
         }
         List<TopTaskInfoContainer> topTasks = mSystemActivityMonitoringService.getTopTasks();
         for (TopTaskInfoContainer topTask : topTasks) {
+            if (topTask == null) {
+                Log.e(CarLog.TAG_PACKAGE, "Top tasks contains null.");
+                continue;
+            }
             doBlockTopActivityIfNotAllowed(topTask);
         }
     }
@@ -1269,6 +1276,10 @@ public class CarPackageManagerService extends ICarPackageManager.Stub implements
             implements SystemActivityMonitoringService.ActivityLaunchListener {
         @Override
         public void onActivityLaunch(TopTaskInfoContainer topTask) {
+            if (topTask == null) {
+                Log.e(CarLog.TAG_PACKAGE, "Received callback with null top task.");
+                return;
+            }
             blockTopActivityIfNecessary(topTask);
         }
     }
@@ -1285,7 +1296,6 @@ public class CarPackageManagerService extends ICarPackageManager.Stub implements
 
         public UxRestrictionsListener(CarUxRestrictionsManagerService service) {
             uxRestrictionsService = service;
-            mCurrentUxRestrictions = uxRestrictionsService.getCurrentUxRestrictions();
         }
 
         @Override

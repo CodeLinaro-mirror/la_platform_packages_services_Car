@@ -40,7 +40,10 @@ LOCAL_STATIC_ANDROID_LIBRARIES += \
     androidx.car_car-cluster \
     car-arch-common \
     car-media-common \
-    car-telephony-common
+    car-telephony-common \
+    car-apps-common
+
+LOCAL_REQUIRED_MODULES := privapp_whitelist_android.car.cluster.sample
 
 include $(BUILD_PACKAGE)
 

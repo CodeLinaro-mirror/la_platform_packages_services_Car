@@ -16,6 +16,7 @@
 
 package com.android.car.trust;
 
+import android.annotation.IntDef;
 import android.annotation.Nullable;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothGattCharacteristic;
@@ -27,8 +28,9 @@ import android.util.Log;
 
 import com.android.car.CarLocalServices;
 import com.android.car.R;
-import com.android.car.Utils;
 
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.util.UUID;
 
 /**
@@ -39,7 +41,22 @@ import java.util.UUID;
  */
 class CarTrustAgentBleManager extends BleManager {
     private static final String TAG = "CarTrustBLEManager";
-    private static final String CONFIRMATION_SIGNAL = "True";
+
+    /** @hide */
+    @IntDef(prefix = { "TRUSTED_DEVICE_OPERATION_" }, value = {
+        TRUSTED_DEVICE_OPERATION_NONE,
+        TRUSTED_DEVICE_OPERATION_ENROLLMENT,
+        TRUSTED_DEVICE_OPERATION_UNLOCK
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface TrustedDeviceOperation {}
+
+    private static final int TRUSTED_DEVICE_OPERATION_NONE = 0;
+    private static final int TRUSTED_DEVICE_OPERATION_ENROLLMENT = 1;
+    private static final int TRUSTED_DEVICE_OPERATION_UNLOCK = 2;
+
+    @TrustedDeviceOperation
+    private int mCurrentTrustedDeviceOperation = TRUSTED_DEVICE_OPERATION_NONE;
     private CarTrustedDeviceService mCarTrustedDeviceService;
     private CarTrustAgentEnrollmentService mCarTrustAgentEnrollmentService;
     private CarTrustAgentUnlockService mCarTrustAgentUnlockService;
@@ -63,12 +80,16 @@ class CarTrustAgentBleManager extends BleManager {
     // Overriding some of the {@link BLEManager} methods to be specific for Trusted Device feature.
     @Override
     public void onRemoteDeviceConnected(BluetoothDevice device) {
-        if (getTrustedDeviceService() != null) {
-            if (device.getName() == null) {
-                retrieveDeviceName(device);
-            }
-            getTrustedDeviceService().onRemoteDeviceConnected(device);
+        if (getTrustedDeviceService() == null) {
+            return;
         }
+        // Retrieving device name only happens in enrollment, the retrieved device name will be
+        // stored in sharedPreference for further use.
+        if (mCurrentTrustedDeviceOperation == TRUSTED_DEVICE_OPERATION_ENROLLMENT
+                && device.getName() == null) {
+            retrieveDeviceName(device);
+        }
+        getTrustedDeviceService().onRemoteDeviceConnected(device);
     }
 
     @Override
@@ -214,23 +235,48 @@ class CarTrustAgentBleManager extends BleManager {
     }
 
     void startEnrollmentAdvertising() {
+        mCurrentTrustedDeviceOperation = TRUSTED_DEVICE_OPERATION_ENROLLMENT;
         startAdvertising(mEnrollmentGattService, mEnrollmentAdvertisingCallback);
     }
 
     void stopEnrollmentAdvertising() {
+        mCurrentTrustedDeviceOperation = TRUSTED_DEVICE_OPERATION_NONE;
         stopAdvertising(mEnrollmentAdvertisingCallback);
     }
 
     void startUnlockAdvertising() {
+        mCurrentTrustedDeviceOperation = TRUSTED_DEVICE_OPERATION_UNLOCK;
         startAdvertising(mUnlockGattService, mUnlockAdvertisingCallback);
     }
 
     void stopUnlockAdvertising() {
+        mCurrentTrustedDeviceOperation = TRUSTED_DEVICE_OPERATION_NONE;
         stopAdvertising(mUnlockAdvertisingCallback);
     }
 
-    void disconnectRemoteDevice(BluetoothDevice device) {
-        // TODO(b/129029421) - is closing the GATT Server the right thing to do here?
+    void disconnectRemoteDevice() {
+        stopGattServer();
+    }
+
+    /**
+     * Sends the given handshake message to the specified device.
+     *
+     * <p>The message is expected to be a message that will continue the encryption handshake and
+     * eventually set up a secure channel for communication between the given device and this
+     * head unit.
+     *
+     * @param device The device to send the message to.
+     * @param message A message that will continue the encryption handshake.
+     */
+    void sendEncryptionHandshakeMessage(BluetoothDevice device, byte[] message) {
+        if (Log.isLoggable(TAG, Log.DEBUG)) {
+            Log.d(TAG, "sendEncryptionHandshakeMessage to: " + device.getAddress());
+        }
+
+        BluetoothGattCharacteristic enrollmentToken = mEnrollmentGattService.getCharacteristic(
+                mEnrollmentEscrowTokenUuid);
+        enrollmentToken.setValue(message);
+        notifyCharacteristicChanged(device, enrollmentToken, false);
     }
 
     /**
@@ -240,29 +286,30 @@ class CarTrustAgentBleManager extends BleManager {
      * @param device the BLE peer device to send the handle to.
      * @param handle the handle corresponding to the escrow token
      */
-    void sendEnrollmentHandle(BluetoothDevice device, long handle) {
+    void sendEnrollmentHandle(BluetoothDevice device, byte[] handle) {
         if (Log.isLoggable(TAG, Log.DEBUG)) {
-            Log.d(TAG, "sendEnrollmentHandle: " + Long.toHexString(handle) + " "
-                    + device.getAddress());
+            Log.d(TAG, "sendEnrollmentHandle to " + device.getAddress());
         }
         BluetoothGattCharacteristic enrollmentHandle = mEnrollmentGattService.getCharacteristic(
                 mEnrollmentTokenHandleUuid);
-        enrollmentHandle.setValue(Utils.longToBytes(handle));
+        enrollmentHandle.setValue(handle);
         notifyCharacteristicChanged(device, enrollmentHandle, false);
     }
 
     /**
-     * Sends the pairing code confirmation signal to the phone
+     * Sends the given pairing code confirmation signal to the specified device.
      *
      * @param device the BLE peer device to send the signal to.
+     * @param confirmationSignal The signal that will let the given {@link device} know that
+     *                           the pairing code has been accepted by the user.
      */
-    void sendPairingCodeConfirmation(BluetoothDevice device) {
+    void sendPairingCodeConfirmation(BluetoothDevice device, byte[] confirmationSignal) {
         if (Log.isLoggable(TAG, Log.DEBUG)) {
             Log.d(TAG, "sendPairingCodeConfirmation: " + device.getAddress());
         }
         BluetoothGattCharacteristic confirmation = mEnrollmentGattService.getCharacteristic(
                 mEnrollmentTokenHandleUuid);
-        confirmation.setValue(CONFIRMATION_SIGNAL.getBytes());
+        confirmation.setValue(confirmationSignal);
         notifyCharacteristicChanged(device, confirmation, false);
     }
 

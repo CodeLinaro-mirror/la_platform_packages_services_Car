@@ -96,6 +96,7 @@ public class ICarImpl extends ICar.Stub {
     private final VmsBrokerService mVmsBrokerService;
     private final VmsSubscriberService mVmsSubscriberService;
     private final VmsPublisherService mVmsPublisherService;
+    private final CarBugreportManagerService mCarBugreportManagerService;
 
     private final CarServiceBase[] mAllServices;
 
@@ -137,8 +138,7 @@ public class ICarImpl extends ICar.Stub {
                 mSystemActivityMonitoringService,
                 mUserManagerHelper);
         mPerUserCarServiceHelper = new PerUserCarServiceHelper(serviceContext);
-        mCarBluetoothService = new CarBluetoothService(serviceContext, mCarPropertyService,
-                mPerUserCarServiceHelper, mCarUXRestrictionsService);
+        mCarBluetoothService = new CarBluetoothService(serviceContext, mPerUserCarServiceHelper);
         mCarInputService = new CarInputService(serviceContext, mHal.getInputHal());
         mCarProjectionService = new CarProjectionService(
                 serviceContext, null /* handler */, mCarInputService, mCarBluetoothService);
@@ -166,6 +166,7 @@ public class ICarImpl extends ICar.Stub {
                 mUserManagerHelper);
         mCarTrustedDeviceService = new CarTrustedDeviceService(serviceContext);
         mCarMediaService = new CarMediaService(serviceContext);
+        mCarBugreportManagerService = new CarBugreportManagerService(serviceContext);
 
         CarLocalServices.addService(CarPowerManagementService.class, mCarPowerManagementService);
         CarLocalServices.addService(CarUserService.class, mCarUserService);
@@ -201,6 +202,7 @@ public class ICarImpl extends ICar.Stub {
         allServices.add(mCarTrustedDeviceService);
         allServices.add(mCarMediaService);
         allServices.add(mCarLocationService);
+        allServices.add(mCarBugreportManagerService);
         mAllServices = allServices.toArray(new CarServiceBase[allServices.size()]);
     }
 
@@ -256,10 +258,23 @@ public class ICarImpl extends ICar.Stub {
         mCarUserService.onSwitchUser(userHandle);
     }
 
-    private static void assertCallingFromSystemProcess() {
+    static void assertCallingFromSystemProcess() {
         int uid = Binder.getCallingUid();
         if (uid != Process.SYSTEM_UID) {
             throw new SecurityException("Only allowed from system");
+        }
+    }
+
+    /**
+     * Assert if binder call is coming from system process like system server or if it is called
+     * from its own process even if it is not system. The latter can happen in test environment.
+     * Note that car service runs as system user but test like car service test will not.
+     */
+    static void assertCallingFromSystemProcessOrSelf() {
+        int uid = Binder.getCallingUid();
+        int pid = Binder.getCallingPid();
+        if (uid != Process.SYSTEM_UID && pid != Process.myPid()) {
+            throw new SecurityException("Only allowed from system or self");
         }
     }
 
@@ -324,6 +339,8 @@ public class ICarImpl extends ICar.Stub {
                 return mCarTrustedDeviceService.getCarTrustAgentEnrollmentService();
             case Car.CAR_MEDIA_SERVICE:
                 return mCarMediaService;
+            case Car.CAR_BUGREPORT_SERVICE:
+                return mCarBugreportManagerService;
             default:
                 Log.w(CarLog.TAG_SERVICE, "getCarService for unknown service:" + serviceName);
                 return null;
