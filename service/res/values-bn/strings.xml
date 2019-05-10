@@ -43,6 +43,8 @@
     <string name="car_permission_label_audio_volume" msgid="310587969373137690">"গাড়ির অডিও ভলিউম নিয়ন্ত্রণ করা"</string>
     <string name="car_permission_label_audio_settings" msgid="6524703796944023977">"গাড়ির অডিও সেটিংস ম্যানেজ করা"</string>
     <string name="car_permission_label_mock_vehicle_hal" msgid="7198852512207405935">"গাড়ির HAL অনুকরণ করা"</string>
+    <string name="car_permission_label_receive_ducking" msgid="4884538660766756573">"অডিও ডাকিং ইভেন্ট রিসিভ করে"</string>
+    <string name="car_permission_desc_receive_ducking" msgid="776376388266656512">"গাড়িতে অন্য অডিও ডিভাইস চালু থাকার সময়, অ্যাপের ভলিউম কম করলে এটিকে বিজ্ঞপ্তি দেওয়ার অনুমতি দিন।"</string>
     <string name="car_permission_desc_mock_vehicle_hal" msgid="5235596491098649155">"অভ্যন্তরীণ পরীক্ষার জন্য আপনার গাড়ির HAL অনুকরণ করা।"</string>
     <string name="car_permission_desc_audio_volume" msgid="536626185654307889">"আপনার গাড়ির ভলিউম নিয়ন্ত্রণ করা।"</string>
     <string name="car_permission_desc_audio_settings" msgid="7192007170677915937">"আপনার গাড়ির অডিও সেটিংস নিয়ন্ত্রণ করা।"</string>
@@ -122,4 +124,5 @@
     <string name="car_permission_desc_car_power" msgid="9202079903668652864">"গাড়ির পাওয়ারের স্ট্যাটাস অ্যাক্সেস করা।"</string>
     <string name="car_permission_label_enroll_trust" msgid="3512907900486690218">"বিশ্বস্ত ডিভাইস নথিভুক্ত করুন"</string>
     <string name="car_permission_desc_enroll_trust" msgid="4148649994602185130">"বিশ্বস্ত ডিভাইস নথিভুক্ত করার অনুমতি দিন"</string>
+    <string name="trust_device_default_name" msgid="4213625926070261253">"আমার ডিভাইস"</string>
 </resources>
