@@ -138,8 +138,7 @@ public class ICarImpl extends ICar.Stub {
                 mSystemActivityMonitoringService,
                 mUserManagerHelper);
         mPerUserCarServiceHelper = new PerUserCarServiceHelper(serviceContext);
-        mCarBluetoothService = new CarBluetoothService(serviceContext, mCarPropertyService,
-                mPerUserCarServiceHelper, mCarUXRestrictionsService);
+        mCarBluetoothService = new CarBluetoothService(serviceContext, mPerUserCarServiceHelper);
         mCarInputService = new CarInputService(serviceContext, mHal.getInputHal());
         mCarProjectionService = new CarProjectionService(
                 serviceContext, null /* handler */, mCarInputService, mCarBluetoothService);
@@ -259,10 +258,23 @@ public class ICarImpl extends ICar.Stub {
         mCarUserService.onSwitchUser(userHandle);
     }
 
-    private static void assertCallingFromSystemProcess() {
+    static void assertCallingFromSystemProcess() {
         int uid = Binder.getCallingUid();
         if (uid != Process.SYSTEM_UID) {
             throw new SecurityException("Only allowed from system");
+        }
+    }
+
+    /**
+     * Assert if binder call is coming from system process like system server or if it is called
+     * from its own process even if it is not system. The latter can happen in test environment.
+     * Note that car service runs as system user but test like car service test will not.
+     */
+    static void assertCallingFromSystemProcessOrSelf() {
+        int uid = Binder.getCallingUid();
+        int pid = Binder.getCallingPid();
+        if (uid != Process.SYSTEM_UID && pid != Process.myPid()) {
+            throw new SecurityException("Only allowed from system or self");
         }
     }
 
