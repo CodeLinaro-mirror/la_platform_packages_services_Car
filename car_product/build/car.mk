@@ -53,7 +53,7 @@ PRODUCT_COPY_FILES += \
 PRODUCT_PROPERTY_OVERRIDES += \
     persist.bluetooth.enablenewavrcp=false \
     ro.carrier=unknown \
-    ro.fw.multiuser.headless_system_user=true
+    ro.fw.mu.headless_system_user=true
 
 # Overlay for Google network and fused location providers
 $(call inherit-product, device/sample/products/location_overlay.mk)
@@ -95,7 +95,6 @@ PRODUCT_PACKAGES += \
     LocalMediaPlayer \
     CarMediaApp \
     CarMessengerApp \
-    CarNotification \
     CarHvacApp \
     CarMapsPlaceholder \
     CarLatinIME \
