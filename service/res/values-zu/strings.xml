@@ -43,6 +43,8 @@
     <string name="car_permission_label_audio_volume" msgid="310587969373137690">"lawula ivolomu yemoto"</string>
     <string name="car_permission_label_audio_settings" msgid="6524703796944023977">"phatha amasethingi omsindo emoto"</string>
     <string name="car_permission_label_mock_vehicle_hal" msgid="7198852512207405935">"phinda i-HAL yemoto"</string>
+    <string name="car_permission_label_receive_ducking" msgid="4884538660766756573">"thola imicimbi yokudakha yomsindo"</string>
+    <string name="car_permission_desc_receive_ducking" msgid="776376388266656512">"Vumela uhlelo lokusebenza ukuthi laziswe uma ivolumu yalo yehlisiwe njengomphumela wokunye ukudlalwa komsindo emotweni."</string>
     <string name="car_permission_desc_mock_vehicle_hal" msgid="5235596491098649155">"Phinda i-HAL yemoto yakho ngenhloso yokuhlola kwangaphakathi."</string>
     <string name="car_permission_desc_audio_volume" msgid="536626185654307889">"Lawula ivolomu yemoto yakho."</string>
     <string name="car_permission_desc_audio_settings" msgid="7192007170677915937">"Lawula izilungiselelo zomsindo zemoto yakho."</string>
@@ -122,4 +124,5 @@
     <string name="car_permission_desc_car_power" msgid="9202079903668652864">"Finyelela amandla emoto."</string>
     <string name="car_permission_label_enroll_trust" msgid="3512907900486690218">"Bhalisa Amadivayisi Athenjwayo"</string>
     <string name="car_permission_desc_enroll_trust" msgid="4148649994602185130">"Vumela ukubhaliswa kwamadivayisi athenjwayo"</string>
+    <string name="trust_device_default_name" msgid="4213625926070261253">"Idivayisi yami"</string>
 </resources>

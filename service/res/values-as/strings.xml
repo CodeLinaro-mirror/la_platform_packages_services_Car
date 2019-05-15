@@ -43,6 +43,8 @@
     <string name="car_permission_label_audio_volume" msgid="310587969373137690">"গাড়ীৰ অডিঅ’ ভলিউম নিয়ন্ত্ৰণ কৰিব"</string>
     <string name="car_permission_label_audio_settings" msgid="6524703796944023977">"গাড়ীৰ অডিঅ’ ছেটিংসমূহ পৰিচালনা কৰিব"</string>
     <string name="car_permission_label_mock_vehicle_hal" msgid="7198852512207405935">"বাহনৰ HAL ইমুলে’ট কৰিব"</string>
+    <string name="car_permission_label_receive_ducking" msgid="4884538660766756573">"অডিঅ\' ডাকিং অনুষ্ঠান পাওক"</string>
+    <string name="car_permission_desc_receive_ducking" msgid="776376388266656512">"গাড়ীত অন্য অডিঅ\' প্লে\' কৰাৰ কাৰণে কোনো এপৰ ভলিউম কম কৰিলে সেই বিষয়ে এপ্‌টোক জাননী পাবলৈ দিয়ে।"</string>
     <string name="car_permission_desc_mock_vehicle_hal" msgid="5235596491098649155">"আভ্যন্তৰীণ পৰীক্ষণৰ উদ্দেশ্যে আপোনাৰ গাড়ীৰ বাহন HAL ইমুলে’ট কৰিব।"</string>
     <string name="car_permission_desc_audio_volume" msgid="536626185654307889">"আপোনাৰ গাড়ীৰ অডিঅ’ৰ ভলিউম নিয়ন্ত্ৰণ কৰিব।"</string>
     <string name="car_permission_desc_audio_settings" msgid="7192007170677915937">"আপোনাৰ গাড়ীৰ অডিঅ’ ছেটিং নিয়ন্ত্ৰণ কৰক।"</string>
@@ -122,4 +124,5 @@
     <string name="car_permission_desc_car_power" msgid="9202079903668652864">"গাড়ীৰ শক্তিৰ স্থিতি এক্সেছ কৰিব।"</string>
     <string name="car_permission_label_enroll_trust" msgid="3512907900486690218">"বিশ্বাসী ডিভাইচ পঞ্জীয়ন কৰক"</string>
     <string name="car_permission_desc_enroll_trust" msgid="4148649994602185130">"বিশ্বাসী ডিভাইচ পঞ্জীয়নৰ অনুমতি দিয়ক"</string>
+    <string name="trust_device_default_name" msgid="4213625926070261253">"মোৰ ডিভাইচ"</string>
 </resources>
