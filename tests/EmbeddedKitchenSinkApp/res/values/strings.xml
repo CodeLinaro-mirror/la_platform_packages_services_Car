@@ -104,11 +104,15 @@
     <string name="stop_wav" translatable="false">Stop WAV</string>
     <string name="audio_focus" translatable="false">Audio Focus</string>
     <string name="focus_gain" translatable="false">Gain</string>
-    <string name="focus_gain_transient_duck" translatable="false">Gain,Transient,Duck</string>
+    <string name="focus_gain_transient" translatable="false">Gain (Transient)</string>
+    <string name="focus_gain_transient_duck" translatable="false">Gain (Transient, May Duck)</string>
+    <string name="focus_gain_transient_exclusive" translatable="false">Gain (Transient, Exclusive)</string>
     <string name="focus_release" translatable="false">Release</string>
     <string name="request" translatable="false">request</string>
     <string name="release" translatable="false">release</string>
     <string name="media_play" translatable="false">Media Play</string>
+    <string name="hw_audio_source_title" translatable="false">HwAudioSource</string>
+    <string name="hw_audio_source_not_found" translatable="false">Not found</string>
     <string name="nav_play" translatable="false">Nav Play</string>
     <string name="vr_play" translatable="false">VR Play</string>
     <string name="system_play" translatable="false">System Play</string>

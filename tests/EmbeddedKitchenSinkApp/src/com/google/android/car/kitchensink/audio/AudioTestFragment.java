@@ -20,12 +20,14 @@ import android.car.Car;
 import android.car.CarAppFocusManager;
 import android.car.CarAppFocusManager.OnAppFocusChangedListener;
 import android.car.CarAppFocusManager.OnAppFocusOwnershipCallback;
-import android.car.media.CarAudioManager;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.ServiceConnection;
 import android.media.AudioAttributes;
+import android.media.AudioDeviceInfo;
+import android.media.AudioFocusRequest;
 import android.media.AudioManager;
+import android.media.HwAudioSource;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
@@ -59,6 +61,7 @@ public class AudioTestFragment extends Fragment {
     private AudioPlayer mVrPlayer;
     private AudioPlayer mSystemPlayer;
     private AudioPlayer mWavPlayer;
+    private HwAudioSource mHwAudioSource;
     private AudioPlayer[] mAllPlayers;
 
     private Handler mHandler;
@@ -66,7 +69,6 @@ public class AudioTestFragment extends Fragment {
 
     private Car mCar;
     private CarAppFocusManager mAppFocusManager;
-    private CarAudioManager mCarAudioManager;
     private AudioAttributes mMusicAudioAttrib;
     private AudioAttributes mNavAudioAttrib;
     private AudioAttributes mVrAudioAttrib;
@@ -94,7 +96,7 @@ public class AudioTestFragment extends Fragment {
                 }
     };
 
-    private void init() {
+    private void connectCar() {
         mContext = getContext();
         mHandler = new Handler(Looper.getMainLooper());
         mCar = Car.createCar(mContext, new ServiceConnection() {
@@ -111,43 +113,6 @@ public class AudioTestFragment extends Fragment {
                         CarAppFocusManager.APP_FOCUS_TYPE_NAVIGATION);
                 mAppFocusManager.addFocusListener(listener,
                         CarAppFocusManager.APP_FOCUS_TYPE_VOICE_COMMAND);
-                mCarAudioManager = (CarAudioManager) mCar.getCarManager(Car.AUDIO_SERVICE);
-                mMusicAudioAttrib = new AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_MEDIA)
-                        .build();
-                mNavAudioAttrib = new AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
-                        .build();
-                mVrAudioAttrib = new AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_ASSISTANT)
-                        .build();
-                mRadioAudioAttrib = new AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_MEDIA)
-                        .build();
-                mSystemSoundAudioAttrib = new AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
-                        .build();
-
-                mMusicPlayer = new AudioPlayer(mContext, R.raw.well_worth_the_wait,
-                        mMusicAudioAttrib);
-                mMusicPlayerShort = new AudioPlayer(mContext, R.raw.ring_classic_01,
-                        mMusicAudioAttrib);
-                mNavGuidancePlayer = new AudioPlayer(mContext, R.raw.turnright,
-                        mNavAudioAttrib);
-                mVrPlayer = new AudioPlayer(mContext, R.raw.one2six,
-                        mVrAudioAttrib);
-                mSystemPlayer = new AudioPlayer(mContext, R.raw.ring_classic_01,
-                        mSystemSoundAudioAttrib);
-                mWavPlayer = new AudioPlayer(mContext, R.raw.free_flight,
-                        mMusicAudioAttrib);
-                mAllPlayers = new AudioPlayer[] {
-                        mMusicPlayer,
-                        mMusicPlayerShort,
-                        mNavGuidancePlayer,
-                        mVrPlayer,
-                        mSystemPlayer,
-                        mWavPlayer
-                };
             }
             @Override
             public void onServiceDisconnected(ComponentName name) {
@@ -156,10 +121,57 @@ public class AudioTestFragment extends Fragment {
         mCar.connect();
     }
 
+    private void initializePlayers() {
+        mMusicAudioAttrib = new AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_MEDIA)
+            .build();
+        mNavAudioAttrib = new AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
+            .build();
+        mVrAudioAttrib = new AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_ASSISTANT)
+            .build();
+        mRadioAudioAttrib = new AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_MEDIA)
+            .build();
+        mSystemSoundAudioAttrib = new AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+            .build();
+
+        mMusicPlayer = new AudioPlayer(mContext, R.raw.well_worth_the_wait,
+            mMusicAudioAttrib);
+        mMusicPlayerShort = new AudioPlayer(mContext, R.raw.ring_classic_01,
+            mMusicAudioAttrib);
+        mNavGuidancePlayer = new AudioPlayer(mContext, R.raw.turnright,
+            mNavAudioAttrib);
+        mVrPlayer = new AudioPlayer(mContext, R.raw.one2six,
+            mVrAudioAttrib);
+        mSystemPlayer = new AudioPlayer(mContext, R.raw.ring_classic_01,
+            mSystemSoundAudioAttrib);
+        mWavPlayer = new AudioPlayer(mContext, R.raw.free_flight,
+            mMusicAudioAttrib);
+        final AudioDeviceInfo tuner = findTunerDevice(mContext);
+        if (tuner != null) {
+            mHwAudioSource = new HwAudioSource.Builder()
+                .setAudioAttributes(mMusicAudioAttrib)
+                .setAudioDeviceInfo(findTunerDevice(mContext))
+                .build();
+        }
+        mAllPlayers = new AudioPlayer[] {
+            mMusicPlayer,
+            mMusicPlayerShort,
+            mNavGuidancePlayer,
+            mVrPlayer,
+            mSystemPlayer,
+            mWavPlayer
+        };
+    }
+
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle bundle) {
         Log.i(TAG, "onCreateView");
-        init();
+        connectCar();
+        initializePlayers();
         View view = inflater.inflate(R.layout.audio, container, false);
         mAudioManager = (AudioManager) mContext.getSystemService(
                 Context.AUDIO_SERVICE);
@@ -238,7 +250,22 @@ public class AudioTestFragment extends Fragment {
                 v -> mAudioManager.setMicrophoneMute(false));
         view.findViewById(R.id.button_microphone_off).setOnClickListener(
                 v -> mAudioManager.setMicrophoneMute(true));
-
+        final View hwAudioSourceNotFound = view.findViewById(R.id.hw_audio_source_not_found);
+        final View hwAudioSourceStart = view.findViewById(R.id.hw_audio_source_start);
+        final View hwAudioSourceStop = view.findViewById(R.id.hw_audio_source_stop);
+        if (mHwAudioSource == null) {
+            hwAudioSourceNotFound.setVisibility(View.VISIBLE);
+            hwAudioSourceStart.setVisibility(View.GONE);
+            hwAudioSourceStop.setVisibility(View.GONE);
+        } else {
+            hwAudioSourceNotFound.setVisibility(View.GONE);
+            hwAudioSourceStart.setVisibility(View.VISIBLE);
+            hwAudioSourceStop.setVisibility(View.VISIBLE);
+            view.findViewById(R.id.hw_audio_source_start).setOnClickListener(
+                    v -> handleHwAudioSourceStart());
+            view.findViewById(R.id.hw_audio_source_stop).setOnClickListener(
+                    v -> handleHwAudioSourceStop());
+        }
 
         mEnableMocking = view.findViewById(R.id.button_mock_audio);
         mEnableMocking.setOnCheckedChangeListener((buttonView, isChecked) -> {
@@ -269,6 +296,7 @@ public class AudioTestFragment extends Fragment {
         for (AudioPlayer p : mAllPlayers) {
             p.stop();
         }
+        handleHwAudioSourceStop();
         if (mAudioFocusHandler != null) {
             mAudioFocusHandler.release();
             mAudioFocusHandler = null;
@@ -303,6 +331,29 @@ public class AudioTestFragment extends Fragment {
         mAudioManager.abandonAudioFocus(mNavFocusListener, mNavAudioAttrib);
         mAppFocusManager.abandonAppFocus(mOwnershipCallbacks,
                 CarAppFocusManager.APP_FOCUS_TYPE_NAVIGATION);
+    }
+
+    private AudioDeviceInfo findTunerDevice(Context context) {
+        AudioManager am = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
+        AudioDeviceInfo[] devices = am.getDevices(AudioManager.GET_DEVICES_INPUTS);
+        for (AudioDeviceInfo device : devices) {
+            if (device.getType() == AudioDeviceInfo.TYPE_FM_TUNER) {
+                return device;
+            }
+        }
+        return null;
+    }
+
+    private void handleHwAudioSourceStart() {
+        if (mHwAudioSource != null) {
+            mHwAudioSource.start();
+        }
+    }
+
+    private void handleHwAudioSourceStop() {
+        if (mHwAudioSource != null) {
+            mHwAudioSource.stop();
+        }
     }
 
     private void handleVrStart() {
@@ -354,6 +405,7 @@ public class AudioTestFragment extends Fragment {
         private final RadioGroup mRequestSelection;
         private final TextView mText;
         private final AudioFocusListener mFocusListener;
+        private AudioFocusRequest mFocusRequest;
 
         public FocusHandler(RadioGroup radioGroup, Button requestButton, TextView text) {
             mText = text;
@@ -363,16 +415,32 @@ public class AudioTestFragment extends Fragment {
             mFocusListener = new AudioFocusListener();
             requestButton.setOnClickListener(v -> {
                 int selectedButtonId = mRequestSelection.getCheckedRadioButtonId();
-                int focusRequest = AudioManager.AUDIOFOCUS_GAIN;
-                if (selectedButtonId == R.id.focus_gain_transient_duck) {
-                    focusRequest = AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK;
-                } else if (selectedButtonId == R.id.focus_release) {
-                    mAudioManager.abandonAudioFocus(mFocusListener);
-                    setFocusText(AUDIO_FOCUS_STATE_RELEASED_UNKNOWN);
-                    return;
+                int focusRequest;
+                switch (selectedButtonId) {
+                    case R.id.focus_gain:
+                        focusRequest = AudioManager.AUDIOFOCUS_GAIN;
+                        break;
+                    case R.id.focus_gain_transient:
+                        focusRequest = AudioManager.AUDIOFOCUS_GAIN_TRANSIENT;
+                        break;
+                    case R.id.focus_gain_transient_duck:
+                        focusRequest = AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK;
+                        break;
+                    case R.id.focus_gain_transient_exclusive:
+                        focusRequest = AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE;
+                        break;
+                    case R.id.focus_release:
+                    default:
+                        abandonAudioFocus();
+                        return;
                 }
-                int ret = mAudioManager.requestAudioFocus(mFocusListener,
-                        AudioManager.STREAM_MUSIC, focusRequest);
+                mFocusRequest = new AudioFocusRequest.Builder(focusRequest)
+                        .setAudioAttributes(new AudioAttributes.Builder()
+                                .setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
+                                .build())
+                        .setOnAudioFocusChangeListener(mFocusListener)
+                        .build();
+                int ret = mAudioManager.requestAudioFocus(mFocusRequest);
                 Log.i(TAG, "requestAudioFocus returned " + ret);
                 if (ret == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
                     setFocusText(AUDIO_FOCUS_STATE_GAIN);
@@ -388,7 +456,8 @@ public class AudioTestFragment extends Fragment {
             if (DBG) {
                 Log.i(TAG, "abandonAudioFocus");
             }
-            mAudioManager.abandonAudioFocus(mFocusListener);
+            mAudioManager.abandonAudioFocusRequest(mFocusRequest);
+            mFocusRequest = null;
             setFocusText(AUDIO_FOCUS_STATE_RELEASED_UNKNOWN);
         }
 

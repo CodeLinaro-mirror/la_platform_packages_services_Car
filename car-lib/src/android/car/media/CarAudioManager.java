@@ -17,12 +17,14 @@ package android.car.media;
 
 import android.annotation.NonNull;
 import android.annotation.RequiresPermission;
+import android.annotation.SystemApi;
 import android.annotation.TestApi;
 import android.car.Car;
 import android.car.CarLibLog;
 import android.car.CarManagerBase;
 import android.content.Context;
 import android.media.AudioAttributes;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.RemoteException;
@@ -52,8 +54,23 @@ public final class CarAudioManager implements CarManagerBase {
 
     /**
      * Zone id of the primary audio zone.
+     * @hide
      */
+    @SystemApi
     public static final int PRIMARY_AUDIO_ZONE = 0x0;
+
+    /**
+     * Extra for {@link android.media.AudioAttributes.Builder#addBundle(Bundle)}: when used in an
+     * {@link android.media.AudioFocusRequest}, the requester should receive all audio focus events,
+     * including {@link android.media.AudioManager#AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK}.
+     * The requester must hold {@link Car#PERMISSION_RECEIVE_CAR_AUDIO_DUCKING_EVENTS}; otherwise,
+     * this extra is ignored.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String AUDIOFOCUS_EXTRA_RECEIVE_DUCKING_EVENTS =
+            "android.car.media.AUDIOFOCUS_EXTRA_RECEIVE_DUCKING_EVENTS";
 
     private final ICarAudio mService;
     private final List<CarVolumeCallback> mCarVolumeCallbacks;
@@ -91,7 +108,10 @@ public final class CarAudioManager implements CarManagerBase {
      * Sets the volume index for a volume group in primary zone.
      *
      * @see {@link #setGroupVolume(int, int, int, int)}
+     * @hide
      */
+    @SystemApi
+    @RequiresPermission(Car.PERMISSION_CAR_CONTROL_AUDIO_VOLUME)
     public void setGroupVolume(int groupId, int index, int flags) {
         setGroupVolume(PRIMARY_AUDIO_ZONE, groupId, index, flags);
     }
@@ -105,7 +125,9 @@ public final class CarAudioManager implements CarManagerBase {
      *            {@link #getGroupMaxVolume(int, int)} for the largest valid value.
      * @param flags One or more flags (e.g., {@link android.media.AudioManager#FLAG_SHOW_UI},
      *              {@link android.media.AudioManager#FLAG_PLAY_SOUND})
+     * @hide
      */
+    @SystemApi
     @RequiresPermission(Car.PERMISSION_CAR_CONTROL_AUDIO_VOLUME)
     public void setGroupVolume(int zoneId, int groupId, int index, int flags) {
         try {
@@ -119,7 +141,10 @@ public final class CarAudioManager implements CarManagerBase {
      * Returns the maximum volume index for a volume group in primary zone.
      *
      * @see {@link #getGroupMaxVolume(int, int)}
+     * @hide
      */
+    @SystemApi
+    @RequiresPermission(Car.PERMISSION_CAR_CONTROL_AUDIO_VOLUME)
     public int getGroupMaxVolume(int groupId) {
         return getGroupMaxVolume(PRIMARY_AUDIO_ZONE, groupId);
     }
@@ -130,7 +155,9 @@ public final class CarAudioManager implements CarManagerBase {
      * @param zoneId The zone id whose volume group is queried.
      * @param groupId The volume group id whose maximum volume index is returned.
      * @return The maximum valid volume index for the given group.
+     * @hide
      */
+    @SystemApi
     @RequiresPermission(Car.PERMISSION_CAR_CONTROL_AUDIO_VOLUME)
     public int getGroupMaxVolume(int zoneId, int groupId) {
         try {
@@ -144,7 +171,10 @@ public final class CarAudioManager implements CarManagerBase {
      * Returns the minimum volume index for a volume group in primary zone.
      *
      * @see {@link #getGroupMinVolume(int, int)}
+     * @hide
      */
+    @SystemApi
+    @RequiresPermission(Car.PERMISSION_CAR_CONTROL_AUDIO_VOLUME)
     public int getGroupMinVolume(int groupId) {
         return getGroupMinVolume(PRIMARY_AUDIO_ZONE, groupId);
     }
@@ -155,7 +185,9 @@ public final class CarAudioManager implements CarManagerBase {
      * @param zoneId The zone id whose volume group is queried.
      * @param groupId The volume group id whose minimum volume index is returned.
      * @return The minimum valid volume index for the given group, non-negative
+     * @hide
      */
+    @SystemApi
     @RequiresPermission(Car.PERMISSION_CAR_CONTROL_AUDIO_VOLUME)
     public int getGroupMinVolume(int zoneId, int groupId) {
         try {
@@ -169,7 +201,10 @@ public final class CarAudioManager implements CarManagerBase {
      * Returns the current volume index for a volume group in primary zone.
      *
      * @see {@link #getGroupVolume(int, int)}
+     * @hide
      */
+    @SystemApi
+    @RequiresPermission(Car.PERMISSION_CAR_CONTROL_AUDIO_VOLUME)
     public int getGroupVolume(int groupId) {
         return getGroupVolume(PRIMARY_AUDIO_ZONE, groupId);
     }
@@ -183,7 +218,9 @@ public final class CarAudioManager implements CarManagerBase {
      *
      * @see #getGroupMaxVolume(int, int)
      * @see #setGroupVolume(int, int, int, int)
+     * @hide
      */
+    @SystemApi
     @RequiresPermission(Car.PERMISSION_CAR_CONTROL_AUDIO_VOLUME)
     public int getGroupVolume(int zoneId, int groupId) {
         try {
@@ -200,7 +237,9 @@ public final class CarAudioManager implements CarManagerBase {
      *              fully toward the front.  0.0 means evenly balanced.
      *
      * @see #setBalanceTowardRight(float)
+     * @hide
      */
+    @SystemApi
     @RequiresPermission(Car.PERMISSION_CAR_CONTROL_AUDIO_VOLUME)
     public void setFadeTowardFront(float value) {
         try {
@@ -217,7 +256,9 @@ public final class CarAudioManager implements CarManagerBase {
      *              fully toward the right.  0.0 means evenly balanced.
      *
      * @see #setFadeTowardFront(float)
+     * @hide
      */
+    @SystemApi
     @RequiresPermission(Car.PERMISSION_CAR_CONTROL_AUDIO_VOLUME)
     public void setBalanceTowardRight(float value) {
         try {
@@ -237,7 +278,9 @@ public final class CarAudioManager implements CarManagerBase {
      *
      * @see #createAudioPatch(String, int, int)
      * @see #releaseAudioPatch(CarAudioPatchHandle)
+     * @hide
      */
+    @SystemApi
     @RequiresPermission(Car.PERMISSION_CAR_CONTROL_AUDIO_SETTINGS)
     public @NonNull String[] getExternalSources() {
         try {
@@ -264,7 +307,9 @@ public final class CarAudioManager implements CarManagerBase {
      *
      * @see #getExternalSources()
      * @see #releaseAudioPatch(CarAudioPatchHandle)
+     * @hide
      */
+    @SystemApi
     @RequiresPermission(Car.PERMISSION_CAR_CONTROL_AUDIO_SETTINGS)
     public CarAudioPatchHandle createAudioPatch(String sourceAddress,
             @AudioAttributes.AttributeUsage int usage, int gainInMillibels) {
@@ -283,7 +328,9 @@ public final class CarAudioManager implements CarManagerBase {
      *
      * @see #getExternalSources()
      * @see #createAudioPatch(String, int, int)
+     * @hide
      */
+    @SystemApi
     @RequiresPermission(Car.PERMISSION_CAR_CONTROL_AUDIO_SETTINGS)
     public void releaseAudioPatch(CarAudioPatchHandle patch) {
         try {
@@ -297,7 +344,10 @@ public final class CarAudioManager implements CarManagerBase {
      * Gets the count of available volume groups in primary zone.
      *
      * @see {@link #getVolumeGroupCount(int)}
+     * @hide
      */
+    @SystemApi
+    @RequiresPermission(Car.PERMISSION_CAR_CONTROL_AUDIO_VOLUME)
     public int getVolumeGroupCount() {
         return getVolumeGroupCount(PRIMARY_AUDIO_ZONE);
     }
@@ -307,7 +357,9 @@ public final class CarAudioManager implements CarManagerBase {
      *
      * @param zoneId The zone id whois count of volume groups is queried.
      * @return Count of volume groups
+     * @hide
      */
+    @SystemApi
     @RequiresPermission(Car.PERMISSION_CAR_CONTROL_AUDIO_VOLUME)
     public int getVolumeGroupCount(int zoneId) {
         try {
@@ -321,7 +373,10 @@ public final class CarAudioManager implements CarManagerBase {
      * Gets the volume group id for a given {@link AudioAttributes} usage in primary zone.
      *
      * @see {@link #getVolumeGroupIdForUsage(int, int)}
+     * @hide
      */
+    @SystemApi
+    @RequiresPermission(Car.PERMISSION_CAR_CONTROL_AUDIO_VOLUME)
     public int getVolumeGroupIdForUsage(@AudioAttributes.AttributeUsage int usage) {
         return getVolumeGroupIdForUsage(PRIMARY_AUDIO_ZONE, usage);
     }
@@ -332,7 +387,9 @@ public final class CarAudioManager implements CarManagerBase {
      * @param zoneId The zone id whose volume group is queried.
      * @param usage The {@link AudioAttributes} usage to get a volume group from.
      * @return The volume group id where the usage belongs to
+     * @hide
      */
+    @SystemApi
     @RequiresPermission(Car.PERMISSION_CAR_CONTROL_AUDIO_VOLUME)
     public int getVolumeGroupIdForUsage(int zoneId, @AudioAttributes.AttributeUsage int usage) {
         try {
@@ -346,7 +403,10 @@ public final class CarAudioManager implements CarManagerBase {
      * Gets array of {@link AudioAttributes} usages for a volume group in primary zone.
      *
      * @see {@link #getUsagesForVolumeGroupId(int, int)}
+     * @hide
      */
+    @SystemApi
+    @RequiresPermission(Car.PERMISSION_CAR_CONTROL_AUDIO_VOLUME)
     public @NonNull int[] getUsagesForVolumeGroupId(int groupId) {
         return getUsagesForVolumeGroupId(PRIMARY_AUDIO_ZONE, groupId);
     }
@@ -357,7 +417,9 @@ public final class CarAudioManager implements CarManagerBase {
      * @param zoneId The zone id whose volume group is queried.
      * @param groupId The volume group id whose associated audio usages is returned.
      * @return Array of {@link AudioAttributes} usages for a given volume group id
+     * @hide
      */
+    @SystemApi
     @RequiresPermission(Car.PERMISSION_CAR_CONTROL_AUDIO_VOLUME)
     public @NonNull int[] getUsagesForVolumeGroupId(int zoneId, int groupId) {
         try {

@@ -33,7 +33,7 @@
             android:targetPackage="com.android.car.test"
             android:label="Tests for Car APIs"/>
 
-        <application android:label="CarServiceTest" android:name=".CarServiceTestApp"
+    <application android:label="CarServiceTest" android:name=".CarServiceTestApp"
             android:debuggable="true">
         <uses-library android:name="android.test.runner" />
         <service android:name="com.android.car.TestAppBlockingPolicyService"
@@ -42,9 +42,7 @@
                 <action android:name="android.car.content.pm.CarAppBlockingPolicyService"/>
             </intent-filter>
         </service>
-        <service android:name="com.android.car.SimpleVmsPublisherClientService"
-                 android:exported="true" />
-        <service android:name="com.android.car.VmsPublisherClientMockService"
+        <service android:name="com.android.car.MockedVmsTestBase$MockPublisherClient"
                  android:exported="true" />
 
         <activity android:name="com.android.car.SystemActivityMonitoringServiceTest$ActivityA"/>

@@ -16,7 +16,6 @@
 
 package com.android.car;
 
-import android.car.Car;
 import android.car.hardware.CarPropertyValue;
 import android.car.hardware.power.CarPowerManager;
 import android.car.hardware.power.CarPowerManager.CarPowerStateListener;
@@ -24,18 +23,15 @@ import android.car.hardware.property.CarPropertyEvent;
 import android.car.hardware.property.ICarPropertyEventListener;
 import android.car.userlib.CarUserManagerHelper;
 import android.content.BroadcastReceiver;
-import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.content.ServiceConnection;
 import android.hardware.automotive.vehicle.V2_0.VehicleIgnitionState;
 import android.hardware.automotive.vehicle.V2_0.VehicleProperty;
 import android.location.Location;
 import android.location.LocationManager;
 import android.os.Handler;
 import android.os.HandlerThread;
-import android.os.IBinder;
 import android.os.RemoteException;
 import android.os.SystemClock;
 import android.os.UserHandle;
@@ -81,22 +77,6 @@ public class CarLocationService extends BroadcastReceiver implements
     private final CarPropertyService mCarPropertyService;
     private final CarPropertyEventListener mCarPropertyEventListener;
     private final CarUserManagerHelper mCarUserManagerHelper;
-    private final Car mCar;
-    private final ServiceConnection mCarServiceConnection = new ServiceConnection() {
-        @Override
-        public void onServiceConnected(ComponentName name, IBinder service) {
-            mCarPowerManager = (CarPowerManager) mCar.getCarManager(Car.POWER_SERVICE);
-            mCarPowerManager.setListener(CarLocationService.this);
-        }
-
-        @Override
-        public void onServiceDisconnected(ComponentName name) {
-            if (mCarPowerManager != null) {
-                mCarPowerManager.clearListener();
-            }
-        }
-    };
-
     private int mTaskCount = 0;
     private HandlerThread mHandlerThread;
     private Handler mHandler;
@@ -106,25 +86,11 @@ public class CarLocationService extends BroadcastReceiver implements
             Context context,
             CarPropertyService carPropertyService,
             CarUserManagerHelper carUserManagerHelper) {
-        this(context, carPropertyService, carUserManagerHelper, null);
-    }
-
-    public CarLocationService(
-            Context context,
-            CarPropertyService carPropertyService,
-            CarUserManagerHelper carUserManagerHelper,
-            Car car) {
         logd("constructed");
         mContext = context;
         mCarPropertyService = carPropertyService;
         mCarPropertyEventListener = new CarPropertyEventListener();
         mCarUserManagerHelper = carUserManagerHelper;
-        if (car != null) {
-            mCar = car;
-        } else {
-            mCar = Car.createCar(context, mCarServiceConnection);
-            mCar.connect();
-        }
     }
 
     @Override
@@ -132,17 +98,23 @@ public class CarLocationService extends BroadcastReceiver implements
         logd("init");
         IntentFilter filter = new IntentFilter();
         filter.addAction(Intent.ACTION_USER_SWITCHED);
-        filter.addAction(Intent.ACTION_LOCKED_BOOT_COMPLETED);
         filter.addAction(LocationManager.MODE_CHANGED_ACTION);
-        filter.addAction(LocationManager.GPS_ENABLED_CHANGE_ACTION);
+        filter.addAction(LocationManager.PROVIDERS_CHANGED_ACTION);
         mContext.registerReceiver(this, filter);
         mCarPropertyService.registerListener(
                 VehicleProperty.IGNITION_STATE, 0, mCarPropertyEventListener);
+        mCarPowerManager = CarLocalServices.createCarPowerManager(mContext);
+        if (mCarPowerManager != null) { // null case happens for testing.
+            mCarPowerManager.setListener(CarLocationService.this);
+        }
     }
 
     @Override
     public void release() {
         logd("release");
+        if (mCarPowerManager != null) {
+            mCarPowerManager.clearListener();
+        }
         mCarPropertyService.unregisterListener(
                 VehicleProperty.IGNITION_STATE, mCarPropertyEventListener);
         mContext.unregisterReceiver(this);
@@ -183,14 +155,7 @@ public class CarLocationService extends BroadcastReceiver implements
     public void onReceive(Context context, Intent intent) {
         logd("onReceive " + intent);
         String action = intent.getAction();
-        if (action == Intent.ACTION_LOCKED_BOOT_COMPLETED) {
-            // If the system user is not headless, then we can inject location as soon as the
-            // system has completed booting.
-            if (!mCarUserManagerHelper.isHeadlessSystemUser()) {
-                logd("not headless on boot complete");
-                asyncOperation(() -> loadLocation());
-            }
-        } else if (action == Intent.ACTION_USER_SWITCHED) {
+        if (action == Intent.ACTION_USER_SWITCHED) {
             int userHandle = intent.getIntExtra(Intent.EXTRA_USER_HANDLE, -1);
             logd("USER_SWITCHED: " + userHandle);
             if (mCarUserManagerHelper.isHeadlessSystemUser()
@@ -206,7 +171,7 @@ public class CarLocationService extends BroadcastReceiver implements
             if (!locationEnabled) {
                 asyncOperation(() -> deleteCacheFile());
             }
-        } else if (action == LocationManager.GPS_ENABLED_CHANGE_ACTION
+        } else if (action == LocationManager.PROVIDERS_CHANGED_ACTION
                 && shouldCheckLocationPermissions()) {
             LocationManager locationManager =
                     (LocationManager) mContext.getSystemService(Context.LOCATION_SERVICE);

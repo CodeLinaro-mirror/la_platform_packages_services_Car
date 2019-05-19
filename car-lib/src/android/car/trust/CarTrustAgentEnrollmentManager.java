@@ -18,6 +18,8 @@ package android.car.trust;
 
 import static android.car.Car.PERMISSION_CAR_ENROLL_TRUST;
 
+import android.annotation.IntDef;
+import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
@@ -34,10 +36,10 @@ import android.util.Log;
 
 import com.android.internal.annotations.GuardedBy;
 
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.lang.ref.WeakReference;
-import java.util.Arrays;
 import java.util.List;
-import java.util.stream.Collectors;
 
 
 /**
@@ -69,7 +71,6 @@ public final class CarTrustAgentEnrollmentManager implements CarManagerBase {
     private static final String TAG = "CarTrustEnrollMgr";
     private static final String KEY_HANDLE = "handle";
     private static final String KEY_ACTIVE = "active";
-    private static final String KEY_SUCCESS = "success";
     private static final int MSG_ENROLL_ADVERTISING_STARTED = 0;
     private static final int MSG_ENROLL_ADVERTISING_FAILED = 1;
     private static final int MSG_ENROLL_DEVICE_CONNECTED = 2;
@@ -77,8 +78,8 @@ public final class CarTrustAgentEnrollmentManager implements CarManagerBase {
     private static final int MSG_ENROLL_HANDSHAKE_FAILURE = 4;
     private static final int MSG_ENROLL_AUTH_STRING_AVAILABLE = 5;
     private static final int MSG_ENROLL_TOKEN_ADDED = 6;
-    private static final int MSG_ENROLL_TOKEN_REVOKED = 7;
-    private static final int MSG_ENROLL_TOKEN_STATE_CHANGED = 8;
+    private static final int MSG_ENROLL_TOKEN_STATE_CHANGED = 7;
+    private static final int MSG_ENROLL_TOKEN_REMOVED = 8;
 
     private final Context mContext;
     private final ICarTrustAgentEnrollment mEnrollmentService;
@@ -92,6 +93,24 @@ public final class CarTrustAgentEnrollmentManager implements CarManagerBase {
             new ListenerToEnrollmentService(this);
     private final ListenerToBleService mListenerToBleService = new ListenerToBleService(this);
     private final EventCallbackHandler mEventCallbackHandler;
+
+    /**
+     * Enrollment Handshake failed.
+     */
+    public static final int ENROLLMENT_HANDSHAKE_FAILURE = 1;
+    /**
+     * Enrollment of a new device is not allowed.  This happens when either the whole feature is
+     * disabled or just the enrollment is disabled.  Useful when feature needs to be disabled
+     * in a lost/stolen phone scenario.
+     */
+    public static final int ENROLLMENT_NOT_ALLOWED = 2;
+
+    /** @hide */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef({ENROLLMENT_HANDSHAKE_FAILURE,
+            ENROLLMENT_NOT_ALLOWED})
+    public @interface TrustedDeviceEnrollmentError {
+    }
 
 
     /** @hide */
@@ -132,28 +151,15 @@ public final class CarTrustAgentEnrollmentManager implements CarManagerBase {
     }
 
     /**
-     * Initiates the handshake with the phone for enrollment.  This should be called after the
-     * user has confirmed the phone that is requesting enrollment.
-     *
-     * @param device the remote Bluetooth device that is trying to enroll.
-     */
-    @RequiresPermission(PERMISSION_CAR_ENROLL_TRUST)
-    public void initiateEnrollmentHandshake(BluetoothDevice device) {
-        try {
-            mEnrollmentService.initiateEnrollmentHandshake(device);
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
-    }
-
-    /**
-     * Confirms that the enrollment handshake has been accepted by the user.  This should be called
+     * Confirms that the enrollment handshake has been accepted by the user. This should be called
      * after the user has confirmed the verification code displayed on the UI.
+     *
+     * @param device the remote Bluetooth device that will receive the signal.
      */
     @RequiresPermission(PERMISSION_CAR_ENROLL_TRUST)
-    public void enrollmentHandshakeAccepted() {
+    public void enrollmentHandshakeAccepted(BluetoothDevice device) {
         try {
-            mEnrollmentService.enrollmentHandshakeAccepted();
+            mEnrollmentService.enrollmentHandshakeAccepted(device);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -172,28 +178,80 @@ public final class CarTrustAgentEnrollmentManager implements CarManagerBase {
     }
 
     /**
-     * Activate the newly added escrow token.
+     * Returns {@code true} if the escrow token associated with the given handle is active.
+     * <p>
+     * When a new escrow token has been added as part of the Trusted device enrollment, the client
+     * will receive {@link CarTrustAgentEnrollmentCallback#onEscrowTokenAdded(long)} and
+     * {@link CarTrustAgentEnrollmentCallback#onEscrowTokenActiveStateChanged(long, boolean)}
+     * callbacks.  This method provides a way to query for the token state at a later point of time.
      *
      * @param handle the handle corresponding to the escrow token
+     * @param uid    user id associated with the token
+     * @return true if the token is active, false if not
      */
     @RequiresPermission(PERMISSION_CAR_ENROLL_TRUST)
-    public void activateToken(long handle) {
+    public boolean isEscrowTokenActive(long handle, int uid) {
         try {
-            mEnrollmentService.activateToken(handle);
+            return mEnrollmentService.isEscrowTokenActive(handle, uid);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
     }
 
     /**
-     * Revoke trust for the remote device denoted by the handle.
+     * Remove the escrow token that is associated with the given handle and uid.
      *
      * @param handle the handle associated with the escrow token
+     * @param uid    user id associated with the token
      */
     @RequiresPermission(PERMISSION_CAR_ENROLL_TRUST)
-    public void revokeTrust(long handle) {
+    public void removeEscrowToken(long handle, int uid) {
         try {
-            mEnrollmentService.revokeTrust(handle);
+            mEnrollmentService.removeEscrowToken(handle, uid);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Remove all of the trusted devices associated with the given user.
+     *
+     * @param uid User id to remove the devices for
+     */
+    @RequiresPermission(PERMISSION_CAR_ENROLL_TRUST)
+    public void removeAllTrustedDevices(int uid) {
+        try {
+            mEnrollmentService.removeAllTrustedDevices(uid);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Enable or Disable Trusted device enrollment.  Once disabled, head unit will not broadcast
+     * for enrollment until enabled back.
+     *
+     * @param isEnabled {@code true} enables enrollment.
+     */
+    @RequiresPermission(PERMISSION_CAR_ENROLL_TRUST)
+    public void setTrustedDeviceEnrollmentEnabled(boolean isEnabled) {
+        try {
+            mEnrollmentService.setTrustedDeviceEnrollmentEnabled(isEnabled);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Enable or disable Unlocking with a trusted device. Once disabled, head unit will not
+     * broadcast until enabled back.
+     *
+     * @param isEnabled {@code true} enables unlock.
+     */
+    @RequiresPermission(PERMISSION_CAR_ENROLL_TRUST)
+    public void setTrustedDeviceUnlockEnabled(boolean isEnabled) {
+        try {
+            mEnrollmentService.setTrustedDeviceUnlockEnabled(isEnabled);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -280,18 +338,18 @@ public final class CarTrustAgentEnrollmentManager implements CarManagerBase {
     }
 
     /**
-     * Provides a list of enrollment handles for the given user id.
+     * Provides a list that contains information about the enrolled devices for the given user id.
+     * <p>
      * Each enrollment handle corresponds to a trusted device for the given user.
      *
      * @param uid user id.
-     * @return list of the Enrollment handles for the user id.
+     * @return list of the Enrollment handles and user names for the user id.
      */
     @RequiresPermission(PERMISSION_CAR_ENROLL_TRUST)
-    public List<Integer> getEnrollmentHandlesForUser(int uid) {
+    @NonNull
+    public List<TrustedDeviceInfo> getEnrolledDeviceInfoForUser(int uid) {
         try {
-            return Arrays.stream(
-                    mEnrollmentService.getEnrollmentHandlesForUser(uid)).boxed().collect(
-                    Collectors.toList());
+            return mEnrollmentService.getEnrolledDeviceInfosForUser(uid);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -307,12 +365,14 @@ public final class CarTrustAgentEnrollmentManager implements CarManagerBase {
      */
     public interface CarTrustAgentEnrollmentCallback {
         /**
-         * Communicate about failure/timeouts in the handshake process.
+         * Communicate about failure/timeouts in the handshake process.  BluetoothDevice will be
+         * null when the returned error code is {@link #ENROLLMENT_NOT_ALLOWED}.
          *
          * @param device    the remote device trying to enroll
          * @param errorCode information on what failed.
          */
-        void onEnrollmentHandshakeFailure(BluetoothDevice device, int errorCode);
+        void onEnrollmentHandshakeFailure(@Nullable BluetoothDevice device,
+                @TrustedDeviceEnrollmentError int errorCode);
 
         /**
          * Present the pairing/authentication string to the user.
@@ -332,12 +392,14 @@ public final class CarTrustAgentEnrollmentManager implements CarManagerBase {
         void onEscrowTokenAdded(long handle);
 
         /**
-         * Escrow token corresponding to the given handle has been removed.
+         * Escrow token was removed as a result of a call to {@link #removeEscrowToken(long handle,
+         * int uid)}. The peer device associated with this token is not trusted for authentication
+         * anymore.
          *
-         * @param handle  the handle associated with the escrow token.
-         * @param success status of the revoke operation.
+         * @param handle the handle associated with the escrow token.
          */
-        void onTrustRevoked(long handle, boolean success);
+        void onEscrowTokenRemoved(long handle);
+
 
         /**
          * Escrow token's active state changed.
@@ -346,7 +408,6 @@ public final class CarTrustAgentEnrollmentManager implements CarManagerBase {
          * @param active True if token has been activated, false if not.
          */
         void onEscrowTokenActiveStateChanged(long handle, boolean active);
-
     }
 
     /**
@@ -372,7 +433,7 @@ public final class CarTrustAgentEnrollmentManager implements CarManagerBase {
         /**
          * Indicates a failure in BLE broadcasting for enrollment.
          */
-        void onEnrollmentAdvertisingFailed(int errorCode);
+        void onEnrollmentAdvertisingFailed();
     }
 
     private static final class ListenerToEnrollmentService extends
@@ -387,7 +448,8 @@ public final class CarTrustAgentEnrollmentManager implements CarManagerBase {
          * Communicate about failure/timeouts in the handshake process.
          */
         @Override
-        public void onEnrollmentHandshakeFailure(BluetoothDevice device, int errorCode) {
+        public void onEnrollmentHandshakeFailure(BluetoothDevice device,
+                @TrustedDeviceEnrollmentError int errorCode) {
             CarTrustAgentEnrollmentManager enrollmentManager = mMgr.get();
             if (enrollmentManager == null) {
                 return;
@@ -430,19 +492,18 @@ public final class CarTrustAgentEnrollmentManager implements CarManagerBase {
         }
 
         /**
-         * Escrow token corresponding to the given handle has been removed.
+         * Escrow token was removed.
          */
         @Override
-        public void onTrustRevoked(long handle, boolean success) {
+        public void onEscrowTokenRemoved(long handle) {
             CarTrustAgentEnrollmentManager enrollmentManager = mMgr.get();
             if (enrollmentManager == null) {
                 return;
             }
             Message message = enrollmentManager.getEventCallbackHandler().obtainMessage(
-                    MSG_ENROLL_TOKEN_REVOKED);
+                    MSG_ENROLL_TOKEN_REMOVED);
             Bundle data = new Bundle();
             data.putLong(KEY_HANDLE, handle);
-            data.putBoolean(KEY_SUCCESS, success);
             message.setData(data);
             enrollmentManager.getEventCallbackHandler().sendMessage(message);
         }
@@ -491,14 +552,14 @@ public final class CarTrustAgentEnrollmentManager implements CarManagerBase {
          * Called when the BLE enrollment advertisement fails to start.
          * see AdvertiseCallback#ADVERTISE_FAILED_* for possible error codes.
          */
-        public void onEnrollmentAdvertisingFailed(int errorCode) {
+        public void onEnrollmentAdvertisingFailed() {
             CarTrustAgentEnrollmentManager enrollmentManager = mMgr.get();
             if (enrollmentManager == null) {
                 return;
             }
             enrollmentManager.getEventCallbackHandler().sendMessage(
                     enrollmentManager.getEventCallbackHandler().obtainMessage(
-                            MSG_ENROLL_ADVERTISING_FAILED, errorCode));
+                            MSG_ENROLL_ADVERTISING_FAILED));
         }
 
         /**
@@ -556,8 +617,8 @@ public final class CarTrustAgentEnrollmentManager implements CarManagerBase {
                 case MSG_ENROLL_HANDSHAKE_FAILURE:
                 case MSG_ENROLL_AUTH_STRING_AVAILABLE:
                 case MSG_ENROLL_TOKEN_ADDED:
-                case MSG_ENROLL_TOKEN_REVOKED:
                 case MSG_ENROLL_TOKEN_STATE_CHANGED:
+                case MSG_ENROLL_TOKEN_REMOVED:
                     enrollmentManager.dispatchEnrollmentCallback(message);
                     break;
                 default:
@@ -585,7 +646,7 @@ public final class CarTrustAgentEnrollmentManager implements CarManagerBase {
                 bleCallback.onEnrollmentAdvertisingStarted();
                 break;
             case MSG_ENROLL_ADVERTISING_FAILED:
-                bleCallback.onEnrollmentAdvertisingFailed((int) message.obj);
+                bleCallback.onEnrollmentAdvertisingFailed();
                 break;
             case MSG_ENROLL_DEVICE_CONNECTED:
                 bleCallback.onBleEnrollmentDeviceConnected((BluetoothDevice) message.obj);
@@ -631,14 +692,6 @@ public final class CarTrustAgentEnrollmentManager implements CarManagerBase {
                 }
                 enrollmentCallback.onEscrowTokenAdded(data.getLong(KEY_HANDLE));
                 break;
-            case MSG_ENROLL_TOKEN_REVOKED:
-                data = message.getData();
-                if (data == null) {
-                    break;
-                }
-                enrollmentCallback.onTrustRevoked(data.getLong(KEY_HANDLE),
-                        data.getBoolean(KEY_SUCCESS));
-                break;
             case MSG_ENROLL_TOKEN_STATE_CHANGED:
                 data = message.getData();
                 if (data == null) {
@@ -646,6 +699,13 @@ public final class CarTrustAgentEnrollmentManager implements CarManagerBase {
                 }
                 enrollmentCallback.onEscrowTokenActiveStateChanged(data.getLong(KEY_HANDLE),
                         data.getBoolean(KEY_ACTIVE));
+                break;
+            case MSG_ENROLL_TOKEN_REMOVED:
+                data = message.getData();
+                if (data == null) {
+                    break;
+                }
+                enrollmentCallback.onEscrowTokenRemoved(data.getLong(KEY_HANDLE));
                 break;
             default:
                 break;
@@ -661,7 +721,8 @@ public final class CarTrustAgentEnrollmentManager implements CarManagerBase {
         final String mAuthString;
         final int mErrorCode;
 
-        AuthInfo(BluetoothDevice device, @Nullable String authString, int errorCode) {
+        AuthInfo(BluetoothDevice device, @Nullable String authString,
+                @TrustedDeviceEnrollmentError int errorCode) {
             mDevice = device;
             mAuthString = authString;
             mErrorCode = errorCode;
