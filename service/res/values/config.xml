@@ -35,7 +35,7 @@
 
     <string name="inputService">android.car.input.service/.DefaultInputService</string>
 
-    <string name="instrumentClusterRendererService">android.car.cluster.loggingrenderer/.LoggingClusterRenderingService</string>
+    <string name="instrumentClusterRendererService">android.car.cluster.sample/.ClusterRenderingServiceImpl</string>
 
     <!--  Whether to enable Activity blocking for safety. When Activity blocking is enabled,
           only whitelisted safe Activities will be allowed while car is not parked. -->
@@ -47,10 +47,17 @@
           blocked in a UX restricted state.
           Format of each entry is either to specify package name to whitelist the whole package or
           use format of "packagename/activity_classname" for tagging each activities.
+          For general guidelines to design distraction optimized apps, please refer
+          to Android Auto Driver Distraction Guidelines. -->
+    <string name="activityWhitelist"></string>
+    <!--  Comma separated list of activities that need to be exempted from getting
+          blocked in a UX restricted state.
+          Format of each entry is either to specify package name to whitelist the whole package or
+          use format of "packagename/activity_classname" for tagging each activities.
           The current implementations expects the following system packages/activities to be
           whitelisted. For general guidelines to design distraction optimized apps, please refer
           to Android Auto Driver Distraction Guidelines. -->
-    <string name="activityWhitelist">com.android.systemui,com.google.android.packageinstaller/com.android.packageinstaller.permission.ui.GrantPermissionsActivity,android/com.android.internal.app.ResolverActivity</string>
+    <string name="systemActivityWhitelist">com.android.systemui,com.google.android.packageinstaller/com.android.packageinstaller.permission.ui.GrantPermissionsActivity,android/com.android.internal.app.ResolverActivity</string>
     <!--  Comma separated list of activities that will be blocked during restricted state.
           Format of each entry is either to specify package name to whitelist the whole package
           or use format of "packagename/activity_classname" for tagging each activities.-->
@@ -122,6 +129,10 @@
          device specific model id. -->
     <integer name="fastPairModelId">0x000000</integer>
 
+    <!-- Maximum allowed time to run garage mode. Note that 15 min (=900sec) is the minimum required
+         duration and this should not be made shorter. -->
+    <integer name="maxGarageModeRunningDurationInSecs">900</integer>
+
     <!-- The garage mode configuration, specifying the time after shutdown to reboot into garage
          mode and the number of attempts at that time to try before moving to the next wake up
          time. This is intended to be a back-off pattern. -->
@@ -134,6 +145,60 @@
         <item>7d,3</item>
     </string-array>
 
+    <!-- The services that needs to be started earlier in the boot sequence and in particular order.
+         Every item in this array contains a flatten component name of a service that needs to be
+         started and a list of parameters after hashtag symbol. Here's the format:
+
+         <item>com.bar.foo/.Service#bind={true|false},user={all|system|foreground},trigger={asap,userUnlocked}</item>
+
+         bind: indicates whether service needs to be bound or started, if the value is 'true'
+               the service will be bound by calling Context#bindService(...), otherwise it will
+               be started using Context#startService. If service was bound it will be restarted
+               unless it is constantly crashing. The default value is 'false'
+         user: all - the service will be bound/started for system and all foreground users
+               system - the service will be started/bound only for system user (u0)
+               foreground - the service will be bound/started only for foreground users
+               The default value is 'all'
+         trigger: indicates when the service needs to be started/bound
+               asap - the service might be bound when user is not fully loaded, be careful with
+                      this value, the service also needs to have directBootAware flag set to true
+               userUnlocked - start service when user unlocked the device
+               The default value is 'userUnlocked'
+
+         If the service bound/started for foreground user it will be unbound/stopped when user
+         is no longer foreground.
+     -->
+    <string-array translatable="false" name="config_earlyStartupServices">
+        <!-- list your services here -->
+    </string-array>
+
     <string name="config_TetheredProjectionAccessPointSsid" translatable="false">CarAP</string>
+
+    <!-- The consent activity that must be shown for every unknown mobile device before projection
+         gets started.  The format is: com.your.package/com.your.Activity  -->
+    <string name="config_projectionConsentActivity" translatable="false"/>
+
+    <!-- Display Id where projection rendering activity needs to be shown, Specify -1 to use system
+         defaults -->
+    <integer name="config_projectionActivityDisplayId" translatable="false">-1</integer>
+
+    <!-- Bounds of the projection activity on the screen. It should be in the pixels and screen
+         coordinates in the following order: left, top, right, bottom. -->
+    <integer-array name="config_projectionActivityLaunchBounds" translatable="false"/>
+
+    <!-- UI mode for projection activity. See ProjectionOptions class for possible values. -->
+    <integer name="config_projectionUiMode" translatable="false">0</integer>
+
+    <!-- service/characteristics uuid for adding new escrow token -->
+    <string name="enrollment_service_uuid" translatable="false">5e2a68a4-27be-43f9-8d1e-4546976fabd7</string>
+    <string name="enrollment_handle_uuid" translatable="false">5e2a68a5-27be-43f9-8d1e-4546976fabd7</string>
+    <string name="enrollment_token_uuid" translatable="false">5e2a68a6-27be-43f9-8d1e-4546976fabd7</string>
+
+    <!-- service/characteristics uuid for unlocking a device -->
+    <string name="unlock_service_uuid" translatable="false">5e2a68a1-27be-43f9-8d1e-4546976fabd7</string>
+    <string name="unlock_escrow_token_uuid" translatable="false">5e2a68a2-27be-43f9-8d1e-4546976fabd7</string>
+    <string name="unlock_handle_uuid" translatable="false">5e2a68a3-27be-43f9-8d1e-4546976fabd7</string>
+
+    <string name="token_handle_shared_preferences" translatable="false">com.android.car.trust.TOKEN_HANDLE</string>
 
 </resources>

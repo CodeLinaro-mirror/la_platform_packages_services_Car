@@ -33,6 +33,7 @@ import android.car.hardware.cabin.CarCabinManager;
 import android.car.hardware.hvac.CarHvacManager;
 import android.car.hardware.power.CarPowerManager;
 import android.car.hardware.property.CarPropertyManager;
+import android.car.hardware.property.ICarProperty;
 import android.car.media.CarAudioManager;
 import android.car.media.CarMediaManager;
 import android.car.navigation.CarNavigationStatusManager;
@@ -66,16 +67,12 @@ import java.util.HashMap;
  *   Calling this API on a device with no such feature will lead to an exception.
  */
 public final class Car {
-
     /**
-     * Represent the version of Car API. This is only updated when there is API change.
-     * 1 : N
-     * 2 : O
-     * 3 : O-MR1
+     * Service name for {@link CarSensorManager}, to be used in {@link #getCarManager(String)}.
+     *
+     * @deprecated  {@link CarSensorManager} is deprecated. Use {@link CarPropertyManager} instead.
      */
-    public static final int VERSION = 3;
-
-    /** Service name for {@link CarSensorManager}, to be used in {@link #getCarManager(String)}. */
+    @Deprecated
     public static final String SENSOR_SERVICE = "sensor";
 
     /** Service name for {@link CarInfoManager}, to be used in {@link #getCarManager(String)}. */
@@ -103,8 +100,12 @@ public final class Car {
     public static final String CAR_INSTRUMENT_CLUSTER_SERVICE = "cluster_service";
 
     /**
+     * Service name for {@link CarCabinManager}.
+     *
+     * @deprecated {@link CarCabinManager} is deprecated. Use {@link CarPropertyManager} instead.
      * @hide
      */
+    @Deprecated
     @SystemApi
     public static final String CABIN_SERVICE = "cabin";
 
@@ -115,8 +116,11 @@ public final class Car {
     public static final String DIAGNOSTIC_SERVICE = "diagnostic";
 
     /**
+     * Service name for {@link CarHvacManager}
+     * @deprecated {@link CarHvacManager} is deprecated. Use {@link CarPropertyManager} instead.
      * @hide
      */
+    @Deprecated
     @SystemApi
     public static final String HVAC_SERVICE = "hvac";
 
@@ -133,14 +137,18 @@ public final class Car {
     public static final String PROJECTION_SERVICE = "projection";
 
     /**
-     * @hide
+     * Service name for {@link CarPropertyManager}
      */
-    @SystemApi
     public static final String PROPERTY_SERVICE = "property";
 
     /**
+     * Service name for {@link CarVendorExtensionManager}
+     *
+     * @deprecated {@link CarVendorExtensionManager} is deprecated.
+     * Use {@link CarPropertyManager} instead.
      * @hide
      */
+    @Deprecated
     @SystemApi
     public static final String VENDOR_EXTENSION_SERVICE = "vendor_extension";
 
@@ -177,6 +185,13 @@ public final class Car {
      * @hide
      */
     public static final String CAR_MEDIA_SERVICE = "car_media";
+
+    /**
+     *
+     * Service name for {@link android.car.CarBugreportManager}
+     * @hide
+     */
+    public static final String CAR_BUGREPORT_SERVICE = "car_bugreport";
 
     /**
      * @hide
@@ -265,6 +280,15 @@ public final class Car {
      */
     public static final String PERMISSION_CAR_CONTROL_AUDIO_SETTINGS =
             "android.car.permission.CAR_CONTROL_AUDIO_SETTINGS";
+
+    /**
+     * Permission necessary to receive full audio ducking events from car audio focus handler.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String PERMISSION_RECEIVE_CAR_AUDIO_DUCKING_EVENTS =
+            "android.car.permission.RECEIVE_CAR_AUDIO_DUCKING_EVENTS";
 
     /**
      * Permission necessary to use {@link CarNavigationStatusManager}.
@@ -400,6 +424,14 @@ public final class Car {
      */
     @SystemApi
     public static final String PERMISSION_CAR_PROJECTION = "android.car.permission.CAR_PROJECTION";
+
+    /**
+     * Permission necessary to access projection status.
+     * @hide
+     */
+    @SystemApi
+    public static final String PERMISSION_CAR_PROJECTION_STATUS =
+            "android.car.permission.ACCESS_CAR_PROJECTION_STATUS";
 
     /**
      * Permission necessary to mock vehicle hal for testing.
@@ -858,8 +890,8 @@ public final class Car {
                 manager = new CarProjectionManager(binder, mEventHandler);
                 break;
             case PROPERTY_SERVICE:
-                manager = new CarPropertyManager(binder, mEventHandler, false,
-                                                 "CarPropertyManager");
+                manager = new CarPropertyManager(ICarProperty.Stub.asInterface(binder),
+                    mEventHandler);
                 break;
             case VENDOR_EXTENSION_SERVICE:
                 manager = new CarVendorExtensionManager(binder, mEventHandler);
@@ -895,6 +927,9 @@ public final class Car {
                 break;
             case CAR_MEDIA_SERVICE:
                 manager = new CarMediaManager(binder);
+                break;
+            case CAR_BUGREPORT_SERVICE:
+                manager = new CarBugreportManager(binder, mContext);
                 break;
             default:
                 break;

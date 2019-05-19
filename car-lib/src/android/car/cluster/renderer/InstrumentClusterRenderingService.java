@@ -32,11 +32,16 @@ import android.content.ActivityNotFoundException;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.content.pm.ProviderInfo;
 import android.content.pm.ResolveInfo;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.os.ParcelFileDescriptor;
 import android.os.RemoteException;
 import android.os.UserHandle;
 import android.util.Log;
@@ -47,14 +52,19 @@ import com.android.internal.annotations.GuardedBy;
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 /**
- * A service that used for interaction between Car Service and Instrument Cluster. Car Service may
+ * A service used for interaction between Car Service and Instrument Cluster. Car Service may
  * provide internal navigation binder interface to Navigation App and all notifications will be
  * eventually land in the {@link NavigationRenderer} returned by {@link #getNavigationRenderer()}.
  *
@@ -73,6 +83,14 @@ import java.util.function.Supplier;
 public abstract class InstrumentClusterRenderingService extends Service {
     private static final String TAG = CarLibLog.TAG_CLUSTER;
 
+    /**
+     * This constant is kept here for backwards compatibility only.
+     * @deprecated TODO (b/130255007): Remove this along {@link NavigationRenderer#onEvent(int,
+     * Bundle)}
+     */
+    @Deprecated
+    private static final int NAVIGATION_STATE_EVENT_ID = 1;
+
     private final Object mLock = new Object();
     private RendererBinder mRendererBinder;
     private Handler mUiHandler = new Handler(Looper.getMainLooper());
@@ -85,15 +103,45 @@ public abstract class InstrumentClusterRenderingService extends Service {
     private static class ContextOwner {
         final int mUid;
         final int mPid;
+        final Set<String> mPackageNames;
+        final Set<String> mAuthorities;
 
-        ContextOwner(int uid, int pid) {
+        ContextOwner(int uid, int pid, PackageManager packageManager) {
             mUid = uid;
             mPid = pid;
+            String[] packageNames = uid != 0 ? packageManager.getPackagesForUid(uid)
+                    : null;
+            mPackageNames = packageNames != null
+                    ? Collections.unmodifiableSet(new HashSet<>(Arrays.asList(packageNames)))
+                    : Collections.emptySet();
+            mAuthorities = Collections.unmodifiableSet(mPackageNames.stream()
+                    .map(packageName -> getAuthoritiesForPackage(packageManager, packageName))
+                    .flatMap(Collection::stream)
+                    .collect(Collectors.toSet()));
         }
 
         @Override
         public String toString() {
-            return "{uid: " + mUid + ", pid: " + mPid + "}";
+            return "{uid: " + mUid + ", pid: " + mPid + ", packagenames: " + mPackageNames
+                    + ", authorities: " + mAuthorities + "}";
+        }
+
+        private List<String> getAuthoritiesForPackage(PackageManager packageManager,
+                String packageName) {
+            try {
+                ProviderInfo[] providers = packageManager.getPackageInfo(packageName,
+                        PackageManager.GET_PROVIDERS).providers;
+                if (providers == null) {
+                    return Collections.emptyList();
+                }
+                return Arrays.stream(providers)
+                        .map(provider -> provider.authority)
+                        .collect(Collectors.toList());
+            } catch (PackageManager.NameNotFoundException e) {
+                Log.w(TAG, "Package name not found while retrieving content provider authorities: "
+                        + packageName);
+                return Collections.emptyList();
+            }
         }
     }
 
@@ -199,7 +247,7 @@ public abstract class InstrumentClusterRenderingService extends Service {
      */
     @Nullable
     private ComponentName getNavigationComponentByOwner(ContextOwner contextOwner) {
-        for (String packageName : getPackageNamesForUid(contextOwner)) {
+        for (String packageName : contextOwner.mPackageNames) {
             ComponentName component = getComponentFromPackage(packageName);
             if (component != null) {
                 if (Log.isLoggable(TAG, Log.DEBUG)) {
@@ -209,14 +257,6 @@ public abstract class InstrumentClusterRenderingService extends Service {
             }
         }
         return null;
-    }
-
-    private String[] getPackageNamesForUid(ContextOwner contextOwner) {
-        if (contextOwner == null || contextOwner.mUid == 0 || contextOwner.mPid == 0) {
-            return new String[0];
-        }
-        String[] packageNames  = getPackageManager().getPackagesForUid(contextOwner.mUid);
-        return packageNames != null ? packageNames : new String[0];
     }
 
     private ContextOwner getNavigationContextOwner() {
@@ -338,8 +378,7 @@ public abstract class InstrumentClusterRenderingService extends Service {
         writer.println("activity options: " + mActivityOptions);
         writer.println("activity state: " + mActivityState);
         writer.println("current nav component: " + mNavigationComponent);
-        writer.println("current nav packages: " + Arrays.toString(getPackageNamesForUid(
-                getNavigationContextOwner())));
+        writer.println("current nav packages: " + getNavigationContextOwner().mPackageNames);
     }
 
     private class RendererBinder extends IInstrumentCluster.Stub {
@@ -356,8 +395,11 @@ public abstract class InstrumentClusterRenderingService extends Service {
 
         @Override
         public void setNavigationContextOwner(int uid, int pid) throws RemoteException {
+            if (Log.isLoggable(TAG, Log.DEBUG)) {
+                Log.d(TAG, "Updating navigation ownership to uid: " + uid + ", pid: " + pid);
+            }
             synchronized (mLock) {
-                mNavContextOwner = new ContextOwner(uid, pid);
+                mNavContextOwner = new ContextOwner(uid, pid, getPackageManager());
             }
             mUiHandler.post(InstrumentClusterRenderingService.this::updateNavigationActivity);
         }
@@ -376,17 +418,22 @@ public abstract class InstrumentClusterRenderingService extends Service {
         }
 
         @Override
-        public void onEvent(int eventType, Bundle bundle) throws RemoteException {
+        @SuppressWarnings("deprecation")
+        public void onNavigationStateChanged(@Nullable Bundle bundle) throws RemoteException {
+            assertClusterManagerPermission();
             assertContextOwnership();
             mUiHandler.post(() -> {
                 if (mNavigationRenderer != null) {
-                    mNavigationRenderer.onEvent(eventType, bundle);
+                    // Invoking deprecated method to maintain backwards compatibility
+                    mNavigationRenderer.onEvent(NAVIGATION_STATE_EVENT_ID, bundle);
+                    mNavigationRenderer.onNavigationStateChanged(bundle);
                 }
             });
         }
 
         @Override
         public CarNavigationInstrumentCluster getInstrumentClusterInfo() throws RemoteException {
+            assertClusterManagerPermission();
             return runAndWaitResult(() -> mNavigationRenderer.getNavigationProperties());
         }
 
@@ -400,6 +447,13 @@ public abstract class InstrumentClusterRenderingService extends Service {
                             + " not an owner of APP_FOCUS_TYPE_NAVIGATION " + mNavContextOwner);
                 }
             }
+        }
+    }
+
+    private void assertClusterManagerPermission() {
+        if (checkCallingOrSelfPermission(Car.PERMISSION_CAR_NAVIGATION_MANAGER)
+                != PackageManager.PERMISSION_GRANTED) {
+            throw new SecurityException("requires " + Car.PERMISSION_CAR_NAVIGATION_MANAGER);
         }
     }
 
@@ -418,5 +472,58 @@ public abstract class InstrumentClusterRenderingService extends Service {
             throw new RuntimeException(e);
         }
         return result.get();
+    }
+
+    /**
+     * Fetches a bitmap from the navigation context owner (application holding navigation focus).
+     * It returns null if:
+     * <ul>
+     * <li>there is no navigation context owner
+     * <li>or if the {@link Uri} is invalid
+     * <li>or if it references a process other than the current navigation context owner
+     * </ul>
+     * This is a costly operation. Returned bitmaps should be cached and fetching should be done on
+     * a secondary thread.
+     */
+    @Nullable
+    public Bitmap getBitmap(Uri uri) {
+        try {
+            ContextOwner contextOwner = getNavigationContextOwner();
+            if (contextOwner == null) {
+                Log.e(TAG, "No context owner available while fetching: " + uri);
+                return null;
+            }
+
+            String host = uri.getHost();
+
+            if (!contextOwner.mAuthorities.contains(host)) {
+                Log.e(TAG, "Uri points to an authority not handled by the current context owner: "
+                        + uri + " (valid authorities: " + contextOwner.mAuthorities + ")");
+                return null;
+            }
+
+            // Add user to URI to make the request to the right instance of content provider
+            // (see ContentProvider#getUserIdFromAuthority()).
+            int userId = UserHandle.getUserId(contextOwner.mUid);
+            Uri filteredUid = uri.buildUpon().encodedAuthority(userId + "@" + host).build();
+
+            // Fetch the bitmap
+            if (Log.isLoggable(TAG, Log.DEBUG)) {
+                Log.d(TAG, "Requesting bitmap: " + uri);
+            }
+            ParcelFileDescriptor fileDesc = getContentResolver()
+                    .openFileDescriptor(filteredUid, "r");
+            if (fileDesc != null) {
+                Bitmap bitmap = BitmapFactory.decodeFileDescriptor(fileDesc.getFileDescriptor());
+                fileDesc.close();
+                return bitmap;
+            } else {
+                Log.e(TAG, "Failed to create pipe for uri string: " + uri);
+            }
+        } catch (Throwable e) {
+            Log.e(TAG, "Unable to fetch uri: " + uri, e);
+        }
+
+        return null;
     }
 }

@@ -34,10 +34,12 @@ import android.os.UserHandle;
 import android.os.UserManager;
 import android.provider.Settings;
 import android.sysprop.CarProperties;
+import android.telephony.TelephonyManager;
 import android.text.TextUtils;
 import android.util.Log;
 
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.os.RoSystemProperties;
 import com.android.internal.util.UserIcons;
 
 import com.google.android.collect.Sets;
@@ -71,7 +73,8 @@ public class CarUserManagerHelper {
     );
 
     /**
-     * Additional optional set of restrictions for Non-Admin users.
+     * Additional optional set of restrictions for Non-Admin users. These are the restrictions
+     * configurable via Settings.
      */
     public static final Set<String> OPTIONAL_NON_ADMIN_RESTRICTIONS = Sets.newArraySet(
             UserManager.DISALLOW_ADD_USER,
@@ -88,9 +91,8 @@ public class CarUserManagerHelper {
             UserManager.DISALLOW_FACTORY_RESET,
             UserManager.DISALLOW_REMOVE_USER,
             UserManager.DISALLOW_MODIFY_ACCOUNTS,
-            UserManager.DISALLOW_OUTGOING_CALLS,
-            UserManager.DISALLOW_SMS,
             UserManager.DISALLOW_INSTALL_APPS,
+            UserManager.DISALLOW_INSTALL_UNKNOWN_SOURCES,
             UserManager.DISALLOW_UNINSTALL_APPS
     );
 
@@ -283,7 +285,7 @@ public class CarUserManagerHelper {
      * @return {@boolean true} if headless system user.
      */
     public boolean isHeadlessSystemUser() {
-        return CarProperties.headless_system_user().orElse(false);
+        return RoSystemProperties.MULTIUSER_HEADLESS_SYSTEM_USER;
     }
 
     /**
@@ -636,10 +638,17 @@ public class CarUserManagerHelper {
     }
 
     /**
-     * Checks if the foreground user can switch to other users.
+     * Returns whether the foreground user can switch to other users.
+     *
+     * <p>For instance switching users is not allowed if the current user is in a phone call,
+     * or {@link #{UserManager.DISALLOW_USER_SWITCH} is set.
      */
     public boolean canForegroundUserSwitchUsers() {
-        return !foregroundUserHasUserRestriction(UserManager.DISALLOW_USER_SWITCH);
+        boolean inIdleCallState = TelephonyManager.getDefault().getCallState()
+                == TelephonyManager.CALL_STATE_IDLE;
+        boolean disallowUserSwitching =
+                foregroundUserHasUserRestriction(UserManager.DISALLOW_USER_SWITCH);
+        return (inIdleCallState && !disallowUserSwitching);
     }
 
     // Current process user information accessors
@@ -717,10 +726,17 @@ public class CarUserManagerHelper {
     }
 
     /**
-     * Checks if the user running the current process is allowed to switch to another user.
+     * Returns whether the current process user can switch to other users.
+     *
+     * <p>For instance switching users is not allowed if the user is in a phone call,
+     * or {@link #{UserManager.DISALLOW_USER_SWITCH} is set.
      */
     public boolean canCurrentProcessSwitchUsers() {
-        return !isCurrentProcessUserHasRestriction(UserManager.DISALLOW_USER_SWITCH);
+        boolean inIdleCallState = TelephonyManager.getDefault().getCallState()
+                == TelephonyManager.CALL_STATE_IDLE;
+        boolean disallowUserSwitching =
+                isCurrentProcessUserHasRestriction(UserManager.DISALLOW_USER_SWITCH);
+        return (inIdleCallState && !disallowUserSwitching);
     }
 
     /**
