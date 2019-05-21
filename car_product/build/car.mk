@@ -21,6 +21,7 @@ BOARD_PLAT_PRIVATE_SEPOLICY_DIR += packages/services/Car/car_product/sepolicy/pr
 
 PRODUCT_PACKAGES += \
     Bluetooth \
+    CarDeveloperOptions \
     OneTimeInitializer \
     Provision \
     SystemUpdater
@@ -50,8 +51,9 @@ PRODUCT_COPY_FILES += \
     frameworks/av/media/libeffects/data/audio_effects.conf:system/etc/audio_effects.conf
 
 PRODUCT_PROPERTY_OVERRIDES += \
+    persist.bluetooth.enablenewavrcp=false \
     ro.carrier=unknown \
-    persist.bluetooth.enablenewavrcp=false
+    ro.fw.mu.headless_system_user=true
 
 # Overlay for Google network and fused location providers
 $(call inherit-product, device/sample/products/location_overlay.mk)
@@ -93,7 +95,6 @@ PRODUCT_PACKAGES += \
     LocalMediaPlayer \
     CarMediaApp \
     CarMessengerApp \
-    CarNotification \
     CarHvacApp \
     CarMapsPlaceholder \
     CarLatinIME \

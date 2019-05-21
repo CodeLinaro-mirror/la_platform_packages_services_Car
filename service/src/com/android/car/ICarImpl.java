@@ -17,6 +17,7 @@
 package com.android.car;
 
 import android.annotation.MainThread;
+import android.app.ActivityManager;
 import android.app.UiModeManager;
 import android.car.Car;
 import android.car.ICar;
@@ -24,6 +25,7 @@ import android.car.cluster.renderer.IInstrumentClusterNavigation;
 import android.car.userlib.CarUserManagerHelper;
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.content.res.Resources;
 import android.hardware.automotive.vehicle.V2_0.IVehicle;
 import android.hardware.automotive.vehicle.V2_0.VehicleArea;
 import android.os.Binder;
@@ -94,6 +96,7 @@ public class ICarImpl extends ICar.Stub {
     private final VmsBrokerService mVmsBrokerService;
     private final VmsSubscriberService mVmsSubscriberService;
     private final VmsPublisherService mVmsPublisherService;
+    private final CarBugreportManagerService mCarBugreportManagerService;
 
     private final CarServiceBase[] mAllServices;
 
@@ -118,7 +121,11 @@ public class ICarImpl extends ICar.Stub {
         mHal = new VehicleHal(vehicle);
         mVehicleInterfaceName = vehicleInterfaceName;
         mUserManagerHelper = new CarUserManagerHelper(serviceContext);
-        mCarUserService = new CarUserService(serviceContext, mUserManagerHelper);
+        final Resources res = mContext.getResources();
+        final int maxRunningUsers = res.getInteger(
+                com.android.internal.R.integer.config_multiuserMaxRunningUsers);
+        mCarUserService = new CarUserService(serviceContext, mUserManagerHelper,
+                ActivityManager.getService(), maxRunningUsers);
         mSystemActivityMonitoringService = new SystemActivityMonitoringService(serviceContext);
         mCarPowerManagementService = new CarPowerManagementService(mContext, mHal.getPowerHal(),
                 systemInterface, mUserManagerHelper);
@@ -128,7 +135,8 @@ public class ICarImpl extends ICar.Stub {
                 mCarDrivingStateService, mCarPropertyService);
         mCarPackageManagerService = new CarPackageManagerService(serviceContext,
                 mCarUXRestrictionsService,
-                mSystemActivityMonitoringService);
+                mSystemActivityMonitoringService,
+                mUserManagerHelper);
         mPerUserCarServiceHelper = new PerUserCarServiceHelper(serviceContext);
         mCarBluetoothService = new CarBluetoothService(serviceContext, mCarPropertyService,
                 mPerUserCarServiceHelper, mCarUXRestrictionsService);
@@ -145,7 +153,7 @@ public class ICarImpl extends ICar.Stub {
                 serviceContext, mCarAudioService, this);
         mVmsBrokerService = new VmsBrokerService();
         mVmsClientManager = new VmsClientManager(
-                serviceContext, mUserManagerHelper, mHal.getVmsHal());
+                serviceContext, mCarUserService, mUserManagerHelper, mHal.getVmsHal());
         mVmsSubscriberService = new VmsSubscriberService(
                 serviceContext, mVmsBrokerService, mHal.getVmsHal());
         mVmsPublisherService = new VmsPublisherService(
@@ -159,9 +167,10 @@ public class ICarImpl extends ICar.Stub {
                 mUserManagerHelper);
         mCarTrustedDeviceService = new CarTrustedDeviceService(serviceContext);
         mCarMediaService = new CarMediaService(serviceContext);
+        mCarBugreportManagerService = new CarBugreportManagerService(serviceContext);
 
+        CarLocalServices.addService(CarPowerManagementService.class, mCarPowerManagementService);
         CarLocalServices.addService(CarUserService.class, mCarUserService);
-        Log.d(TAG, "Adding CarTrustedDeviceService");
         CarLocalServices.addService(CarTrustedDeviceService.class,
                 mCarTrustedDeviceService);
         CarLocalServices.addService(SystemInterface.class, mSystemInterface);
@@ -194,6 +203,7 @@ public class ICarImpl extends ICar.Stub {
         allServices.add(mCarTrustedDeviceService);
         allServices.add(mCarMediaService);
         allServices.add(mCarLocationService);
+        allServices.add(mCarBugreportManagerService);
         mAllServices = allServices.toArray(new CarServiceBase[allServices.size()]);
     }
 
@@ -228,10 +238,7 @@ public class ICarImpl extends ICar.Stub {
 
     @Override
     public void setCarServiceHelper(IBinder helper) {
-        int uid = Binder.getCallingUid();
-        if (uid != Process.SYSTEM_UID) {
-            throw new SecurityException("Only allowed from system");
-        }
+        assertCallingFromSystemProcess();
         synchronized (this) {
             mICarServiceHelper = ICarServiceHelper.Stub.asInterface(helper);
             mSystemInterface.setCarServiceHelper(mICarServiceHelper);
@@ -240,11 +247,23 @@ public class ICarImpl extends ICar.Stub {
 
     @Override
     public void setUserLockStatus(int userHandle, int unlocked) {
+        assertCallingFromSystemProcess();
+        mCarUserService.setUserLockStatus(userHandle, unlocked == 1);
+    }
+
+    @Override
+    public void onSwitchUser(int userHandle) {
+        assertCallingFromSystemProcess();
+
+        Log.i(TAG, "Foreground user switched to " + userHandle);
+        mCarUserService.onSwitchUser(userHandle);
+    }
+
+    private static void assertCallingFromSystemProcess() {
         int uid = Binder.getCallingUid();
         if (uid != Process.SYSTEM_UID) {
             throw new SecurityException("Only allowed from system");
         }
-        mCarUserService.setUserLockStatus(userHandle, unlocked == 1);
     }
 
     @Override
@@ -308,6 +327,8 @@ public class ICarImpl extends ICar.Stub {
                 return mCarTrustedDeviceService.getCarTrustAgentEnrollmentService();
             case Car.CAR_MEDIA_SERVICE:
                 return mCarMediaService;
+            case Car.CAR_BUGREPORT_SERVICE:
+                return mCarBugreportManagerService;
             default:
                 Log.w(CarLog.TAG_SERVICE, "getCarService for unknown service:" + serviceName);
                 return null;
@@ -482,6 +503,8 @@ public class ICarImpl extends ICar.Stub {
         private static final String COMMAND_PROJECTION_UI_MODE = "projection-ui-mode";
         private static final String COMMAND_RESUME = "resume";
         private static final String COMMAND_SUSPEND = "suspend";
+        private static final String COMMAND_ENABLE_TRUSTED_DEVICE = "enable-trusted-device";
+        private static final String COMMAND_REMOVE_TRUSTED_DEVICES = "remove-trusted-devices";
 
         private static final String PARAM_DAY_MODE = "day";
         private static final String PARAM_NIGHT_MODE = "night";
@@ -500,8 +523,8 @@ public class ICarImpl extends ICar.Stub {
             pw.println("\t  Force into day/night mode or restore to auto.");
             pw.println("\tinject-vhal-event property [zone] data(can be comma separated list)");
             pw.println("\t  Inject a vehicle property for testing.");
-            pw.println("\tdisable-uxr true|false");
-            pw.println("\t  Disable UX restrictions and App blocking.");
+            pw.println("\tenable-uxr true|false");
+            pw.println("\t  Enable/Disable UX restrictions and App blocking.");
             pw.println("\tgarage-mode [on|off|query]");
             pw.println("\t  Force into garage mode or check status.");
             pw.println("\tget-do-activities pkgname");
@@ -512,6 +535,10 @@ public class ICarImpl extends ICar.Stub {
             pw.println("\t  Suspend the system to Deep Sleep.");
             pw.println("\tresume");
             pw.println("\t  Wake the system up after a 'suspend.'");
+            pw.println("\tenable-trusted-device true|false");
+            pw.println("\t  Enable/Disable Trusted device feature.");
+            pw.println("\tremove-trusted-devices");
+            pw.println("\t  Remove all trusted devices for the current foreground user.");
         }
 
         public void exec(String[] args, PrintWriter writer) {
@@ -598,6 +625,22 @@ public class ICarImpl extends ICar.Stub {
                 case COMMAND_SUSPEND:
                     mCarPowerManagementService.forceSimulatedSuspend();
                     writer.println("Resume: Simulating powering down to Deep Sleep");
+                    break;
+                case COMMAND_ENABLE_TRUSTED_DEVICE:
+                    if (args.length != 2) {
+                        writer.println("Incorrect number of arguments");
+                        dumpHelp(writer);
+                        break;
+                    }
+                    mCarTrustedDeviceService.getCarTrustAgentEnrollmentService()
+                            .setTrustedDeviceEnrollmentEnabled(Boolean.valueOf(args[1]));
+                    mCarTrustedDeviceService.getCarTrustAgentUnlockService()
+                            .setTrustedDeviceUnlockEnabled(Boolean.valueOf(args[1]));
+                    break;
+                case COMMAND_REMOVE_TRUSTED_DEVICES:
+                    mCarTrustedDeviceService.getCarTrustAgentEnrollmentService()
+                            .removeAllTrustedDevices(
+                                    mUserManagerHelper.getCurrentForegroundUserId());
                     break;
                 default:
                     writer.println("Unknown command: \"" + arg + "\"");

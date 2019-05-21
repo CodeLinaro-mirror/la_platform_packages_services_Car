@@ -19,6 +19,7 @@ package android.car.trust;
 import android.bluetooth.BluetoothDevice;
 import android.car.trust.ICarTrustAgentBleCallback;
 import android.car.trust.ICarTrustAgentEnrollmentCallback;
+import android.car.trust.TrustedDeviceInfo;
 
 /**
  * Binder interface for CarTrustAgentEnrollmentService. The service implements the functionality
@@ -29,12 +30,14 @@ import android.car.trust.ICarTrustAgentEnrollmentCallback;
 interface ICarTrustAgentEnrollment {
     void startEnrollmentAdvertising();
     void stopEnrollmentAdvertising();
-    void initiateEnrollmentHandshake(in BluetoothDevice device);
     void enrollmentHandshakeAccepted(in BluetoothDevice device);
     void terminateEnrollmentHandshake();
     boolean isEscrowTokenActive(in long handle, int uid);
     void removeEscrowToken(in long handle, int uid);
-    long[] getEnrollmentHandlesForUser(in int uid);
+    void removeAllTrustedDevices(int uid);
+    void setTrustedDeviceEnrollmentEnabled(boolean enable);
+    void setTrustedDeviceUnlockEnabled(boolean enable);
+    List<TrustedDeviceInfo> getEnrolledDeviceInfosForUser(in int uid);
     void registerEnrollmentCallback(in ICarTrustAgentEnrollmentCallback callback);
     void unregisterEnrollmentCallback(in ICarTrustAgentEnrollmentCallback callback);
     void registerBleCallback(in ICarTrustAgentBleCallback callback);

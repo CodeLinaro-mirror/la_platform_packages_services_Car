@@ -28,7 +28,6 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import android.car.Car;
 import android.car.hardware.CarPropertyValue;
 import android.car.hardware.CarSensorEvent;
 import android.car.hardware.CarSensorManager;
@@ -92,7 +91,6 @@ public class CarLocationServiceTest {
     private CarLocationService mCarLocationService;
     private Context mContext;
     private CountDownLatch mLatch;
-    private Car mCar;
     private File mTempDirectory;
     @Mock
     private Context mMockContext;
@@ -114,9 +112,8 @@ public class CarLocationServiceTest {
         mContext = InstrumentationRegistry.getTargetContext();
         mTempDirectory = new TemporaryDirectory(TAG).getDirectory();
         mLatch = new CountDownLatch(1);
-        mCar = new Car(mContext, null, null);
         mCarLocationService = new CarLocationService(
-                mMockContext, mMockCarPropertyService, mMockCarUserManagerHelper, mCar) {
+                mMockContext, mMockCarPropertyService, mMockCarUserManagerHelper) {
             @Override
             void asyncOperation(Runnable operation) {
                 super.asyncOperation(() -> {
@@ -154,8 +151,8 @@ public class CarLocationServiceTest {
     }
 
     /**
-     * Test that the {@link CarLocationService} registers to receive the locked boot completed
-     * intent and ignition sensor events upon initialization.
+     * Test that the {@link CarLocationService} registers to receive the ignition sensor event upon
+     * initialization.
      */
     @Test
     public void testRegistersToReceiveEvents() {
@@ -163,10 +160,9 @@ public class CarLocationServiceTest {
         mCarLocationService.init();
         verify(mMockContext).registerReceiver(eq(mCarLocationService), argument.capture());
         IntentFilter intentFilter = argument.getValue();
-        assertEquals(4, intentFilter.countActions());
+        assertEquals(3, intentFilter.countActions());
         String[] actions = {intentFilter.getAction(0), intentFilter.getAction(1),
-                intentFilter.getAction(2), intentFilter.getAction(3)};
-        assertTrue(ArrayUtils.contains(actions, Intent.ACTION_LOCKED_BOOT_COMPLETED));
+                intentFilter.getAction(2)};
         assertTrue(ArrayUtils.contains(actions, LocationManager.MODE_CHANGED_ACTION));
         assertTrue(ArrayUtils.contains(actions, LocationManager.PROVIDERS_CHANGED_ACTION));
         assertTrue(ArrayUtils.contains(actions, Intent.ACTION_USER_SWITCHED));
@@ -187,39 +183,7 @@ public class CarLocationServiceTest {
 
     /**
      * Test that the {@link CarLocationService} parses a location from a JSON serialization and then
-     * injects it into the {@link LocationManager} upon boot complete if the system user is not
-     * headless.
-     */
-    @Test
-    public void testLoadsLocationOnLockedBootComplete() throws Exception {
-        long currentTime = System.currentTimeMillis();
-        long elapsedTime = SystemClock.elapsedRealtimeNanos();
-        long pastTime = currentTime - 60000;
-        writeCacheFile("{\"provider\": \"gps\", \"latitude\": 16.7666, \"longitude\": 3.0026,"
-                + "\"accuracy\":12.3, \"captureTime\": " + pastTime + "}");
-        ArgumentCaptor<Location> argument = ArgumentCaptor.forClass(Location.class);
-        when(mMockContext.getSystemService(Context.LOCATION_SERVICE))
-                .thenReturn(mMockLocationManager);
-        when(mMockSystemInterface.getSystemCarDir()).thenReturn(mTempDirectory);
-        when(mMockLocationManager.injectLocation(argument.capture())).thenReturn(true);
-        when(mMockCarUserManagerHelper.isHeadlessSystemUser()).thenReturn(false);
-
-        mCarLocationService.onReceive(mMockContext,
-                new Intent(Intent.ACTION_LOCKED_BOOT_COMPLETED));
-        mLatch.await();
-
-        Location location = argument.getValue();
-        assertEquals("gps", location.getProvider());
-        assertEquals(16.7666, location.getLatitude());
-        assertEquals(3.0026, location.getLongitude());
-        assertEquals(12.3f, location.getAccuracy());
-        assertTrue(location.getTime() >= currentTime);
-        assertTrue(location.getElapsedRealtimeNanos() >= elapsedTime);
-    }
-
-    /**
-     * Test that the {@link CarLocationService} parses a location from a JSON serialization and then
-     * injects it into the {@link LocationManager} upon user switch if the system user is headless.
+     * injects it into the {@link LocationManager} upon user switch.
      */
     @Test
     public void testLoadsLocationWithHeadlessSystemUser() throws Exception {
@@ -259,8 +223,10 @@ public class CarLocationServiceTest {
                 .thenReturn(mMockLocationManager);
         when(mMockLocationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER))
                 .thenReturn(null);
-        mCarLocationService.onReceive(mMockContext,
-                new Intent(Intent.ACTION_LOCKED_BOOT_COMPLETED));
+        when(mMockCarUserManagerHelper.isHeadlessSystemUser()).thenReturn(true);
+        Intent userSwitchedIntent = new Intent(Intent.ACTION_USER_SWITCHED);
+        userSwitchedIntent.putExtra(Intent.EXTRA_USER_HANDLE, 11);
+        mCarLocationService.onReceive(mMockContext, userSwitchedIntent);
         mLatch.await();
         verify(mMockLocationManager, never()).injectLocation(any());
     }
@@ -275,8 +241,10 @@ public class CarLocationServiceTest {
                 .thenReturn(mMockLocationManager);
         when(mMockLocationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER))
                 .thenReturn(null);
-        mCarLocationService.onReceive(mMockContext,
-                new Intent(Intent.ACTION_LOCKED_BOOT_COMPLETED));
+        when(mMockCarUserManagerHelper.isHeadlessSystemUser()).thenReturn(true);
+        Intent userSwitchedIntent = new Intent(Intent.ACTION_USER_SWITCHED);
+        userSwitchedIntent.putExtra(Intent.EXTRA_USER_HANDLE, 11);
+        mCarLocationService.onReceive(mMockContext, userSwitchedIntent);
         mLatch.await();
         verify(mMockLocationManager, never()).injectLocation(any());
     }
@@ -291,8 +259,10 @@ public class CarLocationServiceTest {
                 .thenReturn(mMockLocationManager);
         when(mMockLocationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER))
                 .thenReturn(null);
-        mCarLocationService.onReceive(mMockContext,
-                new Intent(Intent.ACTION_LOCKED_BOOT_COMPLETED));
+        when(mMockCarUserManagerHelper.isHeadlessSystemUser()).thenReturn(true);
+        Intent userSwitchedIntent = new Intent(Intent.ACTION_USER_SWITCHED);
+        userSwitchedIntent.putExtra(Intent.EXTRA_USER_HANDLE, 11);
+        mCarLocationService.onReceive(mMockContext, userSwitchedIntent);
         mLatch.await();
         verify(mMockLocationManager, never()).injectLocation(any());
     }
@@ -308,8 +278,10 @@ public class CarLocationServiceTest {
                 .thenReturn(mMockLocationManager);
         when(mMockLocationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER))
                 .thenReturn(null);
-        mCarLocationService.onReceive(mMockContext,
-                new Intent(Intent.ACTION_LOCKED_BOOT_COMPLETED));
+        when(mMockCarUserManagerHelper.isHeadlessSystemUser()).thenReturn(true);
+        Intent userSwitchedIntent = new Intent(Intent.ACTION_USER_SWITCHED);
+        userSwitchedIntent.putExtra(Intent.EXTRA_USER_HANDLE, 11);
+        mCarLocationService.onReceive(mMockContext, userSwitchedIntent);
         mLatch.await();
         verify(mMockLocationManager, never()).injectLocation(any());
     }
@@ -328,8 +300,10 @@ public class CarLocationServiceTest {
                 .thenReturn(mMockLocationManager);
         when(mMockLocationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER))
                 .thenReturn(null);
-        mCarLocationService.onReceive(mMockContext,
-                new Intent(Intent.ACTION_LOCKED_BOOT_COMPLETED));
+        when(mMockCarUserManagerHelper.isHeadlessSystemUser()).thenReturn(true);
+        Intent userSwitchedIntent = new Intent(Intent.ACTION_USER_SWITCHED);
+        userSwitchedIntent.putExtra(Intent.EXTRA_USER_HANDLE, 11);
+        mCarLocationService.onReceive(mMockContext, userSwitchedIntent);
         mLatch.await();
         verify(mMockLocationManager, never()).injectLocation(any());
     }

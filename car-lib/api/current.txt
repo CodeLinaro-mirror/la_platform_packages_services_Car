@@ -37,7 +37,8 @@ package android.car {
     field public static final String PERMISSION_READ_INTERIOR_LIGHTS = "android.car.permission.READ_CAR_INTERIOR_LIGHTS";
     field public static final String PERMISSION_READ_STEERING_STATE = "android.car.permission.READ_CAR_STEERING";
     field public static final String PERMISSION_SPEED = "android.car.permission.CAR_SPEED";
-    field public static final String SENSOR_SERVICE = "sensor";
+    field public static final String PROPERTY_SERVICE = "property";
+    field @Deprecated public static final String SENSOR_SERVICE = "sensor";
   }
 
   public final class CarAppFocusManager {
@@ -73,7 +74,8 @@ package android.car {
     method public int[] getFuelTypes();
     method @NonNull public String getManufacturer();
     method @NonNull public String getModel();
-    method @NonNull public String getModelYear();
+    method @Deprecated @NonNull public String getModelYear();
+    method public int getModelYearInInteger();
     method @Deprecated public String getVehicleId();
   }
 
@@ -440,6 +442,7 @@ package android.car.hardware {
     field @Deprecated public static final int SENSOR_RATE_UI = 5; // 0x5
     field @Deprecated public static final int SENSOR_TYPE_ABS_ACTIVE = 287310858; // 0x1120040a
     field @Deprecated public static final int SENSOR_TYPE_CAR_SPEED = 291504647; // 0x11600207
+    field @Deprecated public static final int SENSOR_TYPE_ENGINE_OIL_LEVEL = 289407747; // 0x11400303
     field @Deprecated public static final int SENSOR_TYPE_ENV_OUTSIDE_TEMPERATURE = 291505923; // 0x11600703
     field @Deprecated public static final int SENSOR_TYPE_EV_BATTERY_CHARGE_RATE = 291504908; // 0x1160030c
     field @Deprecated public static final int SENSOR_TYPE_EV_BATTERY_LEVEL = 291504905; // 0x11600309
@@ -507,15 +510,6 @@ package android.car.media {
     ctor public CarAudioManager.CarVolumeCallback();
     method public void onGroupVolumeChanged(int, int, int);
     method public void onMasterMuteChanged(int, int);
-  }
-
-}
-
-package android.car.navigation {
-
-  public final class CarNavigationStatusManager {
-    method public android.car.navigation.CarNavigationInstrumentCluster getInstrumentClusterInfo();
-    method public void sendEvent(int, android.os.Bundle);
   }
 
 }
