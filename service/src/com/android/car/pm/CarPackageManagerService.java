@@ -27,6 +27,7 @@ import android.car.content.pm.CarPackageManager;
 import android.car.content.pm.ICarPackageManager;
 import android.car.drivingstate.CarUxRestrictions;
 import android.car.drivingstate.ICarUxRestrictionsChangeListener;
+import android.car.userlib.CarUserManagerHelper;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
@@ -122,6 +123,7 @@ public class CarPackageManagerService extends ICarPackageManager.Stub implements
 
     private final ActivityLaunchListener mActivityLaunchListener = new ActivityLaunchListener();
     private final UxRestrictionsListener mUxRestrictionsListener;
+    private final VendorServiceController mVendorServiceController;
 
     // Information related to when the installed packages should be parsed for building a white and
     // black list
@@ -135,14 +137,13 @@ public class CarPackageManagerService extends ICarPackageManager.Stub implements
 
     private final PackageParsingEventReceiver mPackageParsingEventReceiver =
             new PackageParsingEventReceiver();
-    private final BootEventReceiver mBootEventReceiver = new BootEventReceiver();
+    private final UserSwitchedEventReceiver mUserSwitchedEventReceiver =
+            new UserSwitchedEventReceiver();
 
     // To track if the packages have been parsed for building white/black lists. If we haven't had
     // received any intents (boot complete or package changed), then the white list is null leading
     // to blocking everything.  So, no blocking until we have had a chance to parse the packages.
     private boolean mHasParsedPackages;
-    // To track if we received the boot complete intent.
-    private boolean mBootLockedIntentRx;
 
     /**
      * Name of blocked activity.
@@ -172,7 +173,8 @@ public class CarPackageManagerService extends ICarPackageManager.Stub implements
 
     public CarPackageManagerService(Context context,
             CarUxRestrictionsManagerService uxRestrictionsService,
-            SystemActivityMonitoringService systemActivityMonitoringService) {
+            SystemActivityMonitoringService systemActivityMonitoringService,
+            CarUserManagerHelper carUserManagerHelper) {
         mContext = context;
         mCarUxRestrictionsService = uxRestrictionsService;
         mSystemActivityMonitoringService = systemActivityMonitoringService;
@@ -187,6 +189,8 @@ public class CarPackageManagerService extends ICarPackageManager.Stub implements
         mActivityBlockingActivity = ComponentName.unflattenFromString(blockingActivity);
         mAllowedAppInstallSources = Arrays.asList(
                 res.getStringArray(R.array.allowedAppInstallSources));
+        mVendorServiceController = new VendorServiceController(
+                mContext, mHandler.getLooper(), carUserManagerHelper);
     }
 
 
@@ -381,7 +385,7 @@ public class CarPackageManagerService extends ICarPackageManager.Stub implements
             wakeupClientsWaitingForPolicySetitngLocked();
         }
         mContext.unregisterReceiver(mPackageParsingEventReceiver);
-        mContext.unregisterReceiver(mBootEventReceiver);
+        mContext.unregisterReceiver(mUserSwitchedEventReceiver);
         mCarUxRestrictionsService.unregisterUxRestrictionsChangeListener(mUxRestrictionsListener);
         mSystemActivityMonitoringService.registerActivityLaunchListener(null);
     }
@@ -389,9 +393,9 @@ public class CarPackageManagerService extends ICarPackageManager.Stub implements
     // run from HandlerThread
     private void doHandleInit() {
         startAppBlockingPolicies();
-        IntentFilter bootIntent = new IntentFilter();
-        bootIntent.addAction(Intent.ACTION_LOCKED_BOOT_COMPLETED);
-        mContext.registerReceiver(mBootEventReceiver, bootIntent);
+        IntentFilter intent = new IntentFilter();
+        intent.addAction(Intent.ACTION_USER_SWITCHED);
+        mContext.registerReceiver(mUserSwitchedEventReceiver, intent);
         IntentFilter pkgParseIntent = new IntentFilter();
         for (String action : mPackageManagerActions) {
             pkgParseIntent.addAction(action);
@@ -407,6 +411,7 @@ public class CarPackageManagerService extends ICarPackageManager.Stub implements
         }
         mSystemActivityMonitoringService.registerActivityLaunchListener(
                 mActivityLaunchListener);
+        mVendorServiceController.init();
     }
 
     private void doParseInstalledPackages() {
@@ -419,6 +424,7 @@ public class CarPackageManagerService extends ICarPackageManager.Stub implements
     }
 
     private synchronized void doHandleRelease() {
+        mVendorServiceController.release();
         notifyAll();
     }
 
@@ -894,7 +900,6 @@ public class CarPackageManagerService extends ICarPackageManager.Stub implements
             writer.println("*PackageManagementService*");
             writer.println("mEnableActivityBlocking:" + mEnableActivityBlocking);
             writer.println("mHasParsedPackages:" + mHasParsedPackages);
-            writer.println("mBootLockedIntentRx:" + mBootLockedIntentRx);
             writer.println("ActivityRestricted:" + mUxRestrictionsListener.isRestricted());
             writer.println(String.join("\n", mBlockedActivityLogs));
             writer.print(dumpPoliciesLocked(true));
@@ -1044,6 +1049,10 @@ public class CarPackageManagerService extends ICarPackageManager.Stub implements
         }
         List<TopTaskInfoContainer> topTasks = mSystemActivityMonitoringService.getTopTasks();
         for (TopTaskInfoContainer topTask : topTasks) {
+            if (topTask == null) {
+                Log.e(CarLog.TAG_PACKAGE, "Top tasks contains null.");
+                continue;
+            }
             doBlockTopActivityIfNotAllowed(topTask);
         }
     }
@@ -1264,6 +1273,10 @@ public class CarPackageManagerService extends ICarPackageManager.Stub implements
             implements SystemActivityMonitoringService.ActivityLaunchListener {
         @Override
         public void onActivityLaunch(TopTaskInfoContainer topTask) {
+            if (topTask == null) {
+                Log.e(CarLog.TAG_PACKAGE, "Received callback with null top task.");
+                return;
+            }
             blockTopActivityIfNecessary(topTask);
         }
     }
@@ -1337,18 +1350,14 @@ public class CarPackageManagerService extends ICarPackageManager.Stub implements
     /**
      * Listens to the Boot intent to initiate parsing installed packages.
      */
-    private class BootEventReceiver extends BroadcastReceiver {
+    private class UserSwitchedEventReceiver extends BroadcastReceiver {
         @Override
         public void onReceive(Context context, Intent intent) {
             if (intent == null || intent.getAction() == null) {
                 return;
             }
-            if (DBG_POLICY_CHECK) {
-                Log.d(CarLog.TAG_PACKAGE, "BootEventReceiver Received " + intent.getAction());
-            }
-            if (Intent.ACTION_LOCKED_BOOT_COMPLETED.equals(intent.getAction())) {
+            if (Intent.ACTION_USER_SWITCHED.equals(intent.getAction())) {
                 mHandler.requestParsingInstalledPkgs(0);
-                mBootLockedIntentRx = true;
             }
         }
     }

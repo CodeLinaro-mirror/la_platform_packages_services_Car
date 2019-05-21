@@ -70,6 +70,11 @@
     <!-- Permission text: apps can control car-audio-settings [CHAR LIMIT=NONE] -->
     <string name="car_permission_label_audio_settings">manage car\u2019s audio settings</string>
     <string name="car_permission_label_mock_vehicle_hal">emulate vehicle HAL</string>
+    <!-- Permission text: apps can receive audio ducking events [CHAR LIMIT=NONE] -->
+    <string name="car_permission_label_receive_ducking">receive audio ducking events</string>
+    <!-- Permission text: apps can receive audio ducking events [CHAR LIMIT=NONE] -->
+    <string name="car_permission_desc_receive_ducking">Allows an app to be notified when its volume
+        is being lowered as a result of other audio playing in the car.</string>
     <!-- Permission text: can emulate information from your car [CHAR LIMIT=NONE] -->
     <string name="car_permission_desc_mock_vehicle_hal">Emulate your car\u2019s vehicle HAL for internal
         testing purpose.</string>
@@ -250,6 +255,9 @@
 
     <string name="car_permission_label_enroll_trust">Enroll Trusted Device</string>
     <string name="car_permission_desc_enroll_trust">Allow Trusted Device Enrollment</string>
+
+    <!-- The default name of device enrolled as trust device [CHAR LIMIT=NONE] -->
+    <string name="trust_device_default_name">My Device</string>
 
     <!-- The package name of the media application that will be selected as the default [CHAR LIMIT=NONE] -->
     <string name="default_media_application" translatable="false">com.android.bluetooth</string>

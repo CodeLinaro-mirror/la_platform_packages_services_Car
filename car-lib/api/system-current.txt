@@ -12,12 +12,12 @@ package android.car {
   }
 
   public final class Car {
-    field public static final String CABIN_SERVICE = "cabin";
+    field @Deprecated public static final String CABIN_SERVICE = "cabin";
     field public static final String CAR_DRIVING_STATE_SERVICE = "drivingstate";
     field public static final String CAR_EXTRA_CLUSTER_ACTIVITY_STATE = "android.car.cluster.ClusterActivityState";
     field public static final String CAR_TRUST_AGENT_ENROLLMENT_SERVICE = "trust_enroll";
     field public static final String DIAGNOSTIC_SERVICE = "diagnostic";
-    field public static final String HVAC_SERVICE = "hvac";
+    field @Deprecated public static final String HVAC_SERVICE = "hvac";
     field public static final String PERMISSION_CAR_DIAGNOSTIC_CLEAR = "android.car.permission.CLEAR_CAR_DIAGNOSTICS";
     field public static final String PERMISSION_CAR_DIAGNOSTIC_READ_ALL = "android.car.permission.CAR_DIAGNOSTICS";
     field public static final String PERMISSION_CAR_DRIVING_STATE = "android.car.permission.CAR_DRIVING_STATE";
@@ -39,6 +39,7 @@ package android.car {
     field public static final String PERMISSION_EXTERIOR_LIGHTS = "android.car.permission.CAR_EXTERIOR_LIGHTS";
     field public static final String PERMISSION_MILEAGE = "android.car.permission.CAR_MILEAGE";
     field @Deprecated public static final String PERMISSION_MOCK_VEHICLE_HAL = "android.car.permission.CAR_MOCK_VEHICLE_HAL";
+    field public static final String PERMISSION_RECEIVE_CAR_AUDIO_DUCKING_EVENTS = "android.car.permission.RECEIVE_CAR_AUDIO_DUCKING_EVENTS";
     field public static final String PERMISSION_STORAGE_MONITORING = "android.car.permission.STORAGE_MONITORING";
     field public static final String PERMISSION_TIRES = "android.car.permission.CAR_TIRES";
     field public static final String PERMISSION_VENDOR_EXTENSION = "android.car.permission.CAR_VENDOR_EXTENSION";
@@ -46,20 +47,22 @@ package android.car {
     field public static final String PERMISSION_VMS_SUBSCRIBER = "android.car.permission.VMS_SUBSCRIBER";
     field public static final String POWER_SERVICE = "power";
     field public static final String PROJECTION_SERVICE = "projection";
-    field public static final String PROPERTY_SERVICE = "property";
     field public static final String STORAGE_MONITORING_SERVICE = "storage_monitoring";
     field public static final String TEST_SERVICE = "car-service-test";
-    field public static final String VENDOR_EXTENSION_SERVICE = "vendor_extension";
+    field @Deprecated public static final String VENDOR_EXTENSION_SERVICE = "vendor_extension";
     field public static final String VMS_SUBSCRIBER_SERVICE = "vehicle_map_subscriber_service";
   }
 
   public final class CarProjectionManager {
+    method @RequiresPermission(android.car.Car.PERMISSION_CAR_PROJECTION) public void addKeyEventHandler(@NonNull java.util.Set<java.lang.Integer>, @NonNull android.car.CarProjectionManager.ProjectionKeyEventHandler);
+    method @RequiresPermission(android.car.Car.PERMISSION_CAR_PROJECTION) public void addKeyEventHandler(@NonNull java.util.Set<java.lang.Integer>, @Nullable java.util.concurrent.Executor, @NonNull android.car.CarProjectionManager.ProjectionKeyEventHandler);
     method @RequiresPermission(android.car.Car.PERMISSION_CAR_PROJECTION) @NonNull public java.util.List<java.lang.Integer> getAvailableWifiChannels(int);
     method @RequiresPermission(android.car.Car.PERMISSION_CAR_PROJECTION) @NonNull public android.os.Bundle getProjectionOptions();
     method @RequiresPermission(android.car.Car.PERMISSION_CAR_PROJECTION) public void registerProjectionListener(@NonNull android.car.CarProjectionManager.CarProjectionListener, int);
     method @RequiresPermission(android.car.Car.PERMISSION_CAR_PROJECTION) public void registerProjectionRunner(@NonNull android.content.Intent);
     method @RequiresPermission(android.car.Car.PERMISSION_CAR_PROJECTION_STATUS) public void registerProjectionStatusListener(@NonNull android.car.CarProjectionManager.ProjectionStatusListener);
     method @RequiresPermission(android.car.Car.PERMISSION_CAR_PROJECTION) public boolean releaseBluetoothProfileInhibit(@NonNull android.bluetooth.BluetoothDevice, int);
+    method @RequiresPermission(android.car.Car.PERMISSION_CAR_PROJECTION) public void removeKeyEventHandler(@NonNull android.car.CarProjectionManager.ProjectionKeyEventHandler);
     method @RequiresPermission(android.car.Car.PERMISSION_CAR_PROJECTION) public boolean requestBluetoothProfileInhibit(@NonNull android.bluetooth.BluetoothDevice, int);
     method @RequiresPermission(android.car.Car.PERMISSION_CAR_PROJECTION) public void startProjectionAccessPoint(@NonNull android.car.CarProjectionManager.ProjectionAccessPointCallback);
     method @RequiresPermission(android.car.Car.PERMISSION_CAR_PROJECTION) public void stopProjectionAccessPoint();
@@ -67,8 +70,16 @@ package android.car {
     method @RequiresPermission(android.car.Car.PERMISSION_CAR_PROJECTION) public void unregisterProjectionRunner(@NonNull android.content.Intent);
     method @RequiresPermission(android.car.Car.PERMISSION_CAR_PROJECTION_STATUS) public void unregisterProjectionStatusListener(@NonNull android.car.CarProjectionManager.ProjectionStatusListener);
     method @RequiresPermission(android.car.Car.PERMISSION_CAR_PROJECTION) public void updateProjectionStatus(@NonNull android.car.projection.ProjectionStatus);
-    field public static final int PROJECTION_LONG_PRESS_VOICE_SEARCH = 2; // 0x2
-    field public static final int PROJECTION_VOICE_SEARCH = 1; // 0x1
+    field public static final int KEY_EVENT_CALL_KEY_DOWN = 4; // 0x4
+    field public static final int KEY_EVENT_CALL_LONG_PRESS_KEY_DOWN = 6; // 0x6
+    field public static final int KEY_EVENT_CALL_LONG_PRESS_KEY_UP = 7; // 0x7
+    field public static final int KEY_EVENT_CALL_SHORT_PRESS_KEY_UP = 5; // 0x5
+    field public static final int KEY_EVENT_VOICE_SEARCH_KEY_DOWN = 0; // 0x0
+    field public static final int KEY_EVENT_VOICE_SEARCH_LONG_PRESS_KEY_DOWN = 2; // 0x2
+    field public static final int KEY_EVENT_VOICE_SEARCH_LONG_PRESS_KEY_UP = 3; // 0x3
+    field public static final int KEY_EVENT_VOICE_SEARCH_SHORT_PRESS_KEY_UP = 1; // 0x1
+    field @Deprecated public static final int PROJECTION_LONG_PRESS_VOICE_SEARCH = 2; // 0x2
+    field @Deprecated public static final int PROJECTION_VOICE_SEARCH = 1; // 0x1
   }
 
   public static interface CarProjectionManager.CarProjectionListener {
@@ -84,6 +95,10 @@ package android.car {
     field public static final int ERROR_INCOMPATIBLE_MODE = 3; // 0x3
     field public static final int ERROR_NO_CHANNEL = 1; // 0x1
     field public static final int ERROR_TETHERING_DISALLOWED = 4; // 0x4
+  }
+
+  public static interface CarProjectionManager.ProjectionKeyEventHandler {
+    method public void onKeyEvent(int);
   }
 
   public static interface CarProjectionManager.ProjectionStatusListener {
@@ -135,6 +150,38 @@ package android.car {
     field public static final int WRITE = 2; // 0x2
   }
 
+  public final class VehicleUnit {
+    field public static final int AMPERE_HOURS = 100; // 0x64
+    field public static final int BAR = 114; // 0x72
+    field public static final int CELSIUS = 48; // 0x30
+    field public static final int DEGREES = 128; // 0x80
+    field public static final int FAHRENHEIT = 49; // 0x31
+    field public static final int HERTZ = 3; // 0x3
+    field public static final int IMPERIAL_GALLON = 67; // 0x43
+    field public static final int KELVIN = 50; // 0x32
+    field public static final int KILOMETER = 35; // 0x23
+    field public static final int KILOPASCAL = 112; // 0x70
+    field public static final int KILOWATT_HOUR = 101; // 0x65
+    field public static final int LITER = 65; // 0x41
+    field public static final int METER = 33; // 0x21
+    field public static final int METER_PER_SEC = 1; // 0x1
+    field public static final int MILE = 36; // 0x24
+    field public static final int MILLIAMPERE = 97; // 0x61
+    field public static final int MILLILITER = 64; // 0x40
+    field public static final int MILLIMETER = 32; // 0x20
+    field public static final int MILLIVOLT = 98; // 0x62
+    field public static final int MILLIWATTS = 99; // 0x63
+    field public static final int NANO_SECS = 80; // 0x50
+    field public static final int PERCENTILE = 16; // 0x10
+    field public static final int PSI = 113; // 0x71
+    field public static final int RPM = 2; // 0x2
+    field public static final int SECS = 83; // 0x53
+    field public static final int SHOULD_NOT_USE = 0; // 0x0
+    field public static final int US_GALLON = 66; // 0x42
+    field public static final int WATT_HOUR = 96; // 0x60
+    field public static final int YEAR = 89; // 0x59
+  }
+
 }
 
 package android.car.cluster {
@@ -179,7 +226,8 @@ package android.car.cluster.renderer {
   @UiThread public abstract class NavigationRenderer {
     ctor public NavigationRenderer();
     method public abstract android.car.navigation.CarNavigationInstrumentCluster getNavigationProperties();
-    method public abstract void onEvent(int, android.os.Bundle);
+    method @Deprecated public void onEvent(int, android.os.Bundle);
+    method public void onNavigationStateChanged(@Nullable android.os.Bundle);
   }
 
 }
@@ -231,7 +279,7 @@ package android.car.content.pm {
 
 package android.car.diagnostic {
 
-  public class CarDiagnosticEvent implements android.os.Parcelable {
+  public final class CarDiagnosticEvent implements android.os.Parcelable {
     ctor public CarDiagnosticEvent(android.os.Parcel);
     method public int describeContents();
     method @Nullable @android.car.diagnostic.CarDiagnosticEvent.FuelSystemStatus.Status public Integer getFuelSystemStatus();
@@ -257,13 +305,17 @@ package android.car.diagnostic {
   }
 
   public static class CarDiagnosticEvent.Builder {
-    method public android.car.diagnostic.CarDiagnosticEvent.Builder atTimestamp(long);
+    method @Deprecated public android.car.diagnostic.CarDiagnosticEvent.Builder atTimestamp(long);
     method public android.car.diagnostic.CarDiagnosticEvent build();
     method public static android.car.diagnostic.CarDiagnosticEvent.Builder newFreezeFrameBuilder();
     method public static android.car.diagnostic.CarDiagnosticEvent.Builder newLiveFrameBuilder();
-    method public android.car.diagnostic.CarDiagnosticEvent.Builder withDtc(String);
-    method public android.car.diagnostic.CarDiagnosticEvent.Builder withFloatValue(int, float);
-    method public android.car.diagnostic.CarDiagnosticEvent.Builder withIntValue(int, int);
+    method public android.car.diagnostic.CarDiagnosticEvent.Builder setDtc(String);
+    method public android.car.diagnostic.CarDiagnosticEvent.Builder setFloatValue(int, float);
+    method public android.car.diagnostic.CarDiagnosticEvent.Builder setIntValue(int, int);
+    method public android.car.diagnostic.CarDiagnosticEvent.Builder setTimeStamp(long);
+    method @Deprecated public android.car.diagnostic.CarDiagnosticEvent.Builder withDtc(String);
+    method @Deprecated public android.car.diagnostic.CarDiagnosticEvent.Builder withFloatValue(int, float);
+    method @Deprecated public android.car.diagnostic.CarDiagnosticEvent.Builder withIntValue(int, int);
   }
 
   public static class CarDiagnosticEvent.CommonIgnitionMonitors {
@@ -713,6 +765,7 @@ package android.car.media {
     method @RequiresPermission(android.car.Car.PERMISSION_CAR_CONTROL_AUDIO_VOLUME) public void setFadeTowardFront(float);
     method @RequiresPermission(android.car.Car.PERMISSION_CAR_CONTROL_AUDIO_VOLUME) public void setGroupVolume(int, int, int);
     method @RequiresPermission(android.car.Car.PERMISSION_CAR_CONTROL_AUDIO_VOLUME) public void setGroupVolume(int, int, int, int);
+    field public static final String AUDIOFOCUS_EXTRA_RECEIVE_DUCKING_EVENTS = "android.car.media.AUDIOFOCUS_EXTRA_RECEIVE_DUCKING_EVENTS";
     field public static final int PRIMARY_AUDIO_ZONE = 0; // 0x0
   }
 
@@ -727,7 +780,7 @@ package android.car.media {
 
 package android.car.navigation {
 
-  public class CarNavigationInstrumentCluster implements android.os.Parcelable {
+  public final class CarNavigationInstrumentCluster implements android.os.Parcelable {
     ctor public CarNavigationInstrumentCluster(android.car.navigation.CarNavigationInstrumentCluster);
     method public static android.car.navigation.CarNavigationInstrumentCluster createCluster(int);
     method public static android.car.navigation.CarNavigationInstrumentCluster createCustomImageCluster(int, int, int, int);
@@ -742,6 +795,12 @@ package android.car.navigation {
     field public static final int CLUSTER_TYPE_CUSTOM_IMAGES_SUPPORTED = 1; // 0x1
     field public static final int CLUSTER_TYPE_IMAGE_CODES_ONLY = 2; // 0x2
     field public static final android.os.Parcelable.Creator<android.car.navigation.CarNavigationInstrumentCluster> CREATOR;
+  }
+
+  public final class CarNavigationStatusManager {
+    method @RequiresPermission(android.car.Car.PERMISSION_CAR_NAVIGATION_MANAGER) public android.car.navigation.CarNavigationInstrumentCluster getInstrumentClusterInfo();
+    method @Deprecated @RequiresPermission(android.car.Car.PERMISSION_CAR_NAVIGATION_MANAGER) public void sendEvent(int, android.os.Bundle);
+    method @RequiresPermission(android.car.Car.PERMISSION_CAR_NAVIGATION_MANAGER) public void sendNavigationStateChange(android.os.Bundle);
   }
 
 }
@@ -833,7 +892,6 @@ package android.car.storagemonitoring {
   public final class IoStats implements android.os.Parcelable {
     ctor public IoStats(java.util.List<android.car.storagemonitoring.IoStatsEntry>, long);
     ctor public IoStats(android.os.Parcel);
-    ctor public IoStats(org.json.JSONObject) throws org.json.JSONException;
     method public int describeContents();
     method public android.car.storagemonitoring.IoStatsEntry.Metrics getBackgroundTotals();
     method public android.car.storagemonitoring.IoStatsEntry.Metrics getForegroundTotals();
@@ -841,7 +899,6 @@ package android.car.storagemonitoring {
     method public long getTimestamp();
     method public android.car.storagemonitoring.IoStatsEntry.Metrics getTotals();
     method public android.car.storagemonitoring.IoStatsEntry getUserIdStats(int);
-    method public void writeToJson(android.util.JsonWriter) throws java.io.IOException;
     method public void writeToParcel(android.os.Parcel, int);
     field public static final android.os.Parcelable.Creator<android.car.storagemonitoring.IoStats> CREATOR;
   }
@@ -850,9 +907,7 @@ package android.car.storagemonitoring {
     ctor public IoStatsEntry(int, long, android.car.storagemonitoring.IoStatsEntry.Metrics, android.car.storagemonitoring.IoStatsEntry.Metrics);
     ctor public IoStatsEntry(android.os.Parcel);
     ctor public IoStatsEntry(android.car.storagemonitoring.UidIoRecord, long);
-    ctor public IoStatsEntry(org.json.JSONObject) throws org.json.JSONException;
     method public int describeContents();
-    method public void writeToJson(android.util.JsonWriter) throws java.io.IOException;
     method public void writeToParcel(android.os.Parcel, int);
     field public static final android.os.Parcelable.Creator<android.car.storagemonitoring.IoStatsEntry> CREATOR;
     field public final android.car.storagemonitoring.IoStatsEntry.Metrics background;
@@ -864,9 +919,7 @@ package android.car.storagemonitoring {
   public static final class IoStatsEntry.Metrics implements android.os.Parcelable {
     ctor public IoStatsEntry.Metrics(long, long, long, long, long);
     ctor public IoStatsEntry.Metrics(android.os.Parcel);
-    ctor public IoStatsEntry.Metrics(org.json.JSONObject) throws org.json.JSONException;
     method public int describeContents();
-    method public void writeToJson(android.util.JsonWriter) throws java.io.IOException;
     method public void writeToParcel(android.os.Parcel, int);
     field public static final android.os.Parcelable.Creator<android.car.storagemonitoring.IoStatsEntry.Metrics> CREATOR;
     field public final long bytesRead;
@@ -879,9 +932,7 @@ package android.car.storagemonitoring {
   public final class LifetimeWriteInfo implements android.os.Parcelable {
     ctor public LifetimeWriteInfo(String, String, long);
     ctor public LifetimeWriteInfo(android.os.Parcel);
-    ctor public LifetimeWriteInfo(org.json.JSONObject) throws org.json.JSONException;
     method public int describeContents();
-    method public void writeToJson(android.util.JsonWriter) throws java.io.IOException;
     method public void writeToParcel(android.os.Parcel, int);
     field public static final android.os.Parcelable.Creator<android.car.storagemonitoring.IoStats> CREATOR;
     field public final String fstype;
@@ -907,9 +958,7 @@ package android.car.storagemonitoring {
   public final class WearEstimate implements android.os.Parcelable {
     ctor public WearEstimate(int, int);
     ctor public WearEstimate(android.os.Parcel);
-    ctor public WearEstimate(android.util.JsonReader) throws java.io.IOException;
     method public int describeContents();
-    method public void writeToJson(android.util.JsonWriter) throws java.io.IOException;
     method public void writeToParcel(android.os.Parcel, int);
     field public static final android.os.Parcelable.Creator<android.car.storagemonitoring.WearEstimate> CREATOR;
     field public static final int UNKNOWN = -1; // 0xffffffff
@@ -932,44 +981,52 @@ package android.car.storagemonitoring {
 
 }
 
-package android.car.test {
-
-  public class CarTestManagerBinderWrapper {
-    ctor public CarTestManagerBinderWrapper(android.os.IBinder);
-    method public void onCarDisconnected();
-    field public final android.os.IBinder binder;
-  }
-
-}
-
 package android.car.trust {
 
   public final class CarTrustAgentEnrollmentManager {
     method @RequiresPermission(android.car.Car.PERMISSION_CAR_ENROLL_TRUST) public void enrollmentHandshakeAccepted(android.bluetooth.BluetoothDevice);
-    method @RequiresPermission(android.car.Car.PERMISSION_CAR_ENROLL_TRUST) @NonNull public java.util.List<java.lang.Long> getEnrollmentHandlesForUser(int);
-    method @RequiresPermission(android.car.Car.PERMISSION_CAR_ENROLL_TRUST) public void initiateEnrollmentHandshake(android.bluetooth.BluetoothDevice);
+    method @RequiresPermission(android.car.Car.PERMISSION_CAR_ENROLL_TRUST) @NonNull public java.util.List<android.car.trust.TrustedDeviceInfo> getEnrolledDeviceInfoForUser(int);
     method @RequiresPermission(android.car.Car.PERMISSION_CAR_ENROLL_TRUST) public boolean isEscrowTokenActive(long, int);
+    method @RequiresPermission(android.car.Car.PERMISSION_CAR_ENROLL_TRUST) public void removeAllTrustedDevices(int);
     method @RequiresPermission(android.car.Car.PERMISSION_CAR_ENROLL_TRUST) public void removeEscrowToken(long, int);
     method @RequiresPermission(android.car.Car.PERMISSION_CAR_ENROLL_TRUST) public void setBleCallback(@Nullable android.car.trust.CarTrustAgentEnrollmentManager.CarTrustAgentBleCallback);
     method @RequiresPermission(android.car.Car.PERMISSION_CAR_ENROLL_TRUST) public void setEnrollmentCallback(@Nullable android.car.trust.CarTrustAgentEnrollmentManager.CarTrustAgentEnrollmentCallback);
+    method @RequiresPermission(android.car.Car.PERMISSION_CAR_ENROLL_TRUST) public void setTrustedDeviceEnrollmentEnabled(boolean);
+    method @RequiresPermission(android.car.Car.PERMISSION_CAR_ENROLL_TRUST) public void setTrustedDeviceUnlockEnabled(boolean);
     method @RequiresPermission(android.car.Car.PERMISSION_CAR_ENROLL_TRUST) public void startEnrollmentAdvertising();
     method @RequiresPermission(android.car.Car.PERMISSION_CAR_ENROLL_TRUST) public void stopEnrollmentAdvertising();
     method @RequiresPermission(android.car.Car.PERMISSION_CAR_ENROLL_TRUST) public void terminateEnrollmentHandshake();
+    field public static final int ENROLLMENT_HANDSHAKE_FAILURE = 1; // 0x1
+    field public static final int ENROLLMENT_NOT_ALLOWED = 2; // 0x2
   }
 
   public static interface CarTrustAgentEnrollmentManager.CarTrustAgentBleCallback {
     method public void onBleEnrollmentDeviceConnected(android.bluetooth.BluetoothDevice);
     method public void onBleEnrollmentDeviceDisconnected(android.bluetooth.BluetoothDevice);
-    method public void onEnrollmentAdvertisingFailed(int);
+    method public void onEnrollmentAdvertisingFailed();
     method public void onEnrollmentAdvertisingStarted();
   }
 
   public static interface CarTrustAgentEnrollmentManager.CarTrustAgentEnrollmentCallback {
     method public void onAuthStringAvailable(android.bluetooth.BluetoothDevice, String);
-    method public void onEnrollmentHandshakeFailure(android.bluetooth.BluetoothDevice, int);
+    method public void onEnrollmentHandshakeFailure(@Nullable android.bluetooth.BluetoothDevice, int);
     method public void onEscrowTokenActiveStateChanged(long, boolean);
     method public void onEscrowTokenAdded(long);
     method public void onEscrowTokenRemoved(long);
+  }
+
+  public final class TrustedDeviceInfo implements android.os.Parcelable {
+    ctor public TrustedDeviceInfo(long, @NonNull String, @NonNull String);
+    ctor public TrustedDeviceInfo(android.os.Parcel);
+    method public int describeContents();
+    method public static android.car.trust.TrustedDeviceInfo deserialize(String);
+    method @NonNull public String getAddress();
+    method public long getHandle();
+    method @NonNull public String getName();
+    method public String serialize();
+    method public void writeToParcel(android.os.Parcel, int);
+    field public static final android.os.Parcelable.Creator CREATOR;
+    field public static final String DEFAULT_NAME = "Default";
   }
 
 }
@@ -1024,7 +1081,6 @@ package android.car.vms {
   }
 
   public final class VmsOperationRecorder {
-    ctor public VmsOperationRecorder(android.car.vms.VmsOperationRecorder.Writer);
     method public void addHalSubscription(int, android.car.vms.VmsLayer);
     method public void addPromiscuousSubscription(int);
     method public void addSubscription(int, android.car.vms.VmsLayer);
