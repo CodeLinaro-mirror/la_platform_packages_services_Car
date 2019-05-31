@@ -21,12 +21,14 @@ import android.car.CarBugreportManager.CarBugreportManagerCallback;
 import android.car.ICarBugreportCallback;
 import android.car.ICarBugreportService;
 import android.content.Context;
+import android.content.pm.PackageManager;
 import android.net.LocalSocket;
 import android.net.LocalSocketAddress;
-import android.os.Build;
+import android.os.Binder;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.ParcelFileDescriptor;
+import android.os.Process;
 import android.os.RemoteException;
 import android.os.SystemClock;
 import android.os.SystemProperties;
@@ -63,6 +65,11 @@ public class CarBugreportManagerService extends ICarBugreportService.Stub implem
 
     // The socket at /dev/socket/dumpstate to communicate with dumpstate.
     private static final String DUMPSTATE_SOCKET = "dumpstate";
+    // The socket definitions must match the actual socket names defined in car_bugreportd service
+    // definition.
+    private static final String BUGREPORT_PROGRESS_SOCKET = "car_br_progress_socket";
+    private static final String BUGREPORT_OUTPUT_SOCKET = "car_br_output_socket";
+
     private static final int SOCKET_CONNECTION_MAX_RETRY = 10;
 
     /**
@@ -76,21 +83,136 @@ public class CarBugreportManagerService extends ICarBugreportService.Stub implem
 
     @Override
     public void init() {
-        // Initialize handler only if build is debuggable.
-        if (Build.IS_DEBUGGABLE) {
-            mHandlerThread = new HandlerThread(TAG);
-            mHandlerThread.start();
-            mHandler = new Handler(mHandlerThread.getLooper());
-        }
+        mHandlerThread = new HandlerThread(TAG);
+        mHandlerThread.start();
+        mHandler = new Handler(mHandlerThread.getLooper());
     }
 
     @Override
     public void release() {
-        if (mHandlerThread != null) {
-            mHandlerThread.quitSafely();
+        mHandlerThread.quitSafely();
+    }
+
+    @Override
+    @RequiresPermission(android.Manifest.permission.DUMP)
+    public void requestZippedBugreport(ParcelFileDescriptor data, ParcelFileDescriptor progress,
+            ICarBugreportCallback callback) {
+
+        // Check the caller has proper permission
+        mContext.enforceCallingOrSelfPermission(android.Manifest.permission.DUMP,
+                "requestZippedBugreport");
+        // Check the caller is signed with platform keys
+        PackageManager pm = mContext.getPackageManager();
+        int callingUid = Binder.getCallingUid();
+        if (pm.checkSignatures(Process.myUid(), callingUid) != PackageManager.SIGNATURE_MATCH) {
+            throw new SecurityException("Caller " + pm.getNameForUid(callingUid)
+                            + " does not have the right signature");
+        }
+        // Check the caller is the default designated bugreport app
+        String defaultAppPkgName = mContext.getString(R.string.default_car_bugreport_application);
+        String[] packageNamesForCallerUid = pm.getPackagesForUid(callingUid);
+        boolean found = false;
+        if (packageNamesForCallerUid != null) {
+            for (String packageName : packageNamesForCallerUid) {
+                if (defaultAppPkgName.equals(packageName)) {
+                    found = true;
+                    break;
+                }
+            }
+        }
+        if (!found) {
+            throw new SecurityException("Caller " +  pm.getNameForUid(callingUid)
+                    + " is not a designated bugreport app");
+        }
+
+        synchronized (mLock) {
+            requestZippedBugReportLocked(data, progress, callback);
         }
     }
 
+    @GuardedBy("mLock")
+    private void requestZippedBugReportLocked(ParcelFileDescriptor data,
+            ParcelFileDescriptor progress, ICarBugreportCallback callback) {
+        if (mIsServiceRunning) {
+            Slog.w(TAG, "Bugreport Service already running");
+            reportError(callback, CarBugreportManagerCallback.CAR_BUGREPORT_IN_PROGRESS);
+            return;
+        }
+        mIsServiceRunning = true;
+        mHandler.post(() -> startBugreportd(data, progress, callback));
+    }
+
+    private void startBugreportd(ParcelFileDescriptor data, ParcelFileDescriptor progress,
+            ICarBugreportCallback callback) {
+        readBugreport(data, progress, callback);
+        synchronized (mLock) {
+            mIsServiceRunning = false;
+        }
+    }
+
+    private void readBugreport(ParcelFileDescriptor output, ParcelFileDescriptor progress,
+            ICarBugreportCallback callback) {
+        Slog.i(TAG, "Starting car-bugreportd");
+        try {
+            SystemProperties.set("ctl.start", "car-bugreportd");
+        } catch (RuntimeException e) {
+            Slog.e(TAG, "Failed to start car-bugreportd", e);
+            reportError(callback, CarBugreportManagerCallback.CAR_BUGREPORT_DUMPSTATE_FAILED);
+            return;
+        }
+        // The native service first generates the progress data. Once it writes the progress
+        // data fully, it closes the socket and writes the zip file. So we read both files
+        // sequentially here.
+        if (!readSocket(BUGREPORT_PROGRESS_SOCKET, progress, callback)) {
+            Slog.e(TAG, "failed reading bugreport progress socket");
+            reportError(callback, CarBugreportManagerCallback.CAR_BUGREPORT_DUMPSTATE_FAILED);
+            return;
+        }
+        if (!readSocket(BUGREPORT_OUTPUT_SOCKET, output, callback)) {
+            Slog.i(TAG, "failed reading bugreport output socket");
+            reportError(callback, CarBugreportManagerCallback.CAR_BUGREPORT_DUMPSTATE_FAILED);
+            return;
+        }
+        Slog.i(TAG, "finished reading bugreport");
+        try {
+            callback.onFinished();
+        } catch (RemoteException e) {
+            Slog.e(TAG, "onFinished() failed: " + e.getMessage());
+        }
+    }
+
+    private boolean readSocket(String name, ParcelFileDescriptor pfd,
+            ICarBugreportCallback callback) {
+        LocalSocket localSocket;
+
+        try {
+            localSocket = connectSocket(name);
+        } catch (IOException e) {
+            Slog.e(TAG, "Failed connecting to socket " + name, e);
+            reportError(callback,
+                    CarBugreportManagerCallback.CAR_BUGREPORT_DUMPSTATE_CONNECTION_FAILED);
+            // Early out if connection to socket fails.
+            return false;
+        }
+
+        try (
+            DataInputStream in = new DataInputStream(localSocket.getInputStream());
+            DataOutputStream out =
+                    new DataOutputStream(new ParcelFileDescriptor.AutoCloseOutputStream(pfd));
+        ) {
+            rawCopyStream(out, in);
+        } catch (IOException | RuntimeException e) {
+            Slog.e(TAG, "Failed to grab dump state " + name, e);
+            reportError(callback, CarBugreportManagerCallback.CAR_BUGREPORT_DUMPSTATE_FAILED);
+            return false;
+        }
+        return true;
+    }
+
+
+    /**
+     * This API and all descendants will be removed once the clients transition to new method
+     */
     @Override
     @RequiresPermission(android.Manifest.permission.DUMP)
     public void requestBugreport(ParcelFileDescriptor pfd, ICarBugreportCallback callback) {
@@ -127,15 +249,16 @@ public class CarBugreportManagerService extends ICarBugreportService.Stub implem
         }
     }
 
-    @Override
-    public void dump(PrintWriter writer) {
-    }
-
     private void dumpStateToFileWrapper(ParcelFileDescriptor pfd, ICarBugreportCallback callback) {
         dumpStateToFile(pfd, callback);
         synchronized (mLock) {
             mIsServiceRunning = false;
         }
+    }
+
+    @Override
+    public void dump(PrintWriter writer) {
+        // TODO(sgurun) implement
     }
 
     private void dumpStateToFile(ParcelFileDescriptor pfd, ICarBugreportCallback callback) {
@@ -155,7 +278,7 @@ public class CarBugreportManagerService extends ICarBugreportService.Stub implem
         }
 
         try {
-            localSocket = connectToDumpstateService();
+            localSocket = connectSocket(DUMPSTATE_SOCKET);
         } catch (IOException e) {
             Slog.e(TAG, "Timed out connecting to dumpstate socket", e);
             reportError(callback,
@@ -184,7 +307,7 @@ public class CarBugreportManagerService extends ICarBugreportService.Stub implem
         }
     }
 
-    private LocalSocket connectToDumpstateService() throws IOException {
+    private LocalSocket connectSocket(String socketName) throws IOException {
         LocalSocket socket = new LocalSocket();
         // The dumpstate socket will be created by init upon receiving the
         // service request. It may not be ready by this point. So we will
@@ -195,14 +318,15 @@ public class CarBugreportManagerService extends ICarBugreportService.Stub implem
             // first time too.
             SystemClock.sleep(/* ms= */ 1000);
             try {
-                socket.connect(new LocalSocketAddress(DUMPSTATE_SOCKET,
+                socket.connect(new LocalSocketAddress(socketName,
                         LocalSocketAddress.Namespace.RESERVED));
                 return socket;
             } catch (IOException e) {
                 if (++retryCount >= SOCKET_CONNECTION_MAX_RETRY) {
                     throw e;
                 }
-                Log.i(TAG, "Failed to connect to dumpstate, will try again: " + e.getMessage());
+                Log.i(TAG, "Failed to connect to" + socketName + ". will try again"
+                        + e.getMessage());
             }
         }
     }
