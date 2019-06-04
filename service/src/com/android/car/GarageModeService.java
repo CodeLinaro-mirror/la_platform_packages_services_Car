@@ -172,6 +172,9 @@ public class GarageModeService implements CarServiceBase,
         // this is the beginning of each garage mode.
         synchronized (this) {
             logd("onPrePowerEvent " + shuttingDown);
+            if (!mGarageModeEnabled) {
+                return 0;
+            }
             mInGarageMode = true;
             mGarageModeIndex++;
             mHandler.removeMessages(MSG_EXIT_GARAGE_MODE_EARLY);
@@ -191,6 +194,9 @@ public class GarageModeService implements CarServiceBase,
     public void onPowerOn(boolean displayOn) {
         synchronized (this) {
             logd("onPowerOn: " + displayOn);
+            if (!mGarageModeEnabled) {
+                return;
+            }
             if (displayOn) {
                 // the car is use now. reset the garage mode counter.
                 mGarageModeIndex = 0;
@@ -216,6 +222,9 @@ public class GarageModeService implements CarServiceBase,
     @Override
     public void onSleepEntry() {
         synchronized (this) {
+            if (!mGarageModeEnabled) {
+                return;
+            }
             mInGarageMode = false;
         }
     }
@@ -223,6 +232,9 @@ public class GarageModeService implements CarServiceBase,
     @Override
     public void onShutdown() {
         synchronized (this) {
+            if (!mGarageModeEnabled) {
+                return;
+            }
             mHandler.sendMessage(
                     mHandler.obtainMessage(MSG_WRITE_TO_PREF, mGarageModeIndex, 0));
         }

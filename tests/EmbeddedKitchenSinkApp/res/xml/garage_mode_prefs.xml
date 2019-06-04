@@ -17,6 +17,7 @@
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
     <SwitchPreference android:key="android.car.GARAGE_MODE_ENABLED"
         android:title="@string/garage_switch"
+        android:defaultValue="true"
         android:summaryOn="@string/garage_enabled"
         android:summaryOff="@string/garage_disabled" />
     <ListPreference
