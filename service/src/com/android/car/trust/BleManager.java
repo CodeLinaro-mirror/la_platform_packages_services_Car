@@ -34,7 +34,6 @@ import android.bluetooth.le.BluetoothLeAdvertiser;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.os.Handler;
-import android.os.ParcelUuid;
 import android.util.Log;
 
 import androidx.annotation.Nullable;
@@ -55,10 +54,12 @@ public abstract class BleManager {
     private static final int BLE_RETRY_LIMIT = 5;
     private static final int BLE_RETRY_INTERVAL_MS = 1000;
 
-    // https://www.bluetooth.com/specifications/gatt/viewer?attributeXmlFile=org.bluetooth.service.generic_access.xml
+    // https://www.bluetooth.com/specifications/gatt/viewer?attributeXmlFile=org.bluetooth
+    // .service.generic_access.xml
     private static final UUID GENERIC_ACCESS_PROFILE_UUID =
             UUID.fromString("00001800-0000-1000-8000-00805f9b34fb");
-    //https://www.bluetooth.com/specifications/gatt/viewer?attributeXmlFile=org.bluetooth.characteristic.gap.device_name.xml
+    //https://www.bluetooth.com/specifications/gatt/viewer?attributeXmlFile=org.bluetooth
+    // .characteristic.gap.device_name.xml
     private static final UUID DEVICE_NAME_UUID =
             UUID.fromString("00002a00-0000-1000-8000-00805f9b34fb");
 
@@ -82,9 +83,11 @@ public abstract class BleManager {
      * <p>It is possible that BLE service is still in TURNING_ON state when this method is invoked.
      * Therefore, several retries will be made to ensure advertising is started.
      *
-     * @param service {@link BluetoothGattService} that will be discovered by clients
+     * @param service           {@link BluetoothGattService} that will be discovered by clients
+     * @param data              {@link AdvertiseData} data to advertise
+     * @param advertiseCallback {@link AdvertiseCallback} callback for advertiser
      */
-    protected void startAdvertising(BluetoothGattService service,
+    protected void startAdvertising(BluetoothGattService service, AdvertiseData data,
             AdvertiseCallback advertiseCallback) {
         if (Log.isLoggable(TAG, Log.DEBUG)) {
             Log.d(TAG, "startAdvertising: " + service.getUuid().toString());
@@ -116,11 +119,6 @@ public abstract class BleManager {
                 .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
                 .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
                 .setConnectable(true)
-                .build();
-
-        AdvertiseData data = new AdvertiseData.Builder()
-                .setIncludeDeviceName(true)
-                .addServiceUuid(new ParcelUuid(service.getUuid()))
                 .build();
 
         mAdvertiserStartCount = 0;
@@ -224,6 +222,14 @@ public abstract class BleManager {
     }
 
     /**
+     * Triggered if a remote client has requested to change the MTU for a given connection.
+     *
+     * @param size The new MTU size.
+     */
+    protected void onMtuSizeChanged(int size) {
+    }
+
+    /**
      * Triggered when a device (GATT client) connected.
      *
      * @param device Remote device that connected on BLE.
@@ -317,6 +323,15 @@ public abstract class BleManager {
                     onCharacteristicWrite(device, requestId, characteristic,
                             preparedWrite, responseNeeded, offset, value);
                 }
+
+                @Override
+                public void onMtuChanged(BluetoothDevice device, int mtu) {
+                    if (Log.isLoggable(TAG, Log.DEBUG)) {
+                        Log.d(TAG, "onMtuChanged: " + mtu + " for device " + device.getAddress());
+                    }
+                    onMtuSizeChanged(mtu);
+                }
+
             };
 
     private final BluetoothGattCallback mGattCallback = new BluetoothGattCallback() {
@@ -341,7 +356,7 @@ public abstract class BleManager {
                     if (Log.isLoggable(TAG, Log.DEBUG)) {
                         Log.d(TAG,
                                 "Connection state not connecting or disconnecting; ignoring: "
-                                + newState);
+                                        + newState);
                     }
             }
         }
