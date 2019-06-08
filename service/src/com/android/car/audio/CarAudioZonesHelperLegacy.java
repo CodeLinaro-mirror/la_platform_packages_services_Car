@@ -44,7 +44,7 @@ import java.util.List;
  * @deprecated This is replaced by {@link CarAudioZonesHelper}.
  */
 @Deprecated
-/* package */ class CarAudioZonesHelperLegacy implements CarAudioService.CarAudioZonesLoader {
+/* package */ class CarAudioZonesHelperLegacy {
 
     private static final String TAG_VOLUME_GROUPS = "volumeGroups";
     private static final String TAG_GROUP = "group";
@@ -74,8 +74,7 @@ import java.util.List;
         }
     }
 
-    @Override
-    public CarAudioZone[] loadAudioZones() {
+    CarAudioZone[] loadAudioZones() {
         final CarAudioZone zone = new CarAudioZone(CarAudioManager.PRIMARY_AUDIO_ZONE,
                 "Primary zone");
         for (CarVolumeGroup group : loadVolumeGroups()) {

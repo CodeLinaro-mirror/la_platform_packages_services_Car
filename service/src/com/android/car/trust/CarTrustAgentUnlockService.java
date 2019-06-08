@@ -24,6 +24,8 @@ import com.android.car.Utils;
 import com.android.internal.annotations.GuardedBy;
 
 import java.io.PrintWriter;
+import java.util.LinkedList;
+import java.util.Queue;
 
 /**
  * A service that interacts with the Trust Agent {@link CarBleTrustAgent} and a comms (BLE) service
@@ -33,9 +35,12 @@ import java.io.PrintWriter;
 public class CarTrustAgentUnlockService {
     private static final String TAG = "CarTrustAgentUnlock";
     private static final String TRUSTED_DEVICE_UNLOCK_ENABLED_KEY = "trusted_device_unlock_enabled";
+    //Arbirary log size
+    private static final int MAX_LOG_SIZE = 20;
     private final CarTrustedDeviceService mTrustedDeviceService;
     private final CarTrustAgentBleManager mCarTrustAgentBleManager;
     private CarTrustAgentUnlockDelegate mUnlockDelegate;
+    private final Queue<String> mLogQueue = new LinkedList<>();
     // Locks
     private final Object mTokenLock = new Object();
     private final Object mHandleLock = new Object();
@@ -78,7 +83,9 @@ public class CarTrustAgentUnlockService {
     public void setTrustedDeviceUnlockEnabled(boolean isEnabled) {
         SharedPreferences.Editor editor = mTrustedDeviceService.getSharedPrefs().edit();
         editor.putBoolean(TRUSTED_DEVICE_UNLOCK_ENABLED_KEY, isEnabled);
-        editor.apply();
+        if (!editor.commit()) {
+            Log.wtf(TAG, "Unlock Enable Failed. Enable? " + isEnabled);
+        }
     }
     /**
      * Set a delegate that implements {@link CarTrustAgentUnlockDelegate}. The delegate will be
@@ -93,6 +100,10 @@ public class CarTrustAgentUnlockService {
      * Start Unlock Advertising
      */
     void startUnlockAdvertising() {
+        queueMessageForLog("startUnlockAdvertising");
+        if (Log.isLoggable(TAG, Log.DEBUG)) {
+            Log.d(TAG, "startUnlockAdvertising");
+        }
         if (!mTrustedDeviceService.getSharedPrefs().getBoolean(TRUSTED_DEVICE_UNLOCK_ENABLED_KEY,
                 true)) {
             Log.e(TAG, "Trusted Device Unlock is disabled");
@@ -100,6 +111,9 @@ public class CarTrustAgentUnlockService {
         }
         mTrustedDeviceService.getCarTrustAgentEnrollmentService().stopEnrollmentAdvertising();
         stopUnlockAdvertising();
+        if (Log.isLoggable(TAG, Log.DEBUG)) {
+            Log.d(TAG, "start unlock advertising");
+        }
         mCarTrustAgentBleManager.startUnlockAdvertising();
     }
 
@@ -107,6 +121,10 @@ public class CarTrustAgentUnlockService {
      * Stop unlock advertising
      */
     void stopUnlockAdvertising() {
+        queueMessageForLog("stopUnlockAdvertising");
+        if (Log.isLoggable(TAG, Log.DEBUG)) {
+            Log.d(TAG, "stopUnlockAdvertising");
+        }
         mCarTrustAgentBleManager.stopUnlockAdvertising();
         // Also disconnect from the peer.
         if (mRemoteUnlockDevice != null) {
@@ -130,6 +148,7 @@ public class CarTrustAgentUnlockService {
                 // TBD, return when this is encountered?
                 Log.e(TAG, "Unexpected: Cannot connect to another device when already connected");
             }
+            queueMessageForLog("onRemoteDeviceConnected (addr:" + device.getAddress() + ")");
             mRemoteUnlockDevice = device;
         }
     }
@@ -139,6 +158,7 @@ public class CarTrustAgentUnlockService {
         if (!device.equals(mRemoteUnlockDevice) && device.getAddress() != null) {
             Log.e(TAG, "Disconnected from an unknown device:" + device.getAddress());
         }
+        queueMessageForLog("onRemoteDeviceDisconnected (addr:" + device.getAddress() + ")");
         synchronized (mDeviceLock) {
             mRemoteUnlockDevice = null;
         }
@@ -149,8 +169,9 @@ public class CarTrustAgentUnlockService {
             mUnlockToken = value;
         }
         if (Log.isLoggable(TAG, Log.DEBUG)) {
-            Log.d(TAG, "Unlock Token: " + mUnlockToken);
+            Log.d(TAG, "Unlock Token: " + Utils.byteArrayToHexString(mUnlockToken));
         }
+        queueMessageForLog("onUnlockTokenReceived");
         if (mUnlockToken == null || mUnlockHandle == null) {
             if (Log.isLoggable(TAG, Log.DEBUG)) {
                 Log.d(TAG, "Unlock Handle not available yet");
@@ -181,8 +202,9 @@ public class CarTrustAgentUnlockService {
             mUnlockHandle = value;
         }
         if (Log.isLoggable(TAG, Log.DEBUG)) {
-            Log.d(TAG, "Unlock Handle: " + mUnlockHandle);
+            Log.d(TAG, "Unlock Handle: " + Utils.byteArrayToHexString(mUnlockHandle));
         }
+        queueMessageForLog("onUnlockHandleReceived");
         if (mUnlockToken == null || mUnlockHandle == null) {
             if (Log.isLoggable(TAG, Log.DEBUG)) {
                 Log.d(TAG, "Unlock Token not available yet");
@@ -210,5 +232,17 @@ public class CarTrustAgentUnlockService {
     }
 
     void dump(PrintWriter writer) {
+        writer.println("*CarTrustAgentUnlockService*");
+        writer.println("Unlock Service Logs:");
+        for (String log : mLogQueue) {
+            writer.println("\t" + log);
+        }
+    }
+
+    private void queueMessageForLog(String message) {
+        if (mLogQueue.size() >= MAX_LOG_SIZE) {
+            mLogQueue.remove();
+        }
+        mLogQueue.add(System.currentTimeMillis() + " : " + message);
     }
 }
