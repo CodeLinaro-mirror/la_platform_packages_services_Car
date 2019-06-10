@@ -138,8 +138,7 @@ public class ICarImpl extends ICar.Stub {
                 mSystemActivityMonitoringService,
                 mUserManagerHelper);
         mPerUserCarServiceHelper = new PerUserCarServiceHelper(serviceContext);
-        mCarBluetoothService = new CarBluetoothService(serviceContext, mCarPropertyService,
-                mPerUserCarServiceHelper, mCarUXRestrictionsService);
+        mCarBluetoothService = new CarBluetoothService(serviceContext, mPerUserCarServiceHelper);
         mCarInputService = new CarInputService(serviceContext, mHal.getInputHal());
         mCarProjectionService = new CarProjectionService(
                 serviceContext, null /* handler */, mCarInputService, mCarBluetoothService);
@@ -163,8 +162,7 @@ public class ICarImpl extends ICar.Stub {
                 systemInterface);
         mCarConfigurationService =
                 new CarConfigurationService(serviceContext, new JsonReaderImpl());
-        mCarLocationService = new CarLocationService(mContext, mCarPropertyService,
-                mUserManagerHelper);
+        mCarLocationService = new CarLocationService(mContext, mUserManagerHelper);
         mCarTrustedDeviceService = new CarTrustedDeviceService(serviceContext);
         mCarMediaService = new CarMediaService(serviceContext);
         mCarBugreportManagerService = new CarBugreportManagerService(serviceContext);
@@ -259,10 +257,23 @@ public class ICarImpl extends ICar.Stub {
         mCarUserService.onSwitchUser(userHandle);
     }
 
-    private static void assertCallingFromSystemProcess() {
+    static void assertCallingFromSystemProcess() {
         int uid = Binder.getCallingUid();
         if (uid != Process.SYSTEM_UID) {
             throw new SecurityException("Only allowed from system");
+        }
+    }
+
+    /**
+     * Assert if binder call is coming from system process like system server or if it is called
+     * from its own process even if it is not system. The latter can happen in test environment.
+     * Note that car service runs as system user but test like car service test will not.
+     */
+    static void assertCallingFromSystemProcessOrSelf() {
+        int uid = Binder.getCallingUid();
+        int pid = Binder.getCallingPid();
+        if (uid != Process.SYSTEM_UID && pid != Process.myPid()) {
+            throw new SecurityException("Only allowed from system or self");
         }
     }
 
@@ -398,7 +409,6 @@ public class ICarImpl extends ICar.Stub {
 
     /**
      * Ensures the caller has the permission to enroll a Trust Agent.
-     * @param context
      */
     public static void assertTrustAgentEnrollmentPermission(Context context) {
         assertPermission(context, Car.PERMISSION_CAR_ENROLL_TRUST);
@@ -412,8 +422,6 @@ public class ICarImpl extends ICar.Stub {
 
     /**
      * Checks to see if the caller has a permission.
-     * @param context
-     * @param permission
      *
      * @return boolean TRUE if caller has the permission.
      */
@@ -500,6 +508,7 @@ public class ICarImpl extends ICar.Stub {
         private static final String COMMAND_GARAGE_MODE = "garage-mode";
         private static final String COMMAND_GET_DO_ACTIVITIES = "get-do-activities";
         private static final String COMMAND_GET_CARPROPERTYCONFIG = "get-carpropertyconfig";
+        private static final String COMMAND_GET_PROPERTY_VALUE = "get-property-value";
         private static final String COMMAND_PROJECTION_UI_MODE = "projection-ui-mode";
         private static final String COMMAND_RESUME = "resume";
         private static final String COMMAND_SUSPEND = "suspend";
@@ -531,6 +540,9 @@ public class ICarImpl extends ICar.Stub {
             pw.println("\t  Get Distraction Optimized activities in given package.");
             pw.println("\tget-carpropertyconfig [propertyId]");
             pw.println("\t  Get a CarPropertyConfig by Id in Hex or list all CarPropertyConfigs");
+            pw.println("\tget-property-value [propertyId] [areaId]");
+            pw.println("\t  Get a vehicle property value by property id in Hex and areaId");
+            pw.println("\t  or list all property values for all areaId");
             pw.println("\tsuspend");
             pw.println("\t  Suspend the system to Deep Sleep.");
             pw.println("\tresume");
@@ -609,6 +621,11 @@ public class ICarImpl extends ICar.Stub {
                 case COMMAND_GET_CARPROPERTYCONFIG:
                     String propertyId = args.length < 2 ? "" : args[1];
                     mHal.dumpPropertyConfigs(writer, propertyId);
+                    break;
+                case COMMAND_GET_PROPERTY_VALUE:
+                    String propId = args.length < 2 ? "" : args[1];
+                    String areaId = args.length < 3 ? "" : args[2];
+                    mHal.dumpPropertyValueByCommend(writer, propId, areaId);
                     break;
                 case COMMAND_PROJECTION_UI_MODE:
                     if (args.length != 2) {
