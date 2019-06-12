@@ -49,9 +49,12 @@ LOCAL_STATIC_JAVA_LIBRARIES += \
     android.hardware.automotive.vehicle-V2.0-java \
     vehicle-hal-support-lib \
     com.android.car.keventreader-client \
+    guava \
     kitchensink-gson
 
 LOCAL_JAVA_LIBRARIES += android.car
+
+LOCAL_REQUIRED_MODULES := privapp_whitelist_com.google.android.car.kitchensink
 
 include $(BUILD_PACKAGE)
 

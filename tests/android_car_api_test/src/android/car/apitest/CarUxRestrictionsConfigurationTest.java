@@ -247,9 +247,25 @@ public class CarUxRestrictionsConfigurationTest extends TestCase {
         new Builder.SpeedRange(0f, MAX_SPEED);
     }
 
-    public void testSpeedRange_NegativeMax() {
+    public void testSpeedRange_NoNegativeMin() {
+        try {
+            new Builder.SpeedRange(-2f, 1f);
+        } catch (Exception e) {
+            // Expected exception.
+        }
+    }
+
+    public void testSpeedRange_NoNegativeMax() {
         try {
             new Builder.SpeedRange(2f, -1f);
+        } catch (Exception e) {
+            // Expected exception.
+        }
+    }
+
+    public void testSpeedRange_MinCannotBeMaxSpeed() {
+        try {
+            new Builder.SpeedRange(MAX_SPEED, 1f);
         } catch (Exception e) {
             // Expected exception.
         }
@@ -535,6 +551,84 @@ public class CarUxRestrictionsConfigurationTest extends TestCase {
                 DRIVING_STATE_MOVING, 1f, UX_RESTRICTION_MODE_PASSENGER);
         assertTrue(baseline.isRequiresDistractionOptimization());
         assertEquals(UX_RESTRICTIONS_NO_VIDEO, baseline.getActiveRestrictions());
+    }
+
+    public void testHasSameParameters_SameParameters() {
+        CarUxRestrictionsConfiguration one = new CarUxRestrictionsConfiguration.Builder()
+                .setMaxStringLength(1)
+                .setMaxCumulativeContentItems(1)
+                .setMaxContentDepth(1)
+                .build();
+
+        CarUxRestrictionsConfiguration other = new CarUxRestrictionsConfiguration.Builder()
+                .setMaxStringLength(1)
+                .setMaxCumulativeContentItems(1)
+                .setMaxContentDepth(1)
+                .build();
+
+        assertTrue(one.hasSameParameters(other));
+    }
+
+    public void testHasSameParameters_DifferentParameters() {
+        CarUxRestrictionsConfiguration one = new CarUxRestrictionsConfiguration.Builder()
+                .setMaxStringLength(2)
+                .setMaxCumulativeContentItems(1)
+                .setMaxContentDepth(1)
+                .build();
+
+        CarUxRestrictionsConfiguration other = new CarUxRestrictionsConfiguration.Builder()
+                .setMaxStringLength(1)
+                .setMaxCumulativeContentItems(1)
+                .setMaxContentDepth(1)
+                .build();
+
+        assertFalse(one.hasSameParameters(other));
+    }
+
+    public void testConfigurationEquals() {
+        CarUxRestrictionsConfiguration one = new CarUxRestrictionsConfiguration.Builder()
+                .setMaxStringLength(2)
+                .setMaxCumulativeContentItems(1)
+                .setMaxContentDepth(1)
+                .setUxRestrictions(DRIVING_STATE_MOVING, new DrivingStateRestrictions())
+                .setUxRestrictions(DRIVING_STATE_PARKED,
+                        new DrivingStateRestrictions().setRestrictions(UX_RESTRICTIONS_NO_VIDEO))
+                .build();
+
+        CarUxRestrictionsConfiguration other = new CarUxRestrictionsConfiguration.Builder()
+                .setMaxStringLength(2)
+                .setMaxCumulativeContentItems(1)
+                .setMaxContentDepth(1)
+                .setUxRestrictions(DRIVING_STATE_MOVING, new DrivingStateRestrictions())
+                .setUxRestrictions(DRIVING_STATE_PARKED,
+                        new DrivingStateRestrictions().setRestrictions(UX_RESTRICTIONS_NO_VIDEO))
+                .build();
+
+        assertTrue(one.equals(other));
+        assertTrue(one.hashCode() == other.hashCode());
+    }
+
+    public void testConfigurationEquals_DifferentRestrictions() {
+        CarUxRestrictionsConfiguration one = new CarUxRestrictionsConfiguration.Builder()
+                .setMaxStringLength(2)
+                .setMaxCumulativeContentItems(1)
+                .setMaxContentDepth(1)
+                .setUxRestrictions(DRIVING_STATE_MOVING, new DrivingStateRestrictions())
+                .setUxRestrictions(DRIVING_STATE_PARKED,
+                        new DrivingStateRestrictions().setRestrictions(
+                                UX_RESTRICTIONS_FULLY_RESTRICTED))
+                .build();
+
+        CarUxRestrictionsConfiguration other = new CarUxRestrictionsConfiguration.Builder()
+                .setMaxStringLength(2)
+                .setMaxCumulativeContentItems(1)
+                .setMaxContentDepth(1)
+                .setUxRestrictions(DRIVING_STATE_MOVING, new DrivingStateRestrictions())
+                .setUxRestrictions(DRIVING_STATE_PARKED,
+                        new DrivingStateRestrictions().setRestrictions(UX_RESTRICTIONS_BASELINE))
+                .build();
+
+        assertFalse(one.equals(other));
     }
 
     /**

@@ -69,7 +69,6 @@
     <string name="activity_blocked_text" msgid="5342114426610711378">"ਤੁਹਾਡੀ ਸੁਰੱਖਿਆ ਲਈ, ਗੱਡੀ ਚਲਾਉਣ ਵੇਲੇ ਇਹ ਸਰਗਰਮੀ ਉਪਲਬਧ ਨਹੀਂ ਹੈ।\nਜਾਰੀ ਰੱਖਣ ਲਈ, ਗੱਡੀ ਰੋਕਣ ਤੱਕ ਉਡੀਕ ਕਰੋ।"</string>
     <string name="exit_button_message" msgid="8554690915924055685">"ਸੁਰੱਖਿਅਤ ਐਪ ਵਿਸ਼ੇਸ਼ਤਾਵਾਂ ਨਾਲ ਮੁੜ ਤੋਂ ਸ਼ੁਰੂ ਕਰਨ ਲਈ, <xliff:g id="EXIT_BUTTON">%s</xliff:g> ਚੁਣੋ।"</string>
     <string name="exit_button" msgid="5829638404777671253">"ਪਿੱਛੇ"</string>
-    <string name="debug_button_text" msgid="6395881820644544676">"ਡੀਬੱਗ ਜਾਣਕਾਰੀ"</string>
     <string name="car_permission_label_diag_read" msgid="7248894224877702604">"ਤਸ਼ਖੀਸੀ ਡਾਟੇ ਨੂੰ ਪੜ੍ਹਨਾ"</string>
     <string name="car_permission_desc_diag_read" msgid="1121426363040966178">"ਕਾਰ ਦਾ ਤਸ਼ਖੀਸੀ ਡਾਟਾ ਪੜ੍ਹਨਾ।"</string>
     <string name="car_permission_label_diag_clear" msgid="4783070510879698157">"ਤਸ਼ਖੀਸੀ ਡਾਟਾ ਕਲੀਅਰ ਕਰਨਾ"</string>
@@ -124,6 +123,5 @@
     <string name="car_permission_desc_car_power" msgid="9202079903668652864">"ਕਾਰ ਦੀ ਪਾਵਰ ਸਥਿਤੀ ਤੱਕ ਪਹੁੰਚ।"</string>
     <string name="car_permission_label_enroll_trust" msgid="3512907900486690218">"ਭਰੋਸੇਯੋਗ ਡੀਵਾਈਸਾਂ ਦਰਜ ਕਰੋ"</string>
     <string name="car_permission_desc_enroll_trust" msgid="4148649994602185130">"ਭਰੋਸੇਯੋਗ ਡੀਵਾਈਸਾਂ ਨੂੰ ਦਰਜਾਬੰਦੀ ਕਰਨ ਦਿਓ"</string>
-    <!-- no translation found for trust_device_default_name (4213625926070261253) -->
-    <skip />
+    <string name="trust_device_default_name" msgid="4213625926070261253">"ਮੇਰਾ ਡੀਵਾਈਸ"</string>
 </resources>

@@ -16,15 +16,41 @@
 
 package com.android.car.trust;
 
+import android.annotation.Nullable;
+import android.app.ActivityManager;
 import android.bluetooth.BluetoothDevice;
+import android.car.trust.TrustedDeviceInfo;
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.security.keystore.KeyGenParameterSpec;
+import android.security.keystore.KeyProperties;
+import android.util.Base64;
 import android.util.Log;
 
 import com.android.car.CarServiceBase;
 import com.android.car.R;
+import com.android.car.Utils;
 
+import java.io.IOException;
 import java.io.PrintWriter;
+import java.security.InvalidAlgorithmParameterException;
+import java.security.InvalidKeyException;
+import java.security.Key;
+import java.security.KeyStore;
+import java.security.KeyStoreException;
+import java.security.NoSuchAlgorithmException;
+import java.security.NoSuchProviderException;
+import java.security.UnrecoverableKeyException;
+import java.security.cert.CertificateException;
+import java.util.List;
+import java.util.UUID;
+
+import javax.crypto.BadPaddingException;
+import javax.crypto.Cipher;
+import javax.crypto.IllegalBlockSizeException;
+import javax.crypto.KeyGenerator;
+import javax.crypto.NoSuchPaddingException;
+import javax.crypto.spec.GCMParameterSpec;
 
 /**
  * The part of the Car service that enables the Trusted device feature.  Trusted Device is a feature
@@ -37,11 +63,28 @@ import java.io.PrintWriter;
  */
 public class CarTrustedDeviceService implements CarServiceBase {
     private static final String TAG = CarTrustedDeviceService.class.getSimpleName();
+
+    private static final String UNIQUE_ID_KEY = "CTABM_unique_id";
+    private static final String PREF_ENCRYPTION_KEY_PREFIX = "CTABM_encryption_key";
+    private static final String KEY_ALIAS = "Ukey2Key";
+    private static final String CIPHER_TRANSFORMATION = "AES/GCM/NoPadding";
+    private static final String KEYSTORE_PROVIDER = "AndroidKeyStore";
+    private static final String IV_SPEC_SEPARATOR = ";";
+
+    // The length of the authentication tag for a cipher in GCM mode. The GCM specification states
+    // that this length can only have the values {128, 120, 112, 104, 96}. Using the highest
+    // possible value.
+    private static final int GCM_AUTHENTICATION_TAG_LENGTH = 128;
+
+    private static final int RANDOM_NAME_LENGTH = 6;
+
     private final Context mContext;
     private CarTrustAgentEnrollmentService mCarTrustAgentEnrollmentService;
     private CarTrustAgentUnlockService mCarTrustAgentUnlockService;
     private CarTrustAgentBleManager mCarTrustAgentBleManager;
     private SharedPreferences mTrustAgentTokenPreferences;
+    private UUID mUniqueId;
+    private String mRandomName;
 
     public CarTrustedDeviceService(Context context) {
         mContext = context;
@@ -123,5 +166,235 @@ public class CarTrustedDeviceService implements CarServiceBase {
 
     @Override
     public void dump(PrintWriter writer) {
+        writer.println("*CarTrustedDeviceService*");
+        int uid = ActivityManager.getCurrentUser();
+        writer.println("current user id: " + uid);
+        List<TrustedDeviceInfo> deviceInfos = mCarTrustAgentEnrollmentService
+                .getEnrolledDeviceInfosForUser(uid);
+        writer.println(getDeviceInfoListString(uid, deviceInfos));
+        mCarTrustAgentEnrollmentService.dump(writer);
+        mCarTrustAgentUnlockService.dump(writer);
+    }
+
+    private static String getDeviceInfoListString(int uid, List<TrustedDeviceInfo> deviceInfos) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("device list of (user : ").append(uid).append("):");
+        if (deviceInfos != null && deviceInfos.size() > 0) {
+            for (int i = 0; i < deviceInfos.size(); i++) {
+                sb.append("\n\tdevice# ").append(i + 1).append(" : ")
+                    .append(deviceInfos.get(i).toString());
+            }
+        } else {
+            sb.append("\n\tno device listed");
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Get the unique id for head unit. Persists on device until factory reset.
+     *
+     * @return unique id, or null if unable to retrieve generated id (this should never happen)
+     */
+    @Nullable
+    UUID getUniqueId() {
+        if (mUniqueId != null) {
+            return mUniqueId;
+        }
+
+        SharedPreferences prefs = getSharedPrefs();
+        if (prefs.contains(UNIQUE_ID_KEY)) {
+            mUniqueId = UUID.fromString(
+                    prefs.getString(UNIQUE_ID_KEY, null));
+            if (Log.isLoggable(TAG, Log.DEBUG)) {
+                Log.d(TAG, "Found existing trusted unique id: "
+                        + prefs.getString(UNIQUE_ID_KEY, ""));
+            }
+        } else {
+            mUniqueId = UUID.randomUUID();
+            if (!prefs.edit().putString(UNIQUE_ID_KEY, mUniqueId.toString()).commit()) {
+                mUniqueId = null;
+            } else if (Log.isLoggable(TAG, Log.DEBUG)) {
+                Log.d(TAG, "Generated new trusted unique id: "
+                        + prefs.getString(UNIQUE_ID_KEY, ""));
+            }
+        }
+
+        return mUniqueId;
+    }
+
+    /**
+     * Get communication encryption key for the given device
+     *
+     * @param deviceId id of trusted device
+     * @return encryption key, null if device id is not recognized
+     */
+    @Nullable
+    byte[] getEncryptionKey(String deviceId) {
+        SharedPreferences prefs = getSharedPrefs();
+        String key = PREF_ENCRYPTION_KEY_PREFIX + deviceId;
+        if (!prefs.contains(key)) {
+            return null;
+        }
+
+        // This value will not be "null" because we already checked via a call to contains().
+        String[] values = prefs.getString(key, null).split(IV_SPEC_SEPARATOR);
+
+        if (values.length != 2) {
+            return null;
+        }
+
+        byte[] encryptedKey = Base64.decode(values[0], Base64.DEFAULT);
+        byte[] ivSpec = Base64.decode(values[1], Base64.DEFAULT);
+        return decryptWithKeyStore(KEY_ALIAS, encryptedKey, ivSpec);
+    }
+
+    /**
+     * Save encryption key for the given device
+     *
+     * @param deviceId did of trusted device
+     * @param encryptionKey encryption key
+     * @return {@code true} if the operation succeeded
+     */
+    boolean saveEncryptionKey(@Nullable String deviceId, @Nullable byte[] encryptionKey) {
+        if (encryptionKey == null || deviceId == null) {
+            return false;
+        }
+        String encryptedKey = encryptWithKeyStore(KEY_ALIAS, encryptionKey);
+        if (encryptedKey == null) {
+            return false;
+        }
+        if (getSharedPrefs().contains(deviceId)) {
+            clearEncryptionKey(deviceId);
+        }
+
+        return getSharedPrefs()
+                .edit()
+                .putString(PREF_ENCRYPTION_KEY_PREFIX + deviceId, encryptedKey)
+                .commit();
+    }
+
+    /**
+     * Clear the encryption key for the given device
+     *
+     * @param deviceId id of the peer device
+     */
+    void clearEncryptionKey(@Nullable String deviceId) {
+        if (deviceId == null) {
+            return;
+        }
+        getSharedPrefs().edit().remove(deviceId);
+    }
+
+    /**
+     * Get generated random name for enrollment
+     *
+     * @return a random name for enrollment
+     */
+    String getRandomName() {
+        if (mRandomName == null) {
+            // Create random RANDOM_NAME_LENGTH digit number for name
+            mRandomName = Utils.generateRandomNumberString(RANDOM_NAME_LENGTH);
+        }
+
+        return mRandomName;
+    }
+
+    /**
+     * Encrypt value with designated key
+     *
+     * <p>The encrypted value is of the form:
+     *
+     * <p>key + IV_SPEC_SEPARATOR + ivSpec
+     *
+     * <p>The {@code ivSpec} is needed to decrypt this key later on.
+     *
+     * @param keyAlias KeyStore alias for key to use
+     * @param value a value to encrypt
+     * @return encrypted value, null if unable to encrypt
+     */
+    @Nullable
+    String encryptWithKeyStore(String keyAlias, byte[] value) {
+        if (value == null) {
+            return null;
+        }
+
+        Key key = getKeyStoreKey(keyAlias);
+        try {
+            Cipher cipher = Cipher.getInstance(CIPHER_TRANSFORMATION);
+            cipher.init(Cipher.ENCRYPT_MODE, key);
+            return new StringBuffer(Base64.encodeToString(cipher.doFinal(value), Base64.DEFAULT))
+                .append(IV_SPEC_SEPARATOR)
+                .append(Base64.encodeToString(cipher.getIV(), Base64.DEFAULT))
+                .toString();
+        } catch (IllegalBlockSizeException
+                | BadPaddingException
+                | NoSuchAlgorithmException
+                | NoSuchPaddingException
+                | IllegalStateException
+                | InvalidKeyException e) {
+            Log.e(TAG, "Unable to encrypt value with key " + keyAlias, e);
+            return null;
+        }
+    }
+
+    /**
+     * Decrypt value with designated key
+     *
+     * @param keyAlias KeyStore alias for key to use
+     * @param value encrypted value
+     * @return decrypted value, null if unable to decrypt
+     */
+    @Nullable
+    byte[] decryptWithKeyStore(String keyAlias, byte[] value, byte[] ivSpec) {
+        if (value == null) {
+            return null;
+        }
+
+        try {
+            Key key = getKeyStoreKey(keyAlias);
+            Cipher cipher = Cipher.getInstance(CIPHER_TRANSFORMATION);
+            cipher.init(Cipher.DECRYPT_MODE, key,
+                    new GCMParameterSpec(GCM_AUTHENTICATION_TAG_LENGTH, ivSpec));
+            return cipher.doFinal(value);
+        } catch (IllegalBlockSizeException
+                | BadPaddingException
+                | NoSuchAlgorithmException
+                | NoSuchPaddingException
+                | IllegalStateException
+                | InvalidKeyException
+                | InvalidAlgorithmParameterException e) {
+            Log.e(TAG, "Unable to decrypt value with key " + keyAlias, e);
+            return null;
+        }
+    }
+
+    private Key getKeyStoreKey(String keyAlias) {
+        KeyStore keyStore;
+        try {
+            keyStore = KeyStore.getInstance(KEYSTORE_PROVIDER);
+            keyStore.load(null);
+            if (!keyStore.containsAlias(keyAlias)) {
+                KeyGenerator keyGenerator = KeyGenerator.getInstance(
+                        KeyProperties.KEY_ALGORITHM_AES, KEYSTORE_PROVIDER);
+                keyGenerator.init(
+                        new KeyGenParameterSpec.Builder(keyAlias,
+                                KeyProperties.PURPOSE_ENCRYPT | KeyProperties.PURPOSE_DECRYPT)
+                                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                                .build());
+                keyGenerator.generateKey();
+            }
+            return keyStore.getKey(keyAlias, null);
+
+        } catch (KeyStoreException
+                | NoSuchAlgorithmException
+                | UnrecoverableKeyException
+                | NoSuchProviderException
+                | CertificateException
+                | IOException
+                | InvalidAlgorithmParameterException e) {
+            Log.e(TAG, "Unable to retrieve key " + keyAlias + " from KeyStore.", e);
+            throw new IllegalStateException(e);
+        }
     }
 }
