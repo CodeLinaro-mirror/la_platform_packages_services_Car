@@ -19,12 +19,11 @@ package com.google.android.car.kitchensink.audio;
 import android.content.Context;
 import android.content.res.AssetFileDescriptor;
 import android.media.AudioAttributes;
-import android.media.AudioDeviceInfo;
 import android.media.AudioManager;
 import android.media.MediaPlayer;
 import android.util.Log;
 
-import androidx.annotation.Nullable;
+import com.google.android.car.kitchensink.R;
 
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -108,19 +107,6 @@ public class AudioPlayer {
     }
 
     public void start(boolean handleFocus, boolean repeat, int focusRequest) {
-        String nullDeviceAddress = null;
-        start(handleFocus, repeat, focusRequest, nullDeviceAddress);
-    }
-
-    /**
-     * Starts player
-     * @param handleFocus true to handle focus
-     * @param repeat true to repeat track
-     * @param focusRequest type of focus to request
-     * @param deviceAddress preferred device to attached to audio
-     */
-    public void start(boolean handleFocus, boolean repeat, int focusRequest,
-            @Nullable String deviceAddress) {
         mHandleFocus = handleFocus;
         mRepeat = repeat;
         mAudioManager = (AudioManager) mContext.getSystemService(Context.AUDIO_SERVICE);
@@ -135,7 +121,7 @@ public class AudioPlayer {
         }
         if (ret == AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
             Log.i(TAG, "MediaPlayer got focus for usage " + mAttrib.getUsage());
-            doStart(deviceAddress);
+            doStart();
         } else {
             Log.i(TAG, "MediaPlayer denied focus for usage " + mAttrib.getUsage());
         }
@@ -147,7 +133,7 @@ public class AudioPlayer {
         start(handleFocus, repeat, focusRequest);
     }
 
-    private void doStart(String deviceAddress) {
+    private void doStart() {
         if (mPlaying.getAndSet(true)) {
             Log.i(TAG, "already playing");
             return;
@@ -201,18 +187,6 @@ public class AudioPlayer {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
-
-        // Search for preferred device
-        if (deviceAddress != null) {
-            AudioDeviceInfo[] devices = mAudioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS);
-            for (AudioDeviceInfo deviceInfo : devices) {
-                if (deviceInfo.getAddress().equals(deviceAddress)) {
-                    mPlayer.setPreferredDevice(deviceInfo);
-                    break;
-                }
-            }
-        }
-
         mPlayer.start();
     }
 

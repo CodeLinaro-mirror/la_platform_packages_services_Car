@@ -150,7 +150,7 @@ public class ICarImpl extends ICar.Stub {
                 mAppFocusService, mCarInputService);
         mSystemStateControllerService = new SystemStateControllerService(
                 serviceContext, mCarAudioService, this);
-        mVmsBrokerService = new VmsBrokerService(mContext.getPackageManager());
+        mVmsBrokerService = new VmsBrokerService();
         mVmsClientManager = new VmsClientManager(
                 serviceContext, mCarUserService, mUserManagerHelper, mHal.getVmsHal());
         mVmsSubscriberService = new VmsSubscriberService(
@@ -169,10 +169,9 @@ public class ICarImpl extends ICar.Stub {
 
         CarLocalServices.addService(CarPowerManagementService.class, mCarPowerManagementService);
         CarLocalServices.addService(CarUserService.class, mCarUserService);
-        CarLocalServices.addService(CarTrustedDeviceService.class, mCarTrustedDeviceService);
+        CarLocalServices.addService(CarTrustedDeviceService.class,
+                mCarTrustedDeviceService);
         CarLocalServices.addService(SystemInterface.class, mSystemInterface);
-        CarLocalServices.addService(CarDrivingStateService.class, mCarDrivingStateService);
-        CarLocalServices.addService(PerUserCarServiceHelper.class, mPerUserCarServiceHelper);
 
         // Be careful with order. Service depending on other service should be inited later.
         List<CarServiceBase> allServices = new ArrayList<>();
@@ -450,7 +449,7 @@ public class ICarImpl extends ICar.Stub {
                     + " without permission " + android.Manifest.permission.DUMP);
             return;
         }
-        if (args == null || args.length == 0 || (args.length > 0 && "-a".equals(args[0]))) {
+        if (args == null || args.length == 0) {
             writer.println("*dump car service*");
 
             writer.println("*FutureConfig, DEFAULT:" + FeatureConfiguration.DEFAULT);
@@ -505,7 +504,6 @@ public class ICarImpl extends ICar.Stub {
         private static final String COMMAND_HELP = "-h";
         private static final String COMMAND_DAY_NIGHT_MODE = "day-night-mode";
         private static final String COMMAND_INJECT_VHAL_EVENT = "inject-vhal-event";
-        private static final String COMMAND_INJECT_ERROR_EVENT = "inject-error-event";
         private static final String COMMAND_ENABLE_UXR = "enable-uxr";
         private static final String COMMAND_GARAGE_MODE = "garage-mode";
         private static final String COMMAND_GET_DO_ACTIVITIES = "get-do-activities";
@@ -534,8 +532,6 @@ public class ICarImpl extends ICar.Stub {
             pw.println("\t  Force into day/night mode or restore to auto.");
             pw.println("\tinject-vhal-event property [zone] data(can be comma separated list)");
             pw.println("\t  Inject a vehicle property for testing.");
-            pw.println("\tinject-error-event property zone errorCode");
-            pw.println("\t  Inject an error event from VHAL for testing.");
             pw.println("\tenable-uxr true|false");
             pw.println("\t  Enable/Disable UX restrictions and App blocking.");
             pw.println("\tgarage-mode [on|off|query]");
@@ -588,17 +584,7 @@ public class ICarImpl extends ICar.Stub {
                         // Global
                         data = args[2];
                     }
-                    injectVhalEvent(args[1], zone, data, false, writer);
-                    break;
-                case COMMAND_INJECT_ERROR_EVENT:
-                    if (args.length != 4) {
-                        writer.println("Incorrect number of arguments");
-                        dumpHelp(writer);
-                        break;
-                    }
-                    String errorAreaId = args[2];
-                    String errorCode = args[3];
-                    injectVhalEvent(args[1], errorAreaId, errorCode, true, writer);
+                    injectVhalEvent(args[1], zone, data, writer);
                     break;
                 case COMMAND_ENABLE_UXR:
                     if (args.length != 2) {
@@ -716,19 +702,19 @@ public class ICarImpl extends ICar.Stub {
             switch (arg) {
                 case PARAM_ON_MODE:
                     mGarageModeService.forceStartGarageMode();
-                    writer.println("Garage mode: " + mGarageModeService.isGarageModeActive());
                     break;
                 case PARAM_OFF_MODE:
                     mGarageModeService.stopAndResetGarageMode();
-                    writer.println("Garage mode: " + mGarageModeService.isGarageModeActive());
                     break;
                 case PARAM_QUERY_MODE:
-                    mGarageModeService.dump(writer);
+                    // Nothing to do. Always query at the end anyway.
                     break;
                 default:
                     writer.println("Unknown value. Valid argument: " + PARAM_ON_MODE + "|"
                             + PARAM_OFF_MODE + "|" + PARAM_QUERY_MODE);
+                    return;
             }
+            writer.println("Garage mode: " + mGarageModeService.isGarageModeActive());
         }
 
         /**
@@ -736,12 +722,11 @@ public class ICarImpl extends ICar.Stub {
          *
          * @param property the Vehicle property Id as defined in the HAL
          * @param zone     Zone that this event services
-         * @param isErrorEvent indicates the type of event
          * @param value    Data value of the event
          * @param writer   PrintWriter
          */
         private void injectVhalEvent(String property, String zone, String value,
-                boolean isErrorEvent, PrintWriter writer) {
+                PrintWriter writer) {
             if (zone != null && (zone.equalsIgnoreCase(PARAM_VEHICLE_PROPERTY_AREA_GLOBAL))) {
                 if (!isPropertyAreaTypeGlobal(property)) {
                     writer.println("Property area type inconsistent with given zone");
@@ -749,11 +734,7 @@ public class ICarImpl extends ICar.Stub {
                 }
             }
             try {
-                if (isErrorEvent) {
-                    mHal.injectOnPropertySetError(property, zone, value);
-                } else {
-                    mHal.injectVhalEvent(property, zone, value);
-                }
+                mHal.injectVhalEvent(property, zone, value);
             } catch (NumberFormatException e) {
                 writer.println("Invalid property Id zone Id or value" + e);
                 dumpHelp(writer);

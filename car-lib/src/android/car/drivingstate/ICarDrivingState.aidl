@@ -31,5 +31,4 @@ interface ICarDrivingState {
     void registerDrivingStateChangeListener(in ICarDrivingStateChangeListener listener) = 0;
     void unregisterDrivingStateChangeListener(in ICarDrivingStateChangeListener listener) = 1;
     CarDrivingStateEvent getCurrentDrivingState() = 2;
-    void injectDrivingState(in CarDrivingStateEvent event) = 3;
 }

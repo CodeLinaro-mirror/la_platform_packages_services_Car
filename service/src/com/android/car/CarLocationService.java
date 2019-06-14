@@ -16,11 +16,6 @@
 
 package com.android.car;
 
-import android.app.ActivityManager;
-import android.car.ICarUserService;
-import android.car.ILocationManagerProxy;
-import android.car.drivingstate.CarDrivingStateEvent;
-import android.car.drivingstate.ICarDrivingStateChangeListener;
 import android.car.hardware.power.CarPowerManager;
 import android.car.hardware.power.CarPowerManager.CarPowerStateListener;
 import android.car.hardware.power.CarPowerManager.CarPowerStateListenerWithCompletion;
@@ -33,7 +28,6 @@ import android.location.Location;
 import android.location.LocationManager;
 import android.os.Handler;
 import android.os.HandlerThread;
-import android.os.RemoteException;
 import android.os.SystemClock;
 import android.os.UserHandle;
 import android.util.AtomicFile;
@@ -58,8 +52,8 @@ import java.util.concurrent.CompletableFuture;
  * This service stores the last known location from {@link LocationManager} when a car is parked
  * and restores the location when the car is powered on.
  */
-public class CarLocationService extends BroadcastReceiver implements CarServiceBase,
-        CarPowerStateListenerWithCompletion {
+public class CarLocationService extends BroadcastReceiver implements
+        CarServiceBase, CarPowerStateListenerWithCompletion {
     private static final String TAG = "CarLocationService";
     private static final String FILENAME = "location_cache.json";
     private static final boolean DBG = true;
@@ -73,81 +67,16 @@ public class CarLocationService extends BroadcastReceiver implements CarServiceB
     // Used internally for mHandlerThread synchronization
     private final Object mLock = new Object();
 
-    // Used internally for mILocationManagerProxy synchronization
-    private final Object mLocationManagerProxyLock = new Object();
-
     private final Context mContext;
     private final CarUserManagerHelper mCarUserManagerHelper;
     private int mTaskCount = 0;
     private HandlerThread mHandlerThread;
     private Handler mHandler;
     private CarPowerManager mCarPowerManager;
-    private CarDrivingStateService mCarDrivingStateService;
-    private PerUserCarServiceHelper mPerUserCarServiceHelper;
 
-    // Allows us to interact with the {@link LocationManager} as the foreground user.
-    private ILocationManagerProxy mILocationManagerProxy;
-
-    // Maintains mILocationManagerProxy for the current foreground user.
-    private final PerUserCarServiceHelper.ServiceCallback mUserServiceCallback =
-            new PerUserCarServiceHelper.ServiceCallback() {
-                @Override
-                public void onServiceConnected(ICarUserService carUserService) {
-                    logd("Connected to PerUserCarService");
-                    if (carUserService == null) {
-                        logd("ICarUserService is null. Cannot get location manager proxy");
-                        return;
-                    }
-                    synchronized (mLocationManagerProxyLock) {
-                        try {
-                            mILocationManagerProxy = carUserService.getLocationManagerProxy();
-                        } catch (RemoteException e) {
-                            Log.e(TAG, "RemoteException from ICarUserService", e);
-                            return;
-                        }
-                    }
-                    int currentUser = ActivityManager.getCurrentUser();
-                    logd("Current user: " + currentUser);
-                    if (mCarUserManagerHelper.isHeadlessSystemUser()
-                            && currentUser > UserHandle.USER_SYSTEM) {
-                        asyncOperation(() -> loadLocation());
-                    }
-                }
-
-                @Override
-                public void onPreUnbind() {
-                    logd("Before Unbinding from PerCarUserService");
-                    synchronized (mLocationManagerProxyLock) {
-                        mILocationManagerProxy = null;
-                    }
-                }
-
-                @Override
-                public void onServiceDisconnected() {
-                    logd("Disconnected from PerUserCarService");
-                    synchronized (mLocationManagerProxyLock) {
-                        mILocationManagerProxy = null;
-                    }
-                }
-            };
-
-    private final ICarDrivingStateChangeListener mICarDrivingStateChangeEventListener =
-            new ICarDrivingStateChangeListener.Stub() {
-                @Override
-                public void onDrivingStateChanged(CarDrivingStateEvent event) {
-                    logd("onDrivingStateChanged " + event);
-                    if (event != null
-                            && event.eventValue == CarDrivingStateEvent.DRIVING_STATE_MOVING) {
-                        deleteCacheFile();
-                        if (mCarDrivingStateService != null) {
-                            mCarDrivingStateService.unregisterDrivingStateChangeListener(
-                                    mICarDrivingStateChangeEventListener);
-                        }
-                    }
-                }
-            };
-
-    public CarLocationService(Context context, CarUserManagerHelper carUserManagerHelper) {
+    public CarLocationService(
+            Context context,
+            CarUserManagerHelper carUserManagerHelper) {
         logd("constructed");
         mContext = context;
         mCarUserManagerHelper = carUserManagerHelper;
@@ -157,25 +86,13 @@ public class CarLocationService extends BroadcastReceiver implements CarServiceB
     public void init() {
         logd("init");
         IntentFilter filter = new IntentFilter();
+        filter.addAction(Intent.ACTION_USER_SWITCHED);
         filter.addAction(LocationManager.MODE_CHANGED_ACTION);
+        filter.addAction(LocationManager.PROVIDERS_CHANGED_ACTION);
         mContext.registerReceiver(this, filter);
-        mCarDrivingStateService = CarLocalServices.getService(CarDrivingStateService.class);
-        if (mCarDrivingStateService != null) {
-            CarDrivingStateEvent event = mCarDrivingStateService.getCurrentDrivingState();
-            if (event != null && event.eventValue == CarDrivingStateEvent.DRIVING_STATE_MOVING) {
-                deleteCacheFile();
-            } else {
-                mCarDrivingStateService.registerDrivingStateChangeListener(
-                        mICarDrivingStateChangeEventListener);
-            }
-        }
         mCarPowerManager = CarLocalServices.createCarPowerManager(mContext);
         if (mCarPowerManager != null) { // null case happens for testing.
             mCarPowerManager.setListenerWithCompletion(CarLocationService.this);
-        }
-        mPerUserCarServiceHelper = CarLocalServices.getService(PerUserCarServiceHelper.class);
-        if (mPerUserCarServiceHelper != null) {
-            mPerUserCarServiceHelper.registerServiceCallback(mUserServiceCallback);
         }
     }
 
@@ -184,13 +101,6 @@ public class CarLocationService extends BroadcastReceiver implements CarServiceB
         logd("release");
         if (mCarPowerManager != null) {
             mCarPowerManager.clearListener();
-        }
-        if (mCarDrivingStateService != null) {
-            mCarDrivingStateService.unregisterDrivingStateChangeListener(
-                    mICarDrivingStateChangeEventListener);
-        }
-        if (mPerUserCarServiceHelper != null) {
-            mPerUserCarServiceHelper.unregisterServiceCallback(mUserServiceCallback);
         }
         mContext.unregisterReceiver(this);
     }
@@ -215,11 +125,6 @@ public class CarLocationService extends BroadcastReceiver implements CarServiceB
                     }
                 });
                 break;
-            case CarPowerStateListener.SUSPEND_EXIT:
-                deleteCacheFile();
-                if (future != null) {
-                    future.complete(null);
-                }
             default:
                 // This service does not need to do any work for these events but should still
                 // notify the CarPowerManager that it may proceed.
@@ -233,59 +138,57 @@ public class CarLocationService extends BroadcastReceiver implements CarServiceB
     @Override
     public void onReceive(Context context, Intent intent) {
         logd("onReceive " + intent);
-        // If the system user is headless but the current user is still the system user, then we
-        // should not delete the location cache file due to missing location permissions.
-        if (isCurrentUserHeadlessSystemUser()) {
-            logd("Current user is headless system user.");
-            return;
-        }
-        synchronized (mLocationManagerProxyLock) {
-            if (mILocationManagerProxy == null) {
-                logd("Null location manager.");
-                return;
+        String action = intent.getAction();
+        if (action == Intent.ACTION_USER_SWITCHED) {
+            int userHandle = intent.getIntExtra(Intent.EXTRA_USER_HANDLE, -1);
+            logd("USER_SWITCHED: " + userHandle);
+            if (mCarUserManagerHelper.isHeadlessSystemUser()
+                    && userHandle > UserHandle.USER_SYSTEM) {
+                asyncOperation(() -> loadLocation());
             }
-            String action = intent.getAction();
-            try {
-                if (action == LocationManager.MODE_CHANGED_ACTION) {
-                    boolean locationEnabled = mILocationManagerProxy.isLocationEnabled();
-                    logd("isLocationEnabled(): " + locationEnabled);
-                    if (!locationEnabled) {
-                        deleteCacheFile();
-                    }
-                } else {
-                    logd("Unexpected intent.");
-                }
-            } catch (RemoteException e) {
-                Log.e(TAG, "RemoteException from ILocationManagerProxy", e);
+        } else if (action == LocationManager.MODE_CHANGED_ACTION
+                && shouldCheckLocationPermissions()) {
+            LocationManager locationManager =
+                    (LocationManager) mContext.getSystemService(Context.LOCATION_SERVICE);
+            boolean locationEnabled = locationManager.isLocationEnabled();
+            logd("isLocationEnabled(): " + locationEnabled);
+            if (!locationEnabled) {
+                asyncOperation(() -> deleteCacheFile());
+            }
+        } else if (action == LocationManager.PROVIDERS_CHANGED_ACTION
+                && shouldCheckLocationPermissions()) {
+            LocationManager locationManager =
+                    (LocationManager) mContext.getSystemService(Context.LOCATION_SERVICE);
+            boolean gpsEnabled =
+                    locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER);
+            logd("isProviderEnabled('gps'): " + gpsEnabled);
+            if (!gpsEnabled) {
+                asyncOperation(() -> deleteCacheFile());
             }
         }
-    }
-
-    /** Tells whether the current foreground user is the headless system user. */
-    private boolean isCurrentUserHeadlessSystemUser() {
-        int currentUserId = ActivityManager.getCurrentUser();
-        return mCarUserManagerHelper.isHeadlessSystemUser() && currentUserId == 0;
     }
 
     /**
-     * Gets the last known location from the location manager proxy and store it in a file.
+     * Tells whether or not we should check location permissions for the sake of deleting the
+     * location cache file when permissions are lacking.  If the system user is headless but the
+     * current user is still the system user, then we should not respond to a lack of location
+     * permissions.
+     */
+    private boolean shouldCheckLocationPermissions() {
+        return !(mCarUserManagerHelper.isHeadlessSystemUser()
+                && mCarUserManagerHelper.isCurrentProcessSystemUser());
+    }
+
+    /**
+     * Gets the last known location from the LocationManager and store it in a file.
      */
     private void storeLocation() {
-        Location location = null;
-        synchronized (mLocationManagerProxyLock) {
-            if (mILocationManagerProxy == null) {
-                logd("Null location manager proxy.");
-                return;
-            }
-            try {
-                location = mILocationManagerProxy.getLastKnownLocation(
-                        LocationManager.GPS_PROVIDER);
-            } catch (RemoteException e) {
-                Log.e(TAG, "RemoteException from ILocationManagerProxy", e);
-            }
-        }
+        LocationManager locationManager =
+                (LocationManager) mContext.getSystemService(Context.LOCATION_SERVICE);
+        Location location = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
         if (location == null) {
             logd("Not storing null location");
+            deleteCacheFile();
         } else {
             logd("Storing location: " + location);
             AtomicFile atomicFile = new AtomicFile(getLocationCacheFile());
@@ -339,7 +242,7 @@ public class CarLocationService extends BroadcastReceiver implements CarServiceB
     }
 
     /**
-     * Reads a previously stored location and attempts to inject it into the location manager proxy.
+     * Reads a previously stored location and attempts to inject it into the LocationManager.
      */
     private void loadLocation() {
         Location location = readLocationFromCacheFile();
@@ -347,7 +250,6 @@ public class CarLocationService extends BroadcastReceiver implements CarServiceB
         long currentTime = System.currentTimeMillis();
         if (location.getTime() + TTL_THIRTY_DAYS_MS < currentTime) {
             logd("Location expired.");
-            deleteCacheFile();
         } else {
             location.setTime(currentTime);
             long elapsedTime = SystemClock.elapsedRealtimeNanos();
@@ -395,6 +297,7 @@ public class CarLocationService extends BroadcastReceiver implements CarServiceB
                 }
             }
             reader.endObject();
+            deleteCacheFile();
         } catch (FileNotFoundException e) {
             Log.d(TAG, "Location cache file not found.");
         } catch (IOException e) {
@@ -415,18 +318,9 @@ public class CarLocationService extends BroadcastReceiver implements CarServiceB
      * initialized or has not updated its handle to the current user yet.
      */
     private void injectLocation(Location location, int attemptCount) {
-        boolean success = false;
-        synchronized (mLocationManagerProxyLock) {
-            if (mILocationManagerProxy == null) {
-                logd("Null location manager proxy.");
-            } else {
-                try {
-                    success = mILocationManagerProxy.injectLocation(location);
-                } catch (RemoteException e) {
-                    Log.e(TAG, "RemoteException from ILocationManagerProxy", e);
-                }
-            }
-        }
+        LocationManager locationManager =
+                (LocationManager) mContext.getSystemService(Context.LOCATION_SERVICE);
+        boolean success = locationManager.injectLocation(location);
         logd("Injected location " + location + " with result " + success + " on attempt "
                 + attemptCount);
         if (success) {

@@ -18,7 +18,6 @@ package com.android.car;
 import android.app.Service;
 import android.car.ICarBluetoothUserService;
 import android.car.ICarUserService;
-import android.car.ILocationManagerProxy;
 import android.content.Intent;
 import android.os.IBinder;
 import android.util.Log;
@@ -34,8 +33,7 @@ import android.util.Log;
 public class PerUserCarService extends Service {
     private static final boolean DBG = true;
     private static final String TAG = "CarUserService";
-    private volatile CarBluetoothUserService mCarBluetoothUserService;
-    private volatile LocationManagerProxy mLocationManagerProxy;
+    private CarBluetoothUserService mCarBluetoothUserService;
     private CarUserServiceBinder mCarUserServiceBinder;
 
     @Override
@@ -62,9 +60,7 @@ public class PerUserCarService extends Service {
         if (DBG) {
             Log.d(TAG, "onCreate()");
         }
-        mCarUserServiceBinder = new CarUserServiceBinder();
-        mCarBluetoothUserService = new CarBluetoothUserService(this);
-        mLocationManagerProxy = new LocationManagerProxy(this);
+        mCarUserServiceBinder = new CarUserServiceBinder(this);
         super.onCreate();
     }
 
@@ -73,7 +69,15 @@ public class PerUserCarService extends Service {
         if (DBG) {
             Log.d(TAG, "onDestroy()");
         }
+        mCarBluetoothUserService = null;
         mCarUserServiceBinder = null;
+    }
+
+    public void createBluetoothUserService() {
+        if (DBG) {
+            Log.d(TAG, "createBluetoothUserService");
+        }
+        mCarBluetoothUserService = new CarBluetoothUserService(this);
     }
 
     /**
@@ -81,14 +85,19 @@ public class PerUserCarService extends Service {
      * through this CarUserService binder.
      */
     private final class CarUserServiceBinder extends ICarUserService.Stub {
-        @Override
-        public ICarBluetoothUserService getBluetoothUserService() {
-            return mCarBluetoothUserService;
+        private PerUserCarService mCarUserService;
+
+        public CarUserServiceBinder(PerUserCarService service) {
+            mCarUserService = service;
         }
 
         @Override
-        public ILocationManagerProxy getLocationManagerProxy() {
-            return mLocationManagerProxy;
+        public ICarBluetoothUserService getBluetoothUserService() {
+            // Create the bluetoothUserService when needed.
+            if (mCarBluetoothUserService == null) {
+                mCarUserService.createBluetoothUserService();
+            }
+            return mCarBluetoothUserService;
         }
     }
 }

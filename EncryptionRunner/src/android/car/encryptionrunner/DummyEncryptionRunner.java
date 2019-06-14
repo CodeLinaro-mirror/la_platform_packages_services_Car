@@ -18,25 +18,19 @@ package android.car.encryptionrunner;
 
 import android.annotation.IntDef;
 
-import com.android.internal.annotations.VisibleForTesting;
-
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 
 /**
- * An encryption runner that doesn't actually do encryption. Useful for debugging. Do not use in
+ * An ecnryption runnner that doesn't actually do encryption. Useful for debugging. Do not use in
  * production environments.
  */
-@VisibleForTesting
-public class DummyEncryptionRunner implements EncryptionRunner {
+class DummyEncryptionRunner implements EncryptionRunner {
 
     private static final String KEY = "key";
-    @VisibleForTesting
-    public static final String INIT = "init";
-    @VisibleForTesting
-    public static final String INIT_RESPONSE = "initResponse";
-    @VisibleForTesting
-    public static final String CLIENT_RESPONSE = "clientResponse";
+    private static final String INIT = "init";
+    private static final String INIT_RESPONSE = "initResponse";
+    private static final String CLIENT_RESPONSE = "clientResponse";
     public static final String VERIFICATION_CODE = "1234";
 
     @Retention(RetentionPolicy.SOURCE)

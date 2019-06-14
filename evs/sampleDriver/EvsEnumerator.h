@@ -20,9 +20,10 @@
 #include <android/hardware/automotive/evs/1.0/IEvsEnumerator.h>
 #include <android/hardware/automotive/evs/1.0/IEvsCamera.h>
 
-#include <unordered_map>
+#include <list>
 #include <thread>
 #include <atomic>
+
 
 namespace android {
 namespace hardware {
@@ -34,6 +35,7 @@ namespace implementation {
 
 class EvsV4lCamera;    // from EvsCamera.h
 class EvsGlDisplay;    // from EvsGlDisplay.h
+
 
 class EvsEnumerator : public IEvsEnumerator {
 public:
@@ -59,6 +61,7 @@ private:
         CameraRecord(const char *cameraId) : desc() { desc.cameraId = cameraId; }
     };
 
+
     static bool qualifyCaptureDevice(const char* deviceName);
     static CameraRecord* findCameraById(const std::string& cameraId);
     static void enumerateDevices();
@@ -69,14 +72,12 @@ private:
     //        Because our server has a single thread in the thread pool, these values are
     //        never accessed concurrently despite potentially having multiple instance objects
     //        using them.
-    static std::unordered_map<std::string,
-                              CameraRecord> sCameraList;
+    static std::list<CameraRecord> sCameraList;
 
-    static wp<EvsGlDisplay>                 sActiveDisplay; // Weak pointer.
-                                                            // Object destructs if client dies.
+    static wp<EvsGlDisplay>        sActiveDisplay; // Weak pointer. Object destructs if client dies.
 
-    static std::mutex                       sLock;          // Mutex on shared camera device list.
-    static std::condition_variable          sCameraSignal;  // Signal on camera device addition.
+    static std::mutex              sLock;          // Mutex on shared camera device list.
+    static std::condition_variable sCameraSignal;  // Signal on camera device addition.
 };
 
 } // namespace implementation

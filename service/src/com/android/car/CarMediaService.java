@@ -477,9 +477,7 @@ public class CarMediaService extends ICarMedia.Stub implements CarServiceBase {
             // e.g. Assistant starts playback, user uses hardware button, etc.
             mStartPlayback = false;
         }
-        if (mSharedPrefs != null) {
-            mSharedPrefs.edit().putInt(PLAYBACK_STATE_KEY, state).apply();
-        }
+        mSharedPrefs.edit().putInt(PLAYBACK_STATE_KEY, state).apply();
     }
 
     private void maybeRestartPlayback(PlaybackState state) {

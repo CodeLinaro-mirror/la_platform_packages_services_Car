@@ -42,7 +42,6 @@ import android.content.pm.ResolveInfo;
 import android.content.pm.ServiceInfo;
 import android.content.pm.Signature;
 import android.content.res.Resources;
-import android.hardware.display.DisplayManager;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Handler;
@@ -55,9 +54,7 @@ import android.text.format.DateFormat;
 import android.util.ArraySet;
 import android.util.Log;
 import android.util.Pair;
-import android.util.SparseArray;
 import android.view.Display;
-import android.view.DisplayAddress;
 
 import com.android.car.CarLog;
 import com.android.car.CarServiceBase;
@@ -92,7 +89,6 @@ public class CarPackageManagerService extends ICarPackageManager.Stub implements
     private final SystemActivityMonitoringService mSystemActivityMonitoringService;
     private final PackageManager mPackageManager;
     private final ActivityManager mActivityManager;
-    private final DisplayManager mDisplayManager;
 
     private final HandlerThread mHandlerThread;
     private final PackageHandler mHandler;
@@ -114,6 +110,7 @@ public class CarPackageManagerService extends ICarPackageManager.Stub implements
     private final HashMap<String, ClientPolicy> mClientPolicies = new HashMap<>();
     @GuardedBy("this")
     private HashMap<String, AppBlockingPackageInfoWrapper> mActivityWhitelistMap = new HashMap<>();
+    // The list corresponding to the one configured in <activityBlacklist>
     @GuardedBy("this")
     private LinkedList<AppBlockingPolicyProxy> mProxies;
 
@@ -125,10 +122,7 @@ public class CarPackageManagerService extends ICarPackageManager.Stub implements
     private final ComponentName mActivityBlockingActivity;
 
     private final ActivityLaunchListener mActivityLaunchListener = new ActivityLaunchListener();
-    // K: (logical) display id of a physical display, V: UXR change listener of this display.
-    // For multi-display, monitor UXR change on each display.
-    private final SparseArray<UxRestrictionsListener> mUxRestrictionsListeners =
-            new SparseArray<>();
+    private final UxRestrictionsListener mUxRestrictionsListener;
     private final VendorServiceController mVendorServiceController;
 
     // Information related to when the installed packages should be parsed for building a white and
@@ -177,12 +171,6 @@ public class CarPackageManagerService extends ICarPackageManager.Stub implements
      */
     public static final String BLOCKING_INTENT_EXTRA_IS_ROOT_ACTIVITY_DO = "is_root_activity_do";
 
-    /**
-     * int display id of the blocked task.
-     * @hide
-     */
-    public static final String BLOCKING_INTENT_EXTRA_DISPLAY_ID = "display_id";
-
     public CarPackageManagerService(Context context,
             CarUxRestrictionsManagerService uxRestrictionsService,
             SystemActivityMonitoringService systemActivityMonitoringService,
@@ -192,7 +180,7 @@ public class CarPackageManagerService extends ICarPackageManager.Stub implements
         mSystemActivityMonitoringService = systemActivityMonitoringService;
         mPackageManager = mContext.getPackageManager();
         mActivityManager = mContext.getSystemService(ActivityManager.class);
-        mDisplayManager = mContext.getSystemService(DisplayManager.class);
+        mUxRestrictionsListener = new UxRestrictionsListener(uxRestrictionsService);
         mHandlerThread = new HandlerThread(CarLog.TAG_PACKAGE);
         mHandlerThread.start();
         mHandler = new PackageHandler(mHandlerThread.getLooper());
@@ -293,12 +281,12 @@ public class CarPackageManagerService extends ICarPackageManager.Stub implements
 
     @Override
     public boolean isActivityBackedBySafeActivity(ComponentName activityName) {
+        if (!mUxRestrictionsListener.isRestricted()) {
+            return true;
+        }
         StackInfo info = mSystemActivityMonitoringService.getFocusedStackForTopActivity(
                 activityName);
         if (info == null) { // not top in focused stack
-            return true;
-        }
-        if (!isUxRestrictedOnDisplay(info.displayId)) {
             return true;
         }
         if (info.taskNames.length <= 1) { // nothing below this.
@@ -397,11 +385,8 @@ public class CarPackageManagerService extends ICarPackageManager.Stub implements
         }
         mContext.unregisterReceiver(mPackageParsingEventReceiver);
         mContext.unregisterReceiver(mUserSwitchedEventReceiver);
+        mCarUxRestrictionsService.unregisterUxRestrictionsChangeListener(mUxRestrictionsListener);
         mSystemActivityMonitoringService.registerActivityLaunchListener(null);
-        for (int i = 0; i < mUxRestrictionsListeners.size(); i++) {
-            UxRestrictionsListener listener = mUxRestrictionsListeners.valueAt(i);
-            mCarUxRestrictionsService.unregisterUxRestrictionsChangeListener(listener);
-        }
     }
 
     // run from HandlerThread
@@ -417,22 +402,15 @@ public class CarPackageManagerService extends ICarPackageManager.Stub implements
         pkgParseIntent.addDataScheme("package");
         mContext.registerReceiverAsUser(mPackageParsingEventReceiver, UserHandle.ALL,
                 pkgParseIntent, null, null);
-
-        List<Display> physicalDisplays = getPhysicalDisplays();
-
-        // Assume default display (display 0) is always a physical display.
-        Display defaultDisplay = mDisplayManager.getDisplay(Display.DEFAULT_DISPLAY);
-        if (!physicalDisplays.contains(defaultDisplay)) {
-            if (Log.isLoggable(CarLog.TAG_PACKAGE, Log.INFO)) {
-                Log.i(CarLog.TAG_PACKAGE, "Adding default display to physical displays.");
-            }
-            physicalDisplays.add(defaultDisplay);
-        }
-        for (Display physicalDisplay : physicalDisplays) {
-            int displayId = physicalDisplay.getDisplayId();
-            UxRestrictionsListener listener = new UxRestrictionsListener(mCarUxRestrictionsService);
-            mUxRestrictionsListeners.put(displayId, listener);
-            mCarUxRestrictionsService.registerUxRestrictionsChangeListener(listener, displayId);
+        try {
+            // TODO(128456985): register listener for each display in order to
+            // properly launch blocking screens.
+            mCarUxRestrictionsService.registerUxRestrictionsChangeListener(
+                    mUxRestrictionsListener, Display.DEFAULT_DISPLAY);
+        } catch (IllegalArgumentException e) {
+            // can happen while mocking is going on while init is still done.
+            Log.w(CarLog.TAG_PACKAGE, "sensor subscription failed", e);
+            return;
         }
         mSystemActivityMonitoringService.registerActivityLaunchListener(
                 mActivityLaunchListener);
@@ -445,7 +423,7 @@ public class CarPackageManagerService extends ICarPackageManager.Stub implements
         synchronized (this) {
             mHasParsedPackages = true;
         }
-        blockTopActivitiesIfNecessary();
+        mUxRestrictionsListener.checkIfTopActivityNeedsBlocking();
     }
 
     private synchronized void doHandleRelease() {
@@ -923,14 +901,7 @@ public class CarPackageManagerService extends ICarPackageManager.Stub implements
             writer.println("*PackageManagementService*");
             writer.println("mEnableActivityBlocking:" + mEnableActivityBlocking);
             writer.println("mHasParsedPackages:" + mHasParsedPackages);
-            List<String> restrictions = new ArrayList<>(mUxRestrictionsListeners.size());
-            for (int i = 0; i < mUxRestrictionsListeners.size(); i++) {
-                int displayId = mUxRestrictionsListeners.keyAt(i);
-                UxRestrictionsListener listener = mUxRestrictionsListeners.valueAt(i);
-                restrictions.add(String.format("Display %d is %s",
-                        displayId, (listener.isRestricted() ? "restricted" : "unrestricted")));
-            }
-            writer.println("Display Restrictions:\n" + String.join("\n", restrictions));
+            writer.println("ActivityRestricted:" + mUxRestrictionsListener.isRestricted());
             writer.println(String.join("\n", mBlockedActivityLogs));
             writer.print(dumpPoliciesLocked(true));
         }
@@ -975,55 +946,15 @@ public class CarPackageManagerService extends ICarPackageManager.Stub implements
         return sb.toString();
     }
 
-    /**
-     * Returns display with physical address.
-     */
-    private List<Display> getPhysicalDisplays() {
-        List<Display> displays = new ArrayList<>();
-        for (Display display : mDisplayManager.getDisplays()) {
-            if (display.getAddress() instanceof DisplayAddress.Physical) {
-                displays.add(display);
-            }
-        }
-        return displays;
-    }
-
-    /**
-     * Returns whether UX restrictions is required for display.
-     *
-     * Non-physical display will use restrictions for {@link Display#DEFAULT_DISPLAY}.
-     */
-    private boolean isUxRestrictedOnDisplay(int displayId) {
-        UxRestrictionsListener listenerForTopTaskDisplay;
-        if (mUxRestrictionsListeners.indexOfKey(displayId) < 0) {
-            listenerForTopTaskDisplay = mUxRestrictionsListeners.get(Display.DEFAULT_DISPLAY);
-            if (listenerForTopTaskDisplay == null) {
-                // This should never happen.
-                Log.e(CarLog.TAG_PACKAGE, "Missing listener for default display.");
-                return true;
-            }
-        } else {
-            listenerForTopTaskDisplay = mUxRestrictionsListeners.get(displayId);
-        }
-
-        return listenerForTopTaskDisplay.isRestricted();
-    }
-
-    private void blockTopActivitiesIfNecessary() {
-        List<TopTaskInfoContainer> topTasks = mSystemActivityMonitoringService.getTopTasks();
-        for (TopTaskInfoContainer topTask : topTasks) {
-            if (topTask == null) {
-                Log.e(CarLog.TAG_PACKAGE, "Top tasks contains null.");
-                continue;
-            }
-            blockTopActivityIfNecessary(topTask);
-        }
-    }
-
     private void blockTopActivityIfNecessary(TopTaskInfoContainer topTask) {
-        if (isUxRestrictedOnDisplay(topTask.displayId)) {
-            doBlockTopActivityIfNotAllowed(topTask);
+        // Only block activities launched on default display.
+        if (topTask.displayId != Display.DEFAULT_DISPLAY) {
+            return;
         }
+        if (!mUxRestrictionsListener.isRestricted()) {
+            return;
+        }
+        doBlockTopActivityIfNotAllowed(topTask);
     }
 
     private void doBlockTopActivityIfNotAllowed(TopTaskInfoContainer topTask) {
@@ -1073,9 +1004,8 @@ public class CarPackageManagerService extends ICarPackageManager.Stub implements
         }
 
         Intent newActivityIntent = createBlockingActivityIntent(
-                mActivityBlockingActivity, topTask.displayId,
-                topTask.topActivity.flattenToShortString(), topTask.taskId, taskRootActivity,
-                isRootDO);
+                mActivityBlockingActivity, topTask.topActivity.flattenToShortString(),
+                topTask.taskId, taskRootActivity, isRootDO);
 
         // Intent contains all info to debug what is blocked - log into both logcat and dumpsys.
         String log = "Starting blocking activity with intent: " + newActivityIntent.toUri(0);
@@ -1097,13 +1027,9 @@ public class CarPackageManagerService extends ICarPackageManager.Stub implements
      * @return an intent to launch the blocking activity.
      */
     private static Intent createBlockingActivityIntent(ComponentName blockingActivity,
-            int displayId, String blockedActivity, int blockedTaskId, String taskRootActivity,
-            boolean isRootDo) {
+            String blockedActivity, int blockedTaskId, String taskRootActivity, boolean isRootDo) {
         Intent newActivityIntent = new Intent();
-        newActivityIntent.setFlags(Intent.FLAG_ACTIVITY_MULTIPLE_TASK);
         newActivityIntent.setComponent(blockingActivity);
-        newActivityIntent.putExtra(
-                BLOCKING_INTENT_EXTRA_DISPLAY_ID, displayId);
         newActivityIntent.putExtra(
                 BLOCKING_INTENT_EXTRA_BLOCKED_ACTIVITY_NAME, blockedActivity);
         newActivityIntent.putExtra(
@@ -1114,6 +1040,21 @@ public class CarPackageManagerService extends ICarPackageManager.Stub implements
                 BLOCKING_INTENT_EXTRA_IS_ROOT_ACTIVITY_DO, isRootDo);
 
         return newActivityIntent;
+    }
+
+    private void blockTopActivitiesIfNecessary() {
+        boolean restricted = mUxRestrictionsListener.isRestricted();
+        if (!restricted) {
+            return;
+        }
+        List<TopTaskInfoContainer> topTasks = mSystemActivityMonitoringService.getTopTasks();
+        for (TopTaskInfoContainer topTask : topTasks) {
+            if (topTask == null) {
+                Log.e(CarLog.TAG_PACKAGE, "Top tasks contains null.");
+                continue;
+            }
+            doBlockTopActivityIfNotAllowed(topTask);
+        }
     }
 
     /**
@@ -1386,10 +1327,9 @@ public class CarPackageManagerService extends ICarPackageManager.Stub implements
                 }
             }
             if (DBG_POLICY_ENFORCEMENT) {
-                Log.d(CarLog.TAG_PACKAGE, "Should check top tasks?: " + shouldCheck);
+                Log.d(CarLog.TAG_PACKAGE, "block?: " + shouldCheck);
             }
             if (shouldCheck) {
-                // Loop over all top tasks to ensure tasks on virtual display can also be blocked.
                 blockTopActivitiesIfNecessary();
             }
         }

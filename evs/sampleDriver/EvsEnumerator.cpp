@@ -35,10 +35,10 @@ namespace implementation {
 // NOTE:  All members values are static so that all clients operate on the same state
 //        That is to say, this is effectively a singleton despite the fact that HIDL
 //        constructs a new instance for each client.
-std::unordered_map<std::string, EvsEnumerator::CameraRecord> EvsEnumerator::sCameraList;
-wp<EvsGlDisplay>                                             EvsEnumerator::sActiveDisplay;
-std::mutex                                                   EvsEnumerator::sLock;
-std::condition_variable                                      EvsEnumerator::sCameraSignal;
+std::list<EvsEnumerator::CameraRecord>   EvsEnumerator::sCameraList;
+wp<EvsGlDisplay>                         EvsEnumerator::sActiveDisplay;
+std::mutex                               EvsEnumerator::sLock;
+std::condition_variable                  EvsEnumerator::sCameraSignal;
 
 // Constants
 const auto kEnumerationTimeout = 10s;
@@ -90,13 +90,17 @@ void EvsEnumerator::EvsUeventThread(std::atomic<bool>& running) {
 
             std::lock_guard<std::mutex> lock(sLock);
             if (cmd_removal) {
-                sCameraList.erase(devpath);
-                ALOGI("%s is removed", devpath.c_str());
+                for (auto it = sCameraList.begin(); it != sCameraList.end(); ++it) {
+                    if (!devpath.compare(it->desc.cameraId)) {
+                        // There must be no entry with duplicated name.
+                        sCameraList.erase(it);
+                        break;
+                    }
+                }
             } else if (cmd_addition) {
                 // NOTE: we are here adding new device without a validation
                 // because it always fails to open, b/132164956.
-                sCameraList.emplace(devpath, devpath.c_str());
-                ALOGI("%s is added", devpath.c_str());
+                sCameraList.emplace_back(devpath.c_str());
             } else {
                 // Ignore all other actions including "change".
             }
@@ -122,8 +126,8 @@ void EvsEnumerator::enumerateDevices() {
     //           information.  Platform implementers should consider hard coding this list of
     //           known good devices to speed up the startup time of their EVS implementation.
     //           For example, this code might be replaced with nothing more than:
-    //                   sCameraList.emplace("/dev/video0");
-    //                   sCameraList.emplace("/dev/video1");
+    //                   sCameraList.emplace_back("/dev/video0");
+    //                   sCameraList.emplace_back("/dev/video1");
     ALOGI("%s: Starting dev/video* enumeration", __FUNCTION__);
     unsigned videoCount   = 0;
     unsigned captureCount = 0;
@@ -141,11 +145,8 @@ void EvsEnumerator::enumerateDevices() {
                 std::string deviceName("/dev/");
                 deviceName += entry->d_name;
                 videoCount++;
-                if (sCameraList.find(deviceName) != sCameraList.end()) {
-                    ALOGI("%s has been added already.", deviceName.c_str());
-                    captureCount++;
-                } else if(qualifyCaptureDevice(deviceName.c_str())) {
-                    sCameraList.emplace(deviceName, deviceName.c_str());
+                if (qualifyCaptureDevice(deviceName.c_str())) {
+                    sCameraList.emplace_back(deviceName.c_str());
                     captureCount++;
                 }
             }
@@ -177,7 +178,7 @@ Return<void> EvsEnumerator::getCameraList(getCameraList_cb _hidl_cb)  {
     hidl_vec<CameraDesc> hidlCameras;
     hidlCameras.resize(numCameras);
     unsigned i = 0;
-    for (const auto& [key, cam] : sCameraList) {
+    for (const auto& cam : sCameraList) {
         hidlCameras[i++] = cam.desc;
     }
 
@@ -369,10 +370,11 @@ bool EvsEnumerator::qualifyCaptureDevice(const char* deviceName) {
 
 EvsEnumerator::CameraRecord* EvsEnumerator::findCameraById(const std::string& cameraId) {
     // Find the named camera
-    auto found = sCameraList.find(cameraId);
-    if (sCameraList.end() != found) {
-        // Found a match!
-        return &found->second;
+    for (auto &&cam : sCameraList) {
+        if (cam.desc.cameraId == cameraId) {
+            // Found a match!
+            return &cam;
+        }
     }
 
     // We didn't find a match

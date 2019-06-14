@@ -15,8 +15,6 @@
  */
 package com.android.car;
 
-import static com.android.car.pm.CarPackageManagerService.BLOCKING_INTENT_EXTRA_DISPLAY_ID;
-
 import android.app.ActivityManager;
 import android.app.ActivityManager.StackInfo;
 import android.app.ActivityOptions;
@@ -106,7 +104,7 @@ public class SystemActivityMonitoringService implements CarServiceBase {
     private final HandlerThread mMonitorHandlerThread;
     private final ActivityMonitorHandler mHandler;
 
-    /** K: display id, V: top task */
+    /** K: stack id, V: top task */
     private final SparseArray<TopTaskInfoContainer> mTopTasks = new SparseArray<>();
     /** K: uid, V : list of pid */
     private final Map<Integer, Set<Integer>> mForegroundUidPids = new ArrayMap<>();
@@ -379,14 +377,10 @@ public class SystemActivityMonitoringService implements CarServiceBase {
      * block the current task with the provided new activity.
      */
     private void handleBlockActivity(TopTaskInfoContainer currentTask, Intent newActivityIntent) {
-        int displayId = newActivityIntent.getIntExtra(BLOCKING_INTENT_EXTRA_DISPLAY_ID,
-                Display.DEFAULT_DISPLAY);
-        if (Log.isLoggable(CarLog.TAG_AM, Log.DEBUG)) {
-            Log.d(CarLog.TAG_AM, "Launching blocking activity on display: " + displayId);
-        }
-
+        // Only block default display.
         ActivityOptions options = ActivityOptions.makeBasic();
-        options.setLaunchDisplayId(displayId);
+        options.setLaunchDisplayId(Display.DEFAULT_DISPLAY);
+
         mContext.startActivityAsUser(newActivityIntent, options.toBundle(),
                 new UserHandle(currentTask.stackInfo.userId));
         // Now make stack with new activity focused.

@@ -67,7 +67,6 @@ import android.os.UserHandle;
 import android.text.TextUtils;
 import android.util.Log;
 
-import com.android.car.BinderInterfaceContainer.BinderInterface;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.util.Preconditions;
 
@@ -81,6 +80,7 @@ import java.util.BitSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Random;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * Car projection service allows to bound to projected app to boost it prioirity.
@@ -128,8 +128,8 @@ class CarProjectionService extends ICarProjection.Stub implements CarServiceBase
     @GuardedBy("mLock")
     private @Nullable String mCurrentProjectionPackage;
 
-    private final BinderInterfaceContainer<ICarProjectionStatusListener>
-            mProjectionStatusListeners = new BinderInterfaceContainer<>();
+    private final List<ICarProjectionStatusListener> mProjectionStatusListeners =
+            new CopyOnWriteArrayList<>();
 
     @GuardedBy("mLock")
     private final ProjectionKeyEventHandlerContainer mKeyEventHandlers;
@@ -431,7 +431,7 @@ class CarProjectionService extends ICarProjection.Stub implements CarServiceBase
     public void registerProjectionStatusListener(ICarProjectionStatusListener listener)
             throws RemoteException {
         ICarImpl.assertProjectionStatusPermission(mContext);
-        mProjectionStatusListeners.addBinder(listener);
+        mProjectionStatusListeners.add(listener);
 
         // Immediately notify listener with the current status.
         notifyProjectionStatusChanged(listener);
@@ -441,7 +441,7 @@ class CarProjectionService extends ICarProjection.Stub implements CarServiceBase
     public void unregisterProjectionStatusListener(ICarProjectionStatusListener listener)
             throws RemoteException {
         ICarImpl.assertProjectionStatusPermission(mContext);
-        mProjectionStatusListeners.removeBinder(listener);
+        mProjectionStatusListeners.remove(listener);
     }
 
     private ProjectionReceiverClient getOrCreateProjectionReceiverClientLocked(
@@ -488,14 +488,8 @@ class CarProjectionService extends ICarProjection.Stub implements CarServiceBase
         }
 
         if (singleListenerToNotify == null) {
-            for (BinderInterface<ICarProjectionStatusListener> listener :
-                    mProjectionStatusListeners.getInterfaces()) {
-                try {
-                    listener.binderInterface.onProjectionStatusChanged(
-                            currentState, currentPackage, statuses);
-                } catch (RemoteException ex) {
-                    Log.e(TAG, "Error calling to projection status listener", ex);
-                }
+            for (ICarProjectionStatusListener listener : mProjectionStatusListeners) {
+                listener.onProjectionStatusChanged(currentState, currentPackage, statuses);
             }
         } else {
             singleListenerToNotify.onProjectionStatusChanged(
@@ -799,8 +793,6 @@ class CarProjectionService extends ICarProjection.Stub implements CarServiceBase
             writer.println("Current projection state: " + mCurrentProjectionState);
             writer.println("Current projection package: " + mCurrentProjectionPackage);
             writer.println("Projection status: " + mProjectionReceiverClients);
-            writer.println("Projection status listeners: "
-                    + mProjectionStatusListeners.getInterfaces());
             writer.println("WifiScanner: " + mWifiScanner);
         }
     }
