@@ -18,6 +18,7 @@ package com.android.car.trust;
 
 import android.app.ActivityManager;
 import android.bluetooth.BluetoothAdapter;
+import android.car.trust.TrustedDeviceInfo;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -31,6 +32,8 @@ import com.android.car.CarLocalServices;
 import com.android.car.Utils;
 import com.android.car.trust.CarTrustAgentEnrollmentService.CarTrustAgentEnrollmentRequestDelegate;
 import com.android.car.trust.CarTrustAgentUnlockService.CarTrustAgentUnlockDelegate;
+
+import java.util.List;
 
 /**
  * A BluetoothLE (BLE) based {@link TrustAgentService} that uses the escrow token unlock APIs.
@@ -90,14 +93,22 @@ public class CarBleTrustAgent extends TrustAgentService {
     // Overriding TrustAgentService methods
     @Override
     public void onDeviceLocked() {
+        int uid = ActivityManager.getCurrentUser();
         if (Log.isLoggable(TAG, Log.DEBUG)) {
-            Log.d(TAG, "onDeviceLocked Current user: " + ActivityManager.getCurrentUser());
+            Log.d(TAG, "onDeviceLocked Current user: " + uid);
         }
         super.onDeviceLocked();
         mIsDeviceLocked = true;
         if (BluetoothAdapter.getDefaultAdapter().getState() == BluetoothAdapter.STATE_OFF) {
             if (Log.isLoggable(TAG, Log.DEBUG)) {
                 Log.d(TAG, "Not starting Unlock Advertising yet, since Bluetooth Adapter is off");
+            }
+            return;
+        }
+        if (!hasTrustedDevice(uid)) {
+            if (Log.isLoggable(TAG, Log.DEBUG)) {
+                Log.d(TAG, "Not starting Unlock Advertising yet, since current user: "
+                        + uid + "has no trusted device");
             }
             return;
         }
@@ -123,7 +134,9 @@ public class CarBleTrustAgent extends TrustAgentService {
             mCarTrustAgentUnlockService.stopUnlockAdvertising();
 
         }
-        // TODO(b/131699594) - Add back revokeTrust()
+        // Set the trust state to false (not trusted), so unlocking is required for current user
+        // in case of user switch.
+        revokeTrust();
     }
 
     @Override
@@ -156,7 +169,7 @@ public class CarBleTrustAgent extends TrustAgentService {
     @Override
     public void onEscrowTokenAdded(byte[] token, long handle, UserHandle user) {
         if (Log.isLoggable(TAG, Log.DEBUG)) {
-            Log.d(TAG, "onEscrowTokenAdded handle: " + Long.toHexString(handle) + "token: "
+            Log.d(TAG, "onEscrowTokenAdded handle: " + Long.toHexString(handle) + " token: "
                     + Utils.byteArrayToHexString(token));
         }
         if (mCarTrustAgentEnrollmentService == null) {
@@ -177,6 +190,17 @@ public class CarBleTrustAgent extends TrustAgentService {
             return;
         }
         mCarTrustAgentUnlockService.setUnlockRequestDelegate(mUnlockDelegate);
+    }
+
+    /**
+     *
+     * @param uid User id
+     * @return if the user has trusted device
+     */
+    private boolean hasTrustedDevice(int uid) {
+        List<TrustedDeviceInfo> trustedDeviceInfos = mCarTrustAgentEnrollmentService
+                .getEnrolledDeviceInfosForUser(uid);
+        return trustedDeviceInfos != null && trustedDeviceInfos.size() > 0;
     }
 
     private void unlockUserInternally(int uid, byte[] token, long handle) {
@@ -213,7 +237,8 @@ public class CarBleTrustAgent extends TrustAgentService {
         }
         switch (state) {
             case BluetoothAdapter.STATE_BLE_ON:
-                if (mCarTrustAgentUnlockService != null) {
+                int uid = ActivityManager.getCurrentUser();
+                if (mCarTrustAgentUnlockService != null && hasTrustedDevice(uid)) {
                     mCarTrustAgentUnlockService.startUnlockAdvertising();
                 }
                 break;
