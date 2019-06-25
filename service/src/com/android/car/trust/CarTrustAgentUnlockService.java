@@ -16,6 +16,17 @@
 
 package com.android.car.trust;
 
+import static com.android.car.trust.EventLog.CLIENT_AUTHENTICATED;
+import static com.android.car.trust.EventLog.ENCRYPTION_STATE;
+import static com.android.car.trust.EventLog.RECEIVED_DEVICE_ID;
+import static com.android.car.trust.EventLog.REMOTE_DEVICE_CONNECTED;
+import static com.android.car.trust.EventLog.START_UNLOCK_ADVERTISING;
+import static com.android.car.trust.EventLog.STOP_UNLOCK_ADVERTISING;
+import static com.android.car.trust.EventLog.UNLOCK_CREDIENTIALS_RECEIVED;
+import static com.android.car.trust.EventLog.UNLOCK_SERVICE_INIT;
+import static com.android.car.trust.EventLog.WAITING_FOR_CLIENT_AUTH;
+import static com.android.car.trust.EventLog.logUnlockEvent;
+
 import android.annotation.IntDef;
 import android.annotation.Nullable;
 import android.bluetooth.BluetoothDevice;
@@ -28,7 +39,9 @@ import android.content.SharedPreferences;
 import android.util.Log;
 
 import com.android.car.BLEStreamProtos.BLEOperationProto.OperationType;
+import com.android.car.PhoneAuthProtos.PhoneAuthProto.PhoneCredentials;
 import com.android.car.Utils;
+import com.android.car.protobuf.InvalidProtocolBufferException;
 import com.android.internal.annotations.GuardedBy;
 
 import com.google.security.cryptauth.lib.securegcm.D2DConnectionContext;
@@ -40,6 +53,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.security.InvalidKeyException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.security.SignatureException;
 import java.util.LinkedList;
 import java.util.Queue;
 import java.util.UUID;
@@ -98,15 +112,13 @@ public class CarTrustAgentUnlockService {
     private static final int UNLOCK_STATE_KEY_EXCHANGE_IN_PROGRESS = 1;
     private static final int UNLOCK_STATE_WAITING_FOR_CLIENT_AUTH = 2;
     private static final int UNLOCK_STATE_MUTUAL_AUTH_ESTABLISHED = 3;
-    private static final int UNLOCK_STATE_TOKEN_RECEIVED = 4;
-    private static final int UNLOCK_STATE_HANDLE_RECEIVED = 5;
+    private static final int UNLOCK_STATE_PHONE_CREDENTIALS_RECEIVED = 4;
 
     /** @hide */
     @Retention(RetentionPolicy.SOURCE)
     @IntDef(prefix = {"UNLOCK_STATE_"}, value = {UNLOCK_STATE_WAITING_FOR_UNIQUE_ID,
             UNLOCK_STATE_KEY_EXCHANGE_IN_PROGRESS, UNLOCK_STATE_WAITING_FOR_CLIENT_AUTH,
-            UNLOCK_STATE_MUTUAL_AUTH_ESTABLISHED, UNLOCK_STATE_TOKEN_RECEIVED,
-            UNLOCK_STATE_HANDLE_RECEIVED})
+            UNLOCK_STATE_MUTUAL_AUTH_ESTABLISHED, UNLOCK_STATE_PHONE_CREDENTIALS_RECEIVED})
     @interface UnlockState {
     }
 
@@ -120,14 +132,7 @@ public class CarTrustAgentUnlockService {
     private final Queue<String> mLogQueue = new LinkedList<>();
 
     // Locks
-    private final Object mTokenLock = new Object();
-    private final Object mHandleLock = new Object();
     private final Object mDeviceLock = new Object();
-
-    @GuardedBy("mTokenLock")
-    private byte[] mUnlockToken;
-    @GuardedBy("mHandleLock")
-    private byte[] mUnlockHandle;
 
     @GuardedBy("mDeviceLock")
     private BluetoothDevice mRemoteUnlockDevice;
@@ -190,10 +195,6 @@ public class CarTrustAgentUnlockService {
      * Start Unlock Advertising
      */
     void startUnlockAdvertising() {
-        queueMessageForLog("startUnlockAdvertising");
-        if (Log.isLoggable(TAG, Log.DEBUG)) {
-            Log.d(TAG, "startUnlockAdvertising");
-        }
         if (!mTrustedDeviceService.getSharedPrefs().getBoolean(TRUSTED_DEVICE_UNLOCK_ENABLED_KEY,
                 true)) {
             Log.e(TAG, "Trusted Device Unlock is disabled");
@@ -201,9 +202,9 @@ public class CarTrustAgentUnlockService {
         }
         mTrustedDeviceService.getCarTrustAgentEnrollmentService().stopEnrollmentAdvertising();
         stopUnlockAdvertising();
-        if (Log.isLoggable(TAG, Log.DEBUG)) {
-            Log.d(TAG, "start unlock advertising");
-        }
+
+        logUnlockEvent(START_UNLOCK_ADVERTISING);
+        queueMessageForLog("startUnlockAdvertising");
         mCarTrustAgentBleManager.startUnlockAdvertising();
     }
 
@@ -211,10 +212,8 @@ public class CarTrustAgentUnlockService {
      * Stop unlock advertising
      */
     void stopUnlockAdvertising() {
+        logUnlockEvent(STOP_UNLOCK_ADVERTISING);
         queueMessageForLog("stopUnlockAdvertising");
-        if (Log.isLoggable(TAG, Log.DEBUG)) {
-            Log.d(TAG, "stopUnlockAdvertising");
-        }
         mCarTrustAgentBleManager.stopUnlockAdvertising();
         // Also disconnect from the peer.
         if (mRemoteUnlockDevice != null) {
@@ -224,6 +223,7 @@ public class CarTrustAgentUnlockService {
     }
 
     void init() {
+        logUnlockEvent(UNLOCK_SERVICE_INIT);
         mCarTrustAgentBleManager.setupUnlockBleServer();
     }
 
@@ -242,6 +242,7 @@ public class CarTrustAgentUnlockService {
                 Log.e(TAG, "Unexpected: Cannot connect to another device when already connected");
             }
             queueMessageForLog("onRemoteDeviceConnected (addr:" + device.getAddress() + ")");
+            logUnlockEvent(REMOTE_DEVICE_CONNECTED);
             mRemoteUnlockDevice = device;
         }
         resetEncryptionState();
@@ -264,6 +265,11 @@ public class CarTrustAgentUnlockService {
     void onUnlockDataReceived(byte[] value) {
         switch (mCurrentUnlockState) {
             case UNLOCK_STATE_WAITING_FOR_UNIQUE_ID:
+                if (!CarTrustAgentValidator.isValidUnlockDeviceId(value)) {
+                    Log.e(TAG, "Device Id rejected by validator.");
+                    resetUnlockStateOnFailure();
+                    return;
+                }
                 mClientDeviceId = convertToDeviceId(value);
                 if (mClientDeviceId == null) {
                     if (Log.isLoggable(TAG, Log.DEBUG)) {
@@ -272,6 +278,7 @@ public class CarTrustAgentUnlockService {
                     resetUnlockStateOnFailure();
                     return;
                 }
+                logUnlockEvent(RECEIVED_DEVICE_ID);
                 sendAckToClient(/* isEncrypted = */ false);
                 // Next step is to wait for the client to start the encryption handshake.
                 mCurrentUnlockState = UNLOCK_STATE_KEY_EXCHANGE_IN_PROGRESS;
@@ -287,15 +294,15 @@ public class CarTrustAgentUnlockService {
             case UNLOCK_STATE_WAITING_FOR_CLIENT_AUTH:
                 if (!authenticateClient(value)) {
                     if (Log.isLoggable(TAG, Log.DEBUG)) {
-                        Log.d(TAG,
-                                "HMAC from the phone is not correct. Cannot resume session.  Need"
-                                        + " to re-enroll");
+                        Log.d(TAG, "HMAC from the phone is not correct. Cannot resume session. Need"
+                                + " to re-enroll");
                     }
                     mTrustedDeviceService.clearEncryptionKey(mClientDeviceId);
                     resetUnlockStateOnFailure();
-
                     return;
                 }
+
+                logUnlockEvent(CLIENT_AUTHENTICATED);
                 sendServerAuthToClient();
                 mCurrentUnlockState = UNLOCK_STATE_MUTUAL_AUTH_ESTABLISHED;
                 break;
@@ -306,26 +313,34 @@ public class CarTrustAgentUnlockService {
                     // Clear the previous session key.  Need to re-enroll the trusted device.
                     mTrustedDeviceService.clearEncryptionKey(mClientDeviceId);
                     resetUnlockStateOnFailure();
+                    return;
                 }
+
                 // Save the current session to be used for authenticating the next session
                 mTrustedDeviceService.saveEncryptionKey(mClientDeviceId, mEncryptionKey.asBytes());
 
-                onUnlockTokenReceived(value);
-                mCurrentUnlockState = UNLOCK_STATE_TOKEN_RECEIVED;
+                byte[] decryptedCredentials;
+                try {
+                    decryptedCredentials = mEncryptionKey.decryptData(value);
+                } catch (SignatureException e) {
+                    Log.e(TAG, "Could not decrypt phone credentials.", e);
+                    resetUnlockStateOnFailure();
+                    return;
+                }
+
+                processCredentials(decryptedCredentials);
+                mCurrentUnlockState = UNLOCK_STATE_PHONE_CREDENTIALS_RECEIVED;
+                logUnlockEvent(UNLOCK_CREDIENTIALS_RECEIVED);
+
                 // Let the phone know that the token was received.
                 sendAckToClient(/* isEncrypted = */ true);
                 break;
-            // TODO(b/131124919) Combine token and handle in the same packet
-            case UNLOCK_STATE_TOKEN_RECEIVED:
-                onUnlockHandleReceived(value);
-                mCurrentUnlockState = UNLOCK_STATE_HANDLE_RECEIVED;
-                break;
-            case UNLOCK_STATE_HANDLE_RECEIVED:
+            case UNLOCK_STATE_PHONE_CREDENTIALS_RECEIVED:
                 // Should never get here because the unlock process should be completed now.
-                Log.e(TAG, "Landed on unexpected state: " + mCurrentUnlockState);
+                Log.e(TAG, "Landed on unexpected state of credentials received.");
                 break;
             default:
-                break;
+                Log.e(TAG, "Encountered unexpected unlock state: " + mCurrentUnlockState);
         }
     }
 
@@ -365,10 +380,7 @@ public class CarTrustAgentUnlockService {
                         mHandshakeMessage.getNextMessage(),
                         OperationType.ENCRYPTION_HANDSHAKE,
                         /* isPayloadEncrypted= */ false);
-
-                if (Log.isLoggable(TAG, Log.DEBUG)) {
-                    Log.d(TAG, "Updated encryption state: " + mEncryptionState);
-                }
+                logUnlockEvent(ENCRYPTION_STATE, mEncryptionState);
                 break;
 
             case HandshakeMessage.HandshakeState.IN_PROGRESS:
@@ -386,6 +398,7 @@ public class CarTrustAgentUnlockService {
                 // The state is updated after a call to continueHandshake(). Thus, need to check
                 // if we're in the next stage.
                 if (mEncryptionState == HandshakeMessage.HandshakeState.VERIFICATION_NEEDED) {
+                    logUnlockEvent(ENCRYPTION_STATE, mEncryptionState);
                     showVerificationCode();
                     return;
                 }
@@ -458,6 +471,7 @@ public class CarTrustAgentUnlockService {
 
         // Now wait for the phone to send its MAC.
         mCurrentUnlockState = UNLOCK_STATE_WAITING_FOR_CLIENT_AUTH;
+        logUnlockEvent(WAITING_FOR_CLIENT_AUTH);
     }
 
     private void sendServerAuthToClient() {
@@ -494,16 +508,32 @@ public class CarTrustAgentUnlockService {
                 computeMAC(mPrevContext, mCurrentContext, CLIENT));
     }
 
-    void onUnlockTokenReceived(byte[] value) {
-        synchronized (mTokenLock) {
-            mUnlockToken = value;
+    void processCredentials(byte[] credentials) {
+        if (mUnlockDelegate == null) {
+            if (Log.isLoggable(TAG, Log.DEBUG)) {
+                Log.d(TAG, "No Unlock delegate to notify of unlock credentials.");
+            }
+            return;
         }
 
-        if (Log.isLoggable(TAG, Log.DEBUG)) {
-            Log.d(TAG, "Unlock Token received: " + Utils.byteArrayToHexString(mUnlockToken));
+        queueMessageForLog("processCredentials");
+
+        PhoneCredentials phoneCredentials;
+        try {
+            phoneCredentials = PhoneCredentials.parseFrom(credentials);
+        } catch (InvalidProtocolBufferException e) {
+            Log.e(TAG, "Error parsing credentials protobuf.", e);
+            return;
         }
 
-        queueMessageForLog("onUnlockTokenReceived");
+        byte[] handle = phoneCredentials.getHandle().toByteArray();
+
+        mUnlockDelegate.onUnlockDataReceived(
+                mTrustedDeviceService.getUserHandleByTokenHandle(Utils.bytesToLong(handle)),
+                phoneCredentials.getEscrowToken().toByteArray(),
+                Utils.bytesToLong(handle));
+
+        resetEncryptionState();
     }
 
     /**
@@ -535,45 +565,6 @@ public class CarTrustAgentUnlockService {
         if (mPrevContext != null) {
             mPrevContext = null;
         }
-    }
-
-    void onUnlockHandleReceived(byte[] value) {
-        synchronized (mHandleLock) {
-            mUnlockHandle = value;
-        }
-
-        if (Log.isLoggable(TAG, Log.DEBUG)) {
-            Log.d(TAG, "Unlock Handl received: " + Utils.byteArrayToHexString(mUnlockHandle));
-        }
-
-        queueMessageForLog("onUnlockHandleReceived");
-
-        if (mUnlockToken == null || mUnlockHandle == null) {
-            if (Log.isLoggable(TAG, Log.DEBUG)) {
-                Log.d(TAG, "Unlock Token not available yet");
-            }
-            return;
-        }
-
-        if (mUnlockDelegate == null) {
-            if (Log.isLoggable(TAG, Log.DEBUG)) {
-                Log.d(TAG, "No Unlock delegate");
-            }
-            return;
-        }
-
-        mUnlockDelegate.onUnlockDataReceived(
-                mTrustedDeviceService.getUserHandleByTokenHandle(Utils.bytesToLong(mUnlockHandle)),
-                mUnlockToken,
-                Utils.bytesToLong(mUnlockHandle));
-
-        synchronized (mUnlockToken) {
-            mUnlockToken = null;
-        }
-        synchronized (mHandleLock) {
-            mUnlockHandle = null;
-        }
-        resetEncryptionState();
     }
 
     void dump(PrintWriter writer) {
