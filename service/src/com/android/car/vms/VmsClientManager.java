@@ -40,6 +40,7 @@ import com.android.internal.annotations.VisibleForTesting;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Manages service connections lifecycle for VMS publisher clients.
@@ -76,7 +77,6 @@ public class VmsClientManager implements CarServiceBase {
     private final Handler mHandler;
     private final CarUserService mUserService;
     private final CarUserManagerHelper mUserManagerHelper;
-    private final IBinder mHalClient;
     private final int mMillisBeforeRebind;
 
     @GuardedBy("mListeners")
@@ -84,12 +84,17 @@ public class VmsClientManager implements CarServiceBase {
     @GuardedBy("mSystemClients")
     private final Map<String, ClientConnection> mSystemClients = new ArrayMap<>();
     @GuardedBy("mSystemClients")
+    private IBinder mHalClient;
+    @GuardedBy("mSystemClients")
     private boolean mSystemUserUnlocked;
 
     @GuardedBy("mCurrentUserClients")
     private final Map<String, ClientConnection> mCurrentUserClients = new ArrayMap<>();
     @GuardedBy("mCurrentUserClients")
     private int mCurrentUser;
+
+    @GuardedBy("mRebindCounts")
+    private final Map<String, AtomicLong> mRebindCounts = new ArrayMap<>();
 
     @VisibleForTesting
     final Runnable mSystemUserUnlockedListener = () -> {
@@ -132,9 +137,9 @@ public class VmsClientManager implements CarServiceBase {
         mHandler = new Handler(Looper.getMainLooper());
         mUserService = userService;
         mUserManagerHelper = userManagerHelper;
-        mHalClient = halService.getPublisherClient();
         mMillisBeforeRebind = mContext.getResources().getInteger(
                 com.android.car.R.integer.millisecondsBeforeRebindToVmsPublisher);
+        halService.setPublisherConnectionCallbacks(this::onHalConnected, this::onHalDisconnected);
     }
 
     @Override
@@ -163,10 +168,30 @@ public class VmsClientManager implements CarServiceBase {
     @Override
     public void dump(PrintWriter writer) {
         writer.println("*" + getClass().getSimpleName() + "*");
-        writer.println("mListeners:" + mListeners);
-        writer.println("mSystemClients:" + mSystemClients.keySet());
-        writer.println("mCurrentUser:" + mCurrentUser);
-        writer.println("mCurrentUserClients:" + mCurrentUserClients.keySet());
+        synchronized (mSystemClients) {
+            writer.println("mHalClient: " + (mHalClient != null ? "connected" : "disconnected"));
+            writer.println("mSystemClients:");
+            dumpConnections(writer, mSystemClients);
+        }
+        synchronized (mCurrentUserClients) {
+            writer.println("mCurrentUserClients:");
+            dumpConnections(writer, mCurrentUserClients);
+            writer.println("mCurrentUser:" + mCurrentUser);
+        }
+        synchronized (mRebindCounts) {
+            writer.println("mRebindCounts:");
+            for (Map.Entry<String, AtomicLong> entry : mRebindCounts.entrySet()) {
+                writer.printf("\t%s: %s\n", entry.getKey(), entry.getValue());
+            }
+        }
+    }
+
+    private void dumpConnections(PrintWriter writer, Map<String, ClientConnection> connectionMap) {
+        for (ClientConnection connection : connectionMap.values()) {
+            writer.printf("\t%s: %s\n",
+                    connection.mName.getPackageName(),
+                    connection.mIsBound ? "connected" : "disconnected");
+        }
     }
 
     /**
@@ -273,8 +298,10 @@ public class VmsClientManager implements CarServiceBase {
     }
 
     private void notifyListenerOfConnectedClients(ConnectionListener listener) {
-        listener.onClientConnected(HAL_CLIENT_NAME, mHalClient);
         synchronized (mSystemClients) {
+            if (mHalClient != null) {
+                listener.onClientConnected(HAL_CLIENT_NAME, mHalClient);
+            }
             mSystemClients.values().forEach(conn -> conn.notifyIfConnected(listener));
         }
         synchronized (mCurrentUserClients) {
@@ -295,6 +322,23 @@ public class VmsClientManager implements CarServiceBase {
             for (ConnectionListener listener : mListeners) {
                 listener.onClientDisconnected(clientName);
             }
+        }
+    }
+
+    private void onHalConnected(IBinder halClient) {
+        synchronized (mSystemClients) {
+            mHalClient = halClient;
+            notifyListenersOnClientConnected(HAL_CLIENT_NAME, mHalClient);
+        }
+    }
+
+    private void onHalDisconnected() {
+        synchronized (mSystemClients) {
+            mHalClient = null;
+            notifyListenersOnClientDisconnected(HAL_CLIENT_NAME);
+        }
+        synchronized (mRebindCounts) {
+            mRebindCounts.computeIfAbsent(HAL_CLIENT_NAME, k -> new AtomicLong()).incrementAndGet();
         }
     }
 
@@ -359,6 +403,10 @@ public class VmsClientManager implements CarServiceBase {
             }
             if (!mIsTerminated) {
                 mHandler.postDelayed(this::bind, mMillisBeforeRebind);
+                synchronized (mRebindCounts) {
+                    mRebindCounts.computeIfAbsent(mName.getPackageName(), k -> new AtomicLong())
+                            .incrementAndGet();
+                }
             }
         }
 

@@ -18,9 +18,9 @@ package com.android.car.trust;
 
 import android.util.Log;
 
-import com.android.car.trust.BLEStream.BLEMessage;
-import com.android.car.trust.BLEStream.BLEMessage.OperationType;
-import com.android.car.trust.protobuf.ByteString;
+import com.android.car.BLEStreamProtos.BLEMessageProto.BLEMessage;
+import com.android.car.BLEStreamProtos.BLEOperationProto.OperationType;
+import com.android.car.protobuf.ByteString;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -88,8 +88,7 @@ class BLEMessageV1Factory {
             + (FIXED_32_SIZE + FIELD_NUMBER_ENCODING_SIZE)
             + (FIXED_32_SIZE + FIELD_NUMBER_ENCODING_SIZE);
 
-    private BLEMessageV1Factory() {
-    }
+    private BLEMessageV1Factory() {}
 
     /**
      * Method used to generate a single message, the packet number and total packets will set to 1

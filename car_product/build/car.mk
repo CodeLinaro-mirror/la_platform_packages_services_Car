@@ -35,11 +35,11 @@ PRODUCT_PACKAGES += \
 # This is for testing
 ifneq (,$(filter userdebug eng, $(TARGET_BUILD_VARIANT)))
 PRODUCT_PACKAGES += \
+    BugReportApp \
     DefaultStorageMonitoringCompanionApp \
     EmbeddedKitchenSinkApp \
     VmsPublisherClientSample \
     VmsSubscriberClientSample \
-    android.car.cluster.loggingrenderer \
     GarageModeTestApp \
 
 # SEPolicy for test apps / services

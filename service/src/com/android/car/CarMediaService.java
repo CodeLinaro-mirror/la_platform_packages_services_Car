@@ -34,6 +34,8 @@ import android.media.session.MediaSession.Token;
 import android.media.session.MediaSessionManager;
 import android.media.session.MediaSessionManager.OnActiveSessionsChangedListener;
 import android.media.session.PlaybackState;
+import android.os.Handler;
+import android.os.HandlerThread;
 import android.os.RemoteCallbackList;
 import android.os.RemoteException;
 import android.service.media.MediaBrowserService;
@@ -81,9 +83,14 @@ public class CarMediaService extends ICarMedia.Stub implements CarServiceBase {
     // null if playback has not been started yet.
     private MediaController mActiveUserMediaController;
     private SessionChangedListener mSessionsListener;
+    private boolean mStartPlayback;
 
     private RemoteCallbackList<ICarMediaSourceListener> mMediaSourceListeners =
             new RemoteCallbackList();
+
+    // Handler to receive PlaybackState callbacks from the active media controller.
+    private Handler mHandler;
+    private HandlerThread mHandlerThread;
 
     /** The package name of the last media source that was removed while being primary. */
     private String mRemovedMediaSourcePackage;
@@ -128,6 +135,10 @@ public class CarMediaService extends ICarMedia.Stub implements CarServiceBase {
         mMediaSessionManager = mContext.getSystemService(MediaSessionManager.class);
         mMediaSessionUpdater = new MediaSessionUpdater();
 
+        mHandlerThread = new HandlerThread(CarLog.TAG_MEDIA);
+        mHandlerThread.start();
+        mHandler = new Handler(mHandlerThread.getLooper());
+
         IntentFilter filter = new IntentFilter();
         filter.addAction(Intent.ACTION_PACKAGE_REMOVED);
         filter.addAction(Intent.ACTION_PACKAGE_REPLACED);
@@ -147,6 +158,8 @@ public class CarMediaService extends ICarMedia.Stub implements CarServiceBase {
         CarLocalServices.getService(CarUserService.class).runOnUser0Unlock(() -> {
             mSharedPrefs = mContext.getSharedPreferences(SHARED_PREF, Context.MODE_PRIVATE);
             mPrimaryMediaPackage = getLastMediaPackage();
+            mStartPlayback = mSharedPrefs.getInt(PLAYBACK_STATE_KEY, PlaybackState.STATE_NONE)
+                    == PlaybackState.STATE_PLAYING;
             notifyListeners();
         });
     }
@@ -214,6 +227,18 @@ public class CarMediaService extends ICarMedia.Stub implements CarServiceBase {
                 ActivityManager.getCurrentUser(), null);
         mMediaSessionUpdater.registerCallbacks(mMediaSessionManager.getActiveSessionsForUser(
                 null, ActivityManager.getCurrentUser()));
+    }
+
+    /**
+     * Attempts to play the current source using MediaController.TransportControls.play()
+     */
+    private void play() {
+        if (mActiveUserMediaController != null) {
+            TransportControls controls = mActiveUserMediaController.getTransportControls();
+            if (controls != null) {
+                controls.play();
+            }
+        }
     }
 
     /**
@@ -331,6 +356,7 @@ public class CarMediaService extends ICarMedia.Stub implements CarServiceBase {
 
         stop();
 
+        mStartPlayback = false;
         mPrimaryMediaPackage = packageName;
         updateActiveMediaController(mMediaSessionManager
                 .getActiveSessionsForUser(null, ActivityManager.getCurrentUser()));
@@ -364,6 +390,8 @@ public class CarMediaService extends ICarMedia.Stub implements CarServiceBase {
         @Override
         public void onPlaybackStateChanged(PlaybackState state) {
             savePlaybackState(state);
+            // Try to start playback if the new state allows the play action
+            maybeRestartPlayback(state);
         }
     };
 
@@ -442,9 +470,24 @@ public class CarMediaService extends ICarMedia.Stub implements CarServiceBase {
         return new ArrayDeque(Arrays.asList(packageNames));
     }
 
-    private void savePlaybackState(PlaybackState state) {
-        mSharedPrefs.edit().putInt(PLAYBACK_STATE_KEY, state != null ? state.getState()
-                : PlaybackState.STATE_NONE).apply();
+    private void savePlaybackState(PlaybackState playbackState) {
+        int state = playbackState != null ? playbackState.getState() : PlaybackState.STATE_NONE;
+        if (state == PlaybackState.STATE_PLAYING) {
+            // No longer need to request play if audio was resumed already via some other means,
+            // e.g. Assistant starts playback, user uses hardware button, etc.
+            mStartPlayback = false;
+        }
+        if (mSharedPrefs != null) {
+            mSharedPrefs.edit().putInt(PLAYBACK_STATE_KEY, state).apply();
+        }
+    }
+
+    private void maybeRestartPlayback(PlaybackState state) {
+        if (mStartPlayback && state != null
+                && (state.getActions() & PlaybackState.ACTION_PLAY) != 0) {
+            play();
+            mStartPlayback = false;
+        }
     }
 
     /**
@@ -462,8 +505,14 @@ public class CarMediaService extends ICarMedia.Stub implements CarServiceBase {
         for (MediaController controller : mediaControllers) {
             if (mPrimaryMediaPackage.equals(controller.getPackageName())) {
                 mActiveUserMediaController = controller;
-                savePlaybackState(mActiveUserMediaController.getPlaybackState());
-                mActiveUserMediaController.registerCallback(mMediaControllerCallback);
+                // Specify Handler to receive callbacks on, to avoid defaulting to the calling
+                // thread; this method can be called from the MediaSessionManager callback.
+                // Using the version of this method without passing a handler causes a
+                // RuntimeException for failing to create a Handler.
+                PlaybackState state = mActiveUserMediaController.getPlaybackState();
+                savePlaybackState(state);
+                mActiveUserMediaController.registerCallback(mMediaControllerCallback, mHandler);
+                maybeRestartPlayback(state);
                 return;
             }
         }

@@ -139,25 +139,32 @@ public final class CarBugreportManager implements CarManagerBase {
     }
 
     /**
-     * Request a bug report. An old style flat bugreport is generated in the background.
-     * The fd is closed when bugreport is written or if an exception happens.
+     * Request a bug report. An zipped bugreport is generated in the background.
+     * The file descriptors are closed when bugreport is written or if an exception happens.
+     * The progress protocol is described
+     * <a href="https://android.googlesource.com/platform/frameworks/native/+/master/cmds/bugreportz/readme.md">
+     *     here</a>
      *
-     * @param fd  the dump file
+     * @param output the zipped bugreport file
+     * @param progress the progress information that includes failure/success status.
      * @param callback  the callback for reporting dump status
      */
     @RequiresPermission(android.Manifest.permission.DUMP)
-    public void requestBugreport(@NonNull ParcelFileDescriptor fd,
+    public void requestZippedBugreport(@NonNull ParcelFileDescriptor output,
+            @NonNull ParcelFileDescriptor progress,
             @NonNull CarBugreportManagerCallback callback) {
+        Preconditions.checkNotNull(output);
+        Preconditions.checkNotNull(progress);
+        Preconditions.checkNotNull(callback);
         try {
-            Preconditions.checkNotNull(fd);
-            Preconditions.checkNotNull(callback);
             CarBugreportManagerCallbackWrapper wrapper =
                     new CarBugreportManagerCallbackWrapper(callback, mHandler);
-            mService.requestBugreport(fd, wrapper);
+            mService.requestZippedBugreport(output, progress, wrapper);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         } finally {
-            IoUtils.closeQuietly(fd);
+            IoUtils.closeQuietly(output);
+            IoUtils.closeQuietly(progress);
         }
     }
 

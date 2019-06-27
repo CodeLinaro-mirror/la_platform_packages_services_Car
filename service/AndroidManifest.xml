@@ -496,6 +496,7 @@
     <uses-permission android:name="android.permission.LOCATION_HARDWARE" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.PROVIDE_TRUST_AGENT" />
+    <uses-permission android:name="android.permission.READ_LOGS" />
 
     <application android:label="@string/app_title"
                  android:directBootAware="true"
@@ -526,10 +527,10 @@
                        android:resource="@xml/car_trust_agent"/>
         </service>
         <activity android:name="com.android.car.pm.ActivityBlockingActivity"
+                  android:documentLaunchMode="always"
                   android:excludeFromRecents="true"
-                  android:theme="@android:style/Theme.Translucent.NoTitleBar"
                   android:exported="false"
-                  android:launchMode="singleTask">
+                  android:theme="@android:style/Theme.Translucent.NoTitleBar">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
             </intent-filter>

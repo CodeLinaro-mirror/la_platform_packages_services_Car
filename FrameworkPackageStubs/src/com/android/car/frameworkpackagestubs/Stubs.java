@@ -64,6 +64,26 @@ public final class Stubs {
     }
 
     /**
+     * Stub activity for Browser events.
+     */
+    public static class BrowserStub extends BaseActivity { }
+
+    /**
+     * Stub activity for Calendar events.
+     */
+    public static class CalendarStub extends BaseActivity { }
+
+    /**
+     * Stub activity for Desk Clock events.
+     */
+    public static class DeskClockStub extends BaseActivity { }
+
+    /**
+     * Stub activity for Dialer events.
+     */
+    public static class DialerStub extends BaseActivity { }
+
+    /**
      * Stub activity for media events.
      */
     public static class MediaStub extends BaseActivity { }
@@ -72,4 +92,24 @@ public final class Stubs {
      * Stub activity for setting events.
      */
     public static class SettingsStub extends BaseActivity { }
+
+    /**
+     * Stub activity for ignore background data restriction setting.
+     */
+    public static class IgnoreBackgroundDataRestrictionsSettingsStub extends BaseActivity { }
+
+    /**
+     * Stub activity for ignore battery optimization setting.
+     */
+    public static class IgnoreBatteryOptimizationSettingsStub extends BaseActivity { }
+
+    /**
+     * Stub activity for request battery optimization.
+     */
+    public static class RequestIgnoreBatteryOptimizationsStub extends BaseActivity { }
+
+    /**
+     * Stub activity for webview setting.
+     */
+    public static class WebViewSettingsStub extends BaseActivity { }
 }
