@@ -169,8 +169,6 @@ public class CarUxRestrictionsManagerService extends ICarUxRestrictionsManager.S
         mCarUxRestrictionsConfigurations = convertToMap(loadConfig());
 
         initializeUxRestrictions();
-        // temporarily disable Ux Restrictions for general UI use
-        setUxRChangeBroadcastEnabled(false);
     }
 
     @Override
