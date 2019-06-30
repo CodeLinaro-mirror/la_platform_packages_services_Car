@@ -16,6 +16,7 @@
 
 package com.android.car.vms;
 
+import android.car.Car;
 import android.car.userlib.CarUserManagerHelper;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
@@ -23,6 +24,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.ServiceConnection;
+import android.content.pm.PackageManager;
+import android.content.pm.ServiceInfo;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
@@ -40,6 +43,7 @@ import com.android.internal.annotations.VisibleForTesting;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Manages service connections lifecycle for VMS publisher clients.
@@ -91,6 +95,9 @@ public class VmsClientManager implements CarServiceBase {
     private final Map<String, ClientConnection> mCurrentUserClients = new ArrayMap<>();
     @GuardedBy("mCurrentUserClients")
     private int mCurrentUser;
+
+    @GuardedBy("mRebindCounts")
+    private final Map<String, AtomicLong> mRebindCounts = new ArrayMap<>();
 
     @VisibleForTesting
     final Runnable mSystemUserUnlockedListener = () -> {
@@ -163,11 +170,36 @@ public class VmsClientManager implements CarServiceBase {
 
     @Override
     public void dump(PrintWriter writer) {
+        dumpMetrics(writer);
+    }
+
+    @Override
+    public void dumpMetrics(PrintWriter writer) {
         writer.println("*" + getClass().getSimpleName() + "*");
-        writer.println("mListeners:" + mListeners);
-        writer.println("mSystemClients:" + mSystemClients.keySet());
-        writer.println("mCurrentUser:" + mCurrentUser);
-        writer.println("mCurrentUserClients:" + mCurrentUserClients.keySet());
+        synchronized (mSystemClients) {
+            writer.println("mHalClient: " + (mHalClient != null ? "connected" : "disconnected"));
+            writer.println("mSystemClients:");
+            dumpConnections(writer, mSystemClients);
+        }
+        synchronized (mCurrentUserClients) {
+            writer.println("mCurrentUserClients:");
+            dumpConnections(writer, mCurrentUserClients);
+            writer.println("mCurrentUser:" + mCurrentUser);
+        }
+        synchronized (mRebindCounts) {
+            writer.println("mRebindCounts:");
+            for (Map.Entry<String, AtomicLong> entry : mRebindCounts.entrySet()) {
+                writer.printf("\t%s: %s\n", entry.getKey(), entry.getValue());
+            }
+        }
+    }
+
+    private void dumpConnections(PrintWriter writer, Map<String, ClientConnection> connectionMap) {
+        for (ClientConnection connection : connectionMap.values()) {
+            writer.printf("\t%s: %s\n",
+                    connection.mName.getPackageName(),
+                    connection.mIsBound ? "connected" : "disconnected");
+        }
     }
 
     /**
@@ -254,8 +286,18 @@ public class VmsClientManager implements CarServiceBase {
             return;
         }
 
-        if (!mContext.getPackageManager().isPackageAvailable(name.getPackageName())) {
+        ServiceInfo serviceInfo;
+        try {
+            serviceInfo = mContext.getPackageManager().getServiceInfo(name,
+                    PackageManager.MATCH_DIRECT_BOOT_AUTO);
+        } catch (PackageManager.NameNotFoundException e) {
             Log.w(TAG, "Client not installed: " + clientName);
+            return;
+        }
+
+        if (!Car.PERMISSION_BIND_VMS_CLIENT.equals(serviceInfo.permission)) {
+            Log.w(TAG, "Client service: " + clientName
+                    + " does not require " + Car.PERMISSION_BIND_VMS_CLIENT + " permission");
             return;
         }
 
@@ -312,6 +354,9 @@ public class VmsClientManager implements CarServiceBase {
         synchronized (mSystemClients) {
             mHalClient = null;
             notifyListenersOnClientDisconnected(HAL_CLIENT_NAME);
+        }
+        synchronized (mRebindCounts) {
+            mRebindCounts.computeIfAbsent(HAL_CLIENT_NAME, k -> new AtomicLong()).incrementAndGet();
         }
     }
 
@@ -376,6 +421,10 @@ public class VmsClientManager implements CarServiceBase {
             }
             if (!mIsTerminated) {
                 mHandler.postDelayed(this::bind, mMillisBeforeRebind);
+                synchronized (mRebindCounts) {
+                    mRebindCounts.computeIfAbsent(mName.getPackageName(), k -> new AtomicLong())
+                            .incrementAndGet();
+                }
             }
         }
 
