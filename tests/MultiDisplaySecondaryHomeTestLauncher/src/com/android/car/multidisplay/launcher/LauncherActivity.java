@@ -16,6 +16,8 @@
 
 package com.android.car.multidisplay.launcher;
 
+import static com.android.car.multidisplay.launcher.PinnedAppListViewModel.PINNED_APPS_KEY;
+
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.app.ActivityOptions;
@@ -46,8 +48,6 @@ import androidx.fragment.app.FragmentManager;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory;
 
-import static com.android.car.multidisplay.launcher.PinnedAppListViewModel.PINNED_APPS_KEY;
-
 import com.android.car.multidisplay.R;
 
 import com.google.android.material.circularreveal.cardview.CircularRevealCardView;
@@ -67,7 +67,9 @@ public class LauncherActivity extends FragmentActivity implements AppPickedCallb
     private Spinner mDisplaySpinner;
     private ArrayAdapter<DisplayItem> mDisplayAdapter;
     private int mSelectedDisplayId = Display.INVALID_DISPLAY;
+    private View mRootView;
     private View mScrimView;
+    private View mAppDrawerHeader;
     private AppListAdapter mAppListAdapter;
     private AppListAdapter mPinnedAppListAdapter;
     private CircularRevealCardView mAppDrawerView;
@@ -81,10 +83,21 @@ public class LauncherActivity extends FragmentActivity implements AppPickedCallb
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
+        mRootView = findViewById(R.id.RootView);
         mScrimView = findViewById(R.id.Scrim);
         mAppDrawerView = findViewById(R.id.FloatingSheet);
-        mFab = findViewById(R.id.FloatingActionButton);
 
+        // get system insets and apply padding accordingly to the content view
+        mRootView.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                | View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
+        mRootView.setOnApplyWindowInsetsListener((view, insets) -> {
+            mRootView.setPadding(0, 0, 0, insets.getSystemWindowInsetBottom());
+            mAppDrawerHeader = findViewById(R.id.FloatingSheetHeader);
+            mAppDrawerHeader.setPadding(0, insets.getSystemWindowInsetTop(), 0, 0);
+            return insets.consumeSystemWindowInsets();
+        });
+
+        mFab = findViewById(R.id.FloatingActionButton);
         mFab.setOnClickListener((View v) -> {
             showAppDrawer(true);
         });

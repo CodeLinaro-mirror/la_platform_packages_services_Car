@@ -88,7 +88,26 @@ class BLEMessageV1Factory {
             + (FIXED_32_SIZE + FIELD_NUMBER_ENCODING_SIZE)
             + (FIXED_32_SIZE + FIELD_NUMBER_ENCODING_SIZE);
 
-    private BLEMessageV1Factory() {
+    private BLEMessageV1Factory() {}
+
+    /**
+     * Creates an acknowledgement {@link BLEMessage}.
+     *
+     * <p>This type of proto should be used to let a client know that this device has received
+     * a partially completed {@code BLEMessage}.
+     *
+     * <p>Note, this type of message has an empty {@code payload} field.
+     *
+     * @return A {@code BLEMessage} with an {@code OperationType} of {@link OperationType.ACK}.
+     */
+    static BLEMessage makeAcknowledgementMessage() {
+        return BLEMessage.newBuilder()
+                .setVersion(PROTOCOL_VERSION)
+                .setOperation(OperationType.ACK)
+                .setPacketNumber(1)
+                .setTotalPackets(1)
+                .setIsPayloadEncrypted(false)
+                .build();
     }
 
     /**
