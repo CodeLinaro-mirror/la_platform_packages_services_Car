@@ -20,6 +20,8 @@
 
 #include <dirent.h>
 #include <hardware_legacy/uevent.h>
+#include <hwbinder/IPCThreadState.h>
+#include <cutils/android_filesystem_config.h>
 
 
 using namespace std::chrono_literals;
@@ -35,13 +37,24 @@ namespace implementation {
 // NOTE:  All members values are static so that all clients operate on the same state
 //        That is to say, this is effectively a singleton despite the fact that HIDL
 //        constructs a new instance for each client.
-std::list<EvsEnumerator::CameraRecord>   EvsEnumerator::sCameraList;
-wp<EvsGlDisplay>                         EvsEnumerator::sActiveDisplay;
-std::mutex                               EvsEnumerator::sLock;
-std::condition_variable                  EvsEnumerator::sCameraSignal;
+std::unordered_map<std::string, EvsEnumerator::CameraRecord> EvsEnumerator::sCameraList;
+wp<EvsGlDisplay>                                             EvsEnumerator::sActiveDisplay;
+std::mutex                                                   EvsEnumerator::sLock;
+std::condition_variable                                      EvsEnumerator::sCameraSignal;
 
 // Constants
 const auto kEnumerationTimeout = 10s;
+
+
+bool EvsEnumerator::checkPermission() {
+    hardware::IPCThreadState *ipc = hardware::IPCThreadState::self();
+    if (AID_AUTOMOTIVE_EVS != ipc->getCallingUid()) {
+        ALOGE("EVS access denied: pid = %d, uid = %d", ipc->getCallingPid(), ipc->getCallingUid());
+        return false;
+    }
+
+    return true;
+}
 
 void EvsEnumerator::EvsUeventThread(std::atomic<bool>& running) {
     int status = uevent_init();
@@ -90,17 +103,13 @@ void EvsEnumerator::EvsUeventThread(std::atomic<bool>& running) {
 
             std::lock_guard<std::mutex> lock(sLock);
             if (cmd_removal) {
-                for (auto it = sCameraList.begin(); it != sCameraList.end(); ++it) {
-                    if (!devpath.compare(it->desc.cameraId)) {
-                        // There must be no entry with duplicated name.
-                        sCameraList.erase(it);
-                        break;
-                    }
-                }
+                sCameraList.erase(devpath);
+                ALOGI("%s is removed", devpath.c_str());
             } else if (cmd_addition) {
                 // NOTE: we are here adding new device without a validation
                 // because it always fails to open, b/132164956.
-                sCameraList.emplace_back(devpath.c_str());
+                sCameraList.emplace(devpath, devpath.c_str());
+                ALOGI("%s is added", devpath.c_str());
             } else {
                 // Ignore all other actions including "change".
             }
@@ -126,8 +135,8 @@ void EvsEnumerator::enumerateDevices() {
     //           information.  Platform implementers should consider hard coding this list of
     //           known good devices to speed up the startup time of their EVS implementation.
     //           For example, this code might be replaced with nothing more than:
-    //                   sCameraList.emplace_back("/dev/video0");
-    //                   sCameraList.emplace_back("/dev/video1");
+    //                   sCameraList.emplace("/dev/video0");
+    //                   sCameraList.emplace("/dev/video1");
     ALOGI("%s: Starting dev/video* enumeration", __FUNCTION__);
     unsigned videoCount   = 0;
     unsigned captureCount = 0;
@@ -145,8 +154,11 @@ void EvsEnumerator::enumerateDevices() {
                 std::string deviceName("/dev/");
                 deviceName += entry->d_name;
                 videoCount++;
-                if (qualifyCaptureDevice(deviceName.c_str())) {
-                    sCameraList.emplace_back(deviceName.c_str());
+                if (sCameraList.find(deviceName) != sCameraList.end()) {
+                    ALOGI("%s has been added already.", deviceName.c_str());
+                    captureCount++;
+                } else if(qualifyCaptureDevice(deviceName.c_str())) {
+                    sCameraList.emplace(deviceName, deviceName.c_str());
                     captureCount++;
                 }
             }
@@ -159,6 +171,10 @@ void EvsEnumerator::enumerateDevices() {
 // Methods from ::android::hardware::automotive::evs::V1_0::IEvsEnumerator follow.
 Return<void> EvsEnumerator::getCameraList(getCameraList_cb _hidl_cb)  {
     ALOGD("getCameraList");
+    if (!checkPermission()) {
+        return Void();
+    }
+
     {
         std::unique_lock<std::mutex> lock(sLock);
         if (sCameraList.size() < 1) {
@@ -178,7 +194,7 @@ Return<void> EvsEnumerator::getCameraList(getCameraList_cb _hidl_cb)  {
     hidl_vec<CameraDesc> hidlCameras;
     hidlCameras.resize(numCameras);
     unsigned i = 0;
-    for (const auto& cam : sCameraList) {
+    for (const auto& [key, cam] : sCameraList) {
         hidlCameras[i++] = cam.desc;
     }
 
@@ -193,6 +209,9 @@ Return<void> EvsEnumerator::getCameraList(getCameraList_cb _hidl_cb)  {
 
 Return<sp<IEvsCamera>> EvsEnumerator::openCamera(const hidl_string& cameraId) {
     ALOGD("openCamera");
+    if (!checkPermission()) {
+        return nullptr;
+    }
 
     // Is this a recognized camera id?
     CameraRecord *pRecord = findCameraById(cameraId);
@@ -257,6 +276,9 @@ Return<void> EvsEnumerator::closeCamera(const ::android::sp<IEvsCamera>& pCamera
 
 Return<sp<IEvsDisplay>> EvsEnumerator::openDisplay() {
     ALOGD("openDisplay");
+    if (!checkPermission()) {
+        return nullptr;
+    }
 
     // If we already have a display active, then we need to shut it down so we can
     // give exclusive access to the new caller.
@@ -296,6 +318,9 @@ Return<void> EvsEnumerator::closeDisplay(const ::android::sp<IEvsDisplay>& pDisp
 
 Return<DisplayState> EvsEnumerator::getDisplayState()  {
     ALOGD("getDisplayState");
+    if (!checkPermission()) {
+        return DisplayState::DEAD;
+    }
 
     // Do we still have a display object we think should be active?
     sp<IEvsDisplay> pActiveDisplay = sActiveDisplay.promote();
@@ -370,11 +395,10 @@ bool EvsEnumerator::qualifyCaptureDevice(const char* deviceName) {
 
 EvsEnumerator::CameraRecord* EvsEnumerator::findCameraById(const std::string& cameraId) {
     // Find the named camera
-    for (auto &&cam : sCameraList) {
-        if (cam.desc.cameraId == cameraId) {
-            // Found a match!
-            return &cam;
-        }
+    auto found = sCameraList.find(cameraId);
+    if (sCameraList.end() != found) {
+        // Found a match!
+        return &found->second;
     }
 
     // We didn't find a match
