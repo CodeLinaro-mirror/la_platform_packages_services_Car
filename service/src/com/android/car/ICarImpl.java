@@ -150,7 +150,7 @@ public class ICarImpl extends ICar.Stub {
                 mAppFocusService, mCarInputService);
         mSystemStateControllerService = new SystemStateControllerService(
                 serviceContext, mCarAudioService, this);
-        mVmsBrokerService = new VmsBrokerService();
+        mVmsBrokerService = new VmsBrokerService(mContext.getPackageManager());
         mVmsClientManager = new VmsClientManager(
                 serviceContext, mCarUserService, mUserManagerHelper, mHal.getVmsHal());
         mVmsSubscriberService = new VmsSubscriberService(
@@ -169,9 +169,10 @@ public class ICarImpl extends ICar.Stub {
 
         CarLocalServices.addService(CarPowerManagementService.class, mCarPowerManagementService);
         CarLocalServices.addService(CarUserService.class, mCarUserService);
-        CarLocalServices.addService(CarTrustedDeviceService.class,
-                mCarTrustedDeviceService);
+        CarLocalServices.addService(CarTrustedDeviceService.class, mCarTrustedDeviceService);
         CarLocalServices.addService(SystemInterface.class, mSystemInterface);
+        CarLocalServices.addService(CarDrivingStateService.class, mCarDrivingStateService);
+        CarLocalServices.addService(PerUserCarServiceHelper.class, mPerUserCarServiceHelper);
 
         // Be careful with order. Service depending on other service should be inited later.
         List<CarServiceBase> allServices = new ArrayList<>();
@@ -216,6 +217,7 @@ public class ICarImpl extends ICar.Stub {
             service.init();
         }
         traceEnd();
+        mSystemInterface.reconfigureSecondaryDisplays();
     }
 
     void release() {
@@ -449,17 +451,14 @@ public class ICarImpl extends ICar.Stub {
                     + " without permission " + android.Manifest.permission.DUMP);
             return;
         }
-        if (args == null || args.length == 0) {
-            writer.println("*dump car service*");
 
+        if (args == null || args.length == 0 || (args.length > 0 && "-a".equals(args[0]))) {
+            writer.println("*Dump car service*");
             writer.println("*FutureConfig, DEFAULT:" + FeatureConfiguration.DEFAULT);
             writer.println("*Dump all services*");
-            for (CarServiceBase service : mAllServices) {
-                dumpService(service, writer);
-            }
-            if (mCarTestService != null) {
-                dumpService(mCarTestService, writer);
-            }
+
+            dumpAllServices(writer, false);
+
             writer.println("*Dump Vehicle HAL*");
             writer.println("Vehicle HAL Interface: " + mVehicleInterfaceName);
             try {
@@ -469,6 +468,9 @@ public class ICarImpl extends ICar.Stub {
                 writer.println("Failed dumping: " + mHal.getClass().getName());
                 e.printStackTrace(writer);
             }
+        } else if ("--metrics".equals(args[0])) {
+            writer.println("*Dump car service metrics*");
+            dumpAllServices(writer, true);
         } else if (Build.IS_USERDEBUG || Build.IS_ENG) {
             execShellCmd(args, writer);
         } else {
@@ -476,9 +478,23 @@ public class ICarImpl extends ICar.Stub {
         }
     }
 
-    private void dumpService(CarServiceBase service, PrintWriter writer) {
+    private void dumpAllServices(PrintWriter writer, boolean dumpMetricsOnly) {
+        for (CarServiceBase service : mAllServices) {
+            dumpService(service, writer, dumpMetricsOnly);
+        }
+        if (mCarTestService != null) {
+            dumpService(mCarTestService, writer, dumpMetricsOnly);
+        }
+
+    }
+
+    private void dumpService(CarServiceBase service, PrintWriter writer, boolean dumpMetricsOnly) {
         try {
-            service.dump(writer);
+            if (dumpMetricsOnly) {
+                service.dumpMetrics(writer);
+            } else {
+                service.dump(writer);
+            }
         } catch (Exception e) {
             writer.println("Failed dumping: " + service.getClass().getName());
             e.printStackTrace(writer);
@@ -504,11 +520,13 @@ public class ICarImpl extends ICar.Stub {
         private static final String COMMAND_HELP = "-h";
         private static final String COMMAND_DAY_NIGHT_MODE = "day-night-mode";
         private static final String COMMAND_INJECT_VHAL_EVENT = "inject-vhal-event";
+        private static final String COMMAND_INJECT_ERROR_EVENT = "inject-error-event";
         private static final String COMMAND_ENABLE_UXR = "enable-uxr";
         private static final String COMMAND_GARAGE_MODE = "garage-mode";
         private static final String COMMAND_GET_DO_ACTIVITIES = "get-do-activities";
         private static final String COMMAND_GET_CARPROPERTYCONFIG = "get-carpropertyconfig";
         private static final String COMMAND_GET_PROPERTY_VALUE = "get-property-value";
+        private static final String COMMAND_PROJECTION_AP_TETHERING = "projection-tethering";
         private static final String COMMAND_PROJECTION_UI_MODE = "projection-ui-mode";
         private static final String COMMAND_RESUME = "resume";
         private static final String COMMAND_SUSPEND = "suspend";
@@ -532,6 +550,8 @@ public class ICarImpl extends ICar.Stub {
             pw.println("\t  Force into day/night mode or restore to auto.");
             pw.println("\tinject-vhal-event property [zone] data(can be comma separated list)");
             pw.println("\t  Inject a vehicle property for testing.");
+            pw.println("\tinject-error-event property zone errorCode");
+            pw.println("\t  Inject an error event from VHAL for testing.");
             pw.println("\tenable-uxr true|false");
             pw.println("\t  Enable/Disable UX restrictions and App blocking.");
             pw.println("\tgarage-mode [on|off|query]");
@@ -551,6 +571,11 @@ public class ICarImpl extends ICar.Stub {
             pw.println("\t  Enable/Disable Trusted device feature.");
             pw.println("\tremove-trusted-devices");
             pw.println("\t  Remove all trusted devices for the current foreground user.");
+            pw.println("\tprojection-tethering [true|false]");
+            pw.println("\t  Whether tethering should be used when creating access point for"
+                    + " wireless projection");
+            pw.println("\t--metrics");
+            pw.println("\t  When used with dumpsys, only metrics will be in the dumpsys output.");
         }
 
         public void exec(String[] args, PrintWriter writer) {
@@ -584,7 +609,17 @@ public class ICarImpl extends ICar.Stub {
                         // Global
                         data = args[2];
                     }
-                    injectVhalEvent(args[1], zone, data, writer);
+                    injectVhalEvent(args[1], zone, data, false, writer);
+                    break;
+                case COMMAND_INJECT_ERROR_EVENT:
+                    if (args.length != 4) {
+                        writer.println("Incorrect number of arguments");
+                        dumpHelp(writer);
+                        break;
+                    }
+                    String errorAreaId = args[2];
+                    String errorCode = args[3];
+                    injectVhalEvent(args[1], errorAreaId, errorCode, true, writer);
                     break;
                 case COMMAND_ENABLE_UXR:
                     if (args.length != 2) {
@@ -634,6 +669,14 @@ public class ICarImpl extends ICar.Stub {
                         break;
                     }
                     mCarProjectionService.setUiMode(Integer.valueOf(args[1]));
+                    break;
+                case COMMAND_PROJECTION_AP_TETHERING:
+                    if (args.length != 2) {
+                        writer.println("Incorrect number of arguments");
+                        dumpHelp(writer);
+                        break;
+                    }
+                    mCarProjectionService.setAccessPointTethering(Boolean.valueOf(args[1]));
                     break;
                 case COMMAND_RESUME:
                     mCarPowerManagementService.forceSimulatedResume();
@@ -702,19 +745,19 @@ public class ICarImpl extends ICar.Stub {
             switch (arg) {
                 case PARAM_ON_MODE:
                     mGarageModeService.forceStartGarageMode();
+                    writer.println("Garage mode: " + mGarageModeService.isGarageModeActive());
                     break;
                 case PARAM_OFF_MODE:
                     mGarageModeService.stopAndResetGarageMode();
+                    writer.println("Garage mode: " + mGarageModeService.isGarageModeActive());
                     break;
                 case PARAM_QUERY_MODE:
-                    // Nothing to do. Always query at the end anyway.
+                    mGarageModeService.dump(writer);
                     break;
                 default:
                     writer.println("Unknown value. Valid argument: " + PARAM_ON_MODE + "|"
                             + PARAM_OFF_MODE + "|" + PARAM_QUERY_MODE);
-                    return;
             }
-            writer.println("Garage mode: " + mGarageModeService.isGarageModeActive());
         }
 
         /**
@@ -722,11 +765,12 @@ public class ICarImpl extends ICar.Stub {
          *
          * @param property the Vehicle property Id as defined in the HAL
          * @param zone     Zone that this event services
+         * @param isErrorEvent indicates the type of event
          * @param value    Data value of the event
          * @param writer   PrintWriter
          */
         private void injectVhalEvent(String property, String zone, String value,
-                PrintWriter writer) {
+                boolean isErrorEvent, PrintWriter writer) {
             if (zone != null && (zone.equalsIgnoreCase(PARAM_VEHICLE_PROPERTY_AREA_GLOBAL))) {
                 if (!isPropertyAreaTypeGlobal(property)) {
                     writer.println("Property area type inconsistent with given zone");
@@ -734,7 +778,11 @@ public class ICarImpl extends ICar.Stub {
                 }
             }
             try {
-                mHal.injectVhalEvent(property, zone, value);
+                if (isErrorEvent) {
+                    mHal.injectOnPropertySetError(property, zone, value);
+                } else {
+                    mHal.injectVhalEvent(property, zone, value);
+                }
             } catch (NumberFormatException e) {
                 writer.println("Invalid property Id zone Id or value" + e);
                 dumpHelp(writer);
