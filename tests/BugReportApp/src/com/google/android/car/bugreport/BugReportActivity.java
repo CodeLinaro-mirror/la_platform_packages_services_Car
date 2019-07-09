@@ -16,9 +16,14 @@
 package com.google.android.car.bugreport;
 
 import static com.google.android.car.bugreport.BugReportService.EXTRA_META_BUG_REPORT;
+import static com.google.android.car.bugreport.BugReportService.MAX_PROGRESS_VALUE;
 
 import android.Manifest;
 import android.app.Activity;
+import android.car.Car;
+import android.car.CarNotConnectedException;
+import android.car.drivingstate.CarDrivingStateEvent;
+import android.car.drivingstate.CarDrivingStateManager;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.ServiceConnection;
@@ -33,6 +38,8 @@ import android.os.UserManager;
 import android.util.Log;
 import android.view.View;
 import android.view.Window;
+import android.widget.ProgressBar;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import java.io.File;
@@ -63,10 +70,14 @@ public class BugReportActivity extends Activity {
 
     private final Handler mHandler = new Handler(Looper.getMainLooper());
 
+    private TextView mInProgressTitleText;
+    private ProgressBar mProgressBar;
+    private TextView mProgressText;
     private VoiceRecordingView mVoiceRecordingView;
     private View mVoiceRecordingFinishedView;
     private View mSubmitBugReportLayout;
     private View mInProgressLayout;
+    private View mShowBugReportsButton;
 
     private boolean mBound;
     private boolean mAudioRecordingStarted;
@@ -74,6 +85,8 @@ public class BugReportActivity extends Activity {
     private BugReportService mService;
     private MediaRecorder mRecorder;
     private MetaBugReport mMetaBugReport;
+    private Car mCar;
+    private CarDrivingStateManager mDrivingStateManager;
 
     /** Defines callbacks for service binding, passed to bindService() */
     private ServiceConnection mConnection = new ServiceConnection() {
@@ -92,6 +105,24 @@ public class BugReportActivity extends Activity {
         }
     };
 
+    private final ServiceConnection mServiceConnection = new ServiceConnection() {
+        @Override
+        public void onServiceConnected(ComponentName name, IBinder service) {
+            try {
+                mDrivingStateManager = (CarDrivingStateManager) mCar.getCarManager(
+                        Car.CAR_DRIVING_STATE_SERVICE);
+                mDrivingStateManager.registerListener(
+                        BugReportActivity.this::onCarDrivingStateChanged);
+            } catch (CarNotConnectedException e) {
+                Log.w(TAG, "Failed to get CarDrivingStateManager.", e);
+            }
+        }
+
+        @Override
+        public void onServiceDisconnected(ComponentName name) {
+        }
+    };
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -99,14 +130,22 @@ public class BugReportActivity extends Activity {
         requestWindowFeature(Window.FEATURE_NO_TITLE);
         setContentView(R.layout.bug_report_activity);
 
+        mInProgressTitleText = findViewById(R.id.in_progress_title_text);
+        mProgressBar = findViewById(R.id.progress_bar);
+        mProgressText = findViewById(R.id.progress_text);
         mVoiceRecordingView = findViewById(R.id.voice_recording_view);
         mVoiceRecordingFinishedView = findViewById(R.id.voice_recording_finished_text_view);
         mSubmitBugReportLayout = findViewById(R.id.submit_bug_report_layout);
         mInProgressLayout = findViewById(R.id.in_progress_layout);
+        mShowBugReportsButton = findViewById(R.id.button_show_bugreports);
 
+        mShowBugReportsButton.setOnClickListener(this::buttonShowBugReportsClick);
         findViewById(R.id.button_submit).setOnClickListener(this::buttonSubmitClick);
         findViewById(R.id.button_cancel).setOnClickListener(this::buttonCancelClick);
         findViewById(R.id.button_close).setOnClickListener(this::buttonCancelClick);
+
+        mCar = Car.createCar(this, mServiceConnection);
+        mCar.connect();
 
         // Bind to BugReportService.
         Intent intent = new Intent(this, BugReportService.class);
@@ -128,7 +167,9 @@ public class BugReportActivity extends Activity {
         if (!mBugReportServiceStarted && mAudioRecordingStarted) {
             cancelAudioMessageRecording();
         }
-        mAudioRecordingStarted = false;
+        if (mBound) {
+            mService.removeBugReportProgressListener();
+        }
     }
 
     @Override
@@ -140,23 +181,34 @@ public class BugReportActivity extends Activity {
             unbindService(mConnection);
             mBound = false;
         }
-    }
-
-    private void checkStatus() {
-        if (mBound && mService.isCollectingBugReport()) {
-            scheduleStatusCheck();
-        } else {
-            finish();
+        if (mCar != null && mCar.isConnected()) {
+            mCar.disconnect();
+            mCar = null;
         }
     }
 
-    private void scheduleStatusCheck() {
-        mHandler.postDelayed(this::checkStatus, 1000);
+    private void onCarDrivingStateChanged(CarDrivingStateEvent event) {
+        if (event.eventValue == CarDrivingStateEvent.DRIVING_STATE_PARKED) {
+            mShowBugReportsButton.setVisibility(View.VISIBLE);
+        } else {
+            mShowBugReportsButton.setVisibility(View.GONE);
+        }
+    }
+
+    private void onProgressChanged(float progress) {
+        int progressValue = (int) progress;
+        mProgressBar.setProgress(progressValue);
+        mProgressText.setText(progressValue + "%");
+        if (progressValue == MAX_PROGRESS_VALUE) {
+            mInProgressTitleText.setText(R.string.bugreport_dialog_in_progress_title_finished);
+        }
     }
 
     private void showInProgressUi() {
         mSubmitBugReportLayout.setVisibility(View.GONE);
         mInProgressLayout.setVisibility(View.VISIBLE);
+        mInProgressTitleText.setText(R.string.bugreport_dialog_in_progress_title);
+        onProgressChanged(mService.getBugReportProgress());
     }
 
     private void showSubmitBugReportUi(boolean isRecording) {
@@ -169,13 +221,29 @@ public class BugReportActivity extends Activity {
             mVoiceRecordingFinishedView.setVisibility(View.VISIBLE);
             mVoiceRecordingView.setVisibility(View.GONE);
         }
+        // NOTE: mShowBugReportsButton visibility is also handled in #onCarDrivingStateChanged().
+        mShowBugReportsButton.setVisibility(View.GONE);
+        if (mDrivingStateManager != null) {
+            try {
+                // Call onCarDrivingStateChanged(), because it's not called when Car is connected.
+                onCarDrivingStateChanged(mDrivingStateManager.getCurrentCarDrivingState());
+            } catch (CarNotConnectedException e) {
+                Log.e(TAG, "Failed to get current driving state.", e);
+            }
+        }
     }
 
+    /**
+     * Initializes MetaBugReport in a local DB and starts audio recording.
+     *
+     * <p>This method expected to be called when the activity is started and bound to the service.
+     */
     private void startAudioMessageRecording() {
+        mService.setBugReportProgressListener(this::onProgressChanged);
+
         if (mService.isCollectingBugReport()) {
             Log.i(TAG, "Bug report is already being collected.");
             showInProgressUi();
-            scheduleStatusCheck();
             return;
         }
 
@@ -204,13 +272,15 @@ public class BugReportActivity extends Activity {
      * Cancels bugreporting by stopping audio recording and deleting temp files.
      */
     private void cancelAudioMessageRecording() {
+        if (!mAudioRecordingStarted) {
+            return;
+        }
         stopAudioRecording();
         File tempDir = FileUtils.getTempDir(this, mMetaBugReport.getTimestamp());
-        Log.i(TAG, "Bug report is cancelled");
         new DeleteDirectoryAsyncTask().execute(tempDir);
         BugStorageUtils.setBugReportStatus(this, mMetaBugReport, Status.STATUS_USER_CANCELLED, "");
-        Toast.makeText(this, getString(R.string.toast_bugreport_cancelled),
-                Toast.LENGTH_SHORT).show();
+        Log.i(TAG, "Bug report is cancelled");
+        mAudioRecordingStarted = false;
     }
 
     private void buttonCancelClick(View view) {
@@ -219,6 +289,22 @@ public class BugReportActivity extends Activity {
 
     private void buttonSubmitClick(View view) {
         startBugReportingInService();
+        finish();
+    }
+
+    /**
+     * Starts {@link BugReportInfoActivity} and finishes current activity, so it won't be running
+     * in the background and closing {@link BugReportInfoActivity} will not open it again.
+     */
+    private void buttonShowBugReportsClick(View view) {
+        cancelAudioMessageRecording();
+        // Delete the bugreport from database, otherwise pressing "Show Bugreports" button will
+        // create unnecessary cancelled bugreports.
+        if (mMetaBugReport != null) {
+            BugStorageUtils.deleteBugReport(this, mMetaBugReport.getId());
+        }
+        Intent intent = new Intent(this, BugReportInfoActivity.class);
+        startActivity(intent);
         finish();
     }
 
@@ -263,14 +349,15 @@ public class BugReportActivity extends Activity {
                 + Arrays.toString(permissions);
         Log.w(TAG, text);
         Toast.makeText(this, text, Toast.LENGTH_LONG).show();
+        BugStorageUtils.setBugReportStatus(this, mMetaBugReport,
+                Status.STATUS_USER_CANCELLED, text);
         finish();
     }
 
     private void startRecordingWithPermission() {
         File recordingFile = FileUtils.getFileWithSuffix(this, mMetaBugReport.getTimestamp(),
                 "-message.3gp");
-        Log.d(TAG, "start voice recording: " + recordingFile + ". activityObjectId"
-                + System.identityHashCode(this));
+        Log.i(TAG, "Started voice recording, and saving audio to " + recordingFile);
 
         mRecorder = new MediaRecorder();
         mRecorder.setAudioSource(MediaRecorder.AudioSource.MIC);
@@ -348,7 +435,7 @@ public class BugReportActivity extends Activity {
         @Override
         protected Void doInBackground(File... files) {
             for (File file : files) {
-                Log.d(TAG, "Deleting " + file.getAbsolutePath());
+                Log.i(TAG, "Deleting " + file.getAbsolutePath());
                 FileUtils.deleteDirectory(file);
             }
             return null;
