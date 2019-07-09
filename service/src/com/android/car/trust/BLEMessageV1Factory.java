@@ -21,6 +21,7 @@ import android.util.Log;
 import com.android.car.BLEStreamProtos.BLEMessageProto.BLEMessage;
 import com.android.car.BLEStreamProtos.BLEOperationProto.OperationType;
 import com.android.car.protobuf.ByteString;
+import com.android.internal.annotations.VisibleForTesting;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -91,6 +92,26 @@ class BLEMessageV1Factory {
     private BLEMessageV1Factory() {}
 
     /**
+     * Creates an acknowledgement {@link BLEMessage}.
+     *
+     * <p>This type of proto should be used to let a client know that this device has received
+     * a partially completed {@code BLEMessage}.
+     *
+     * <p>Note, this type of message has an empty {@code payload} field.
+     *
+     * @return A {@code BLEMessage} with an {@code OperationType} of {@link OperationType.ACK}.
+     */
+    static BLEMessage makeAcknowledgementMessage() {
+        return BLEMessage.newBuilder()
+                .setVersion(PROTOCOL_VERSION)
+                .setOperation(OperationType.ACK)
+                .setPacketNumber(1)
+                .setTotalPackets(1)
+                .setIsPayloadEncrypted(false)
+                .build();
+    }
+
+    /**
      * Method used to generate a single message, the packet number and total packets will set to 1
      * by default
      *
@@ -152,7 +173,8 @@ class BLEMessageV1Factory {
      * Returns the header size for the proto in bytes. This method assumes that the proto
      * contain a payload.
      */
-    public static int getProtoHeaderSize(OperationType operation, boolean isPayloadEncrypted) {
+    @VisibleForTesting
+    static int getProtoHeaderSize(OperationType operation, boolean isPayloadEncrypted) {
         int isPayloadEncryptedFieldSize =
                 isPayloadEncrypted ? (BOOLEAN_FIELD_ENCODING_SIZE + FIELD_NUMBER_ENCODING_SIZE) : 0;
         int operationSize = getEncodedSize(operation.getNumber()) + FIELD_NUMBER_ENCODING_SIZE;
