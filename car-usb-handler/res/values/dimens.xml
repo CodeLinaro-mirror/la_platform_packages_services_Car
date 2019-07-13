@@ -13,17 +13,6 @@
      See the License for the specific language governing permissions and
      limitations under the License.
 -->
-<configuration description="Runs Tests for EncryptionRunner.">
-    <option name="test-tag" value="EncryptionRunnerTest" />
-
-    <target_preparer class="com.android.tradefed.targetprep.suite.SuiteApkInstaller">
-        <option name="cleanup-apks" value="true" />
-        <option name="test-file-name" value="EncryptionRunnerTest.apk" />
-    </target_preparer>
-
-    <test class="com.android.tradefed.testtype.AndroidJUnitTest" >
-        <option name="package" value="android.car.encryptionrunner" />
-        <option name="runner" value="androidx.test.runner.AndroidJUnitRunner" />
-        <option name="hidden-api-checks" value="false"/>
-    </test>
-</configuration>
+<resources>
+    <dimen name="title_view_padding">8dp</dimen>
+</resources>

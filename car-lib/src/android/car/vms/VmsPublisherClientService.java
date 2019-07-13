@@ -22,13 +22,13 @@ import android.annotation.SystemApi;
 import android.app.Service;
 import android.content.Intent;
 import android.os.Binder;
+import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.Message;
 import android.os.Process;
 import android.os.RemoteException;
-import android.os.UserHandle;
 import android.util.Log;
 
 import com.android.internal.annotations.GuardedBy;
@@ -262,7 +262,12 @@ public abstract class VmsPublisherClientService extends Service {
         }
 
         private void assertSystemOrSelf() {
-            if (!(Binder.getCallingUid() == UserHandle.USER_SYSTEM
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                if (DBG) Log.d(TAG, "Skipping system user check");
+                return;
+            }
+
+            if (!(Binder.getCallingUid() == Process.SYSTEM_UID
                     || Binder.getCallingPid() == Process.myPid())) {
                 throw new SecurityException("Caller must be system user or same process");
             }
