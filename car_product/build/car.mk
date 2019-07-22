@@ -52,7 +52,7 @@ PRODUCT_COPY_FILES := \
 
 PRODUCT_PROPERTY_OVERRIDES += \
     ro.carrier=unknown \
-    persist.bluetooth.enablenewavrcp=false
+    persist.vendor.bluetooth.enablenewavrcp=false
 
 # Overlay for Google network and fused location providers
 $(call inherit-product, device/sample/products/location_overlay.mk)
