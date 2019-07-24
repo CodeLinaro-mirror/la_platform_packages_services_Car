@@ -16,6 +16,7 @@
 
 package com.android.car.vms;
 
+import android.car.Car;
 import android.car.userlib.CarUserManagerHelper;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
@@ -23,10 +24,13 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.ServiceConnection;
+import android.content.pm.PackageManager;
+import android.content.pm.ServiceInfo;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.UserHandle;
+import android.os.UserManager;
 import android.util.ArrayMap;
 import android.util.Log;
 
@@ -40,6 +44,7 @@ import com.android.internal.annotations.VisibleForTesting;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Manages service connections lifecycle for VMS publisher clients.
@@ -48,7 +53,7 @@ import java.util.Map;
  * according to the Android user lifecycle.
  */
 public class VmsClientManager implements CarServiceBase {
-    private static final boolean DBG = false;
+    private static final boolean DBG = true;
     private static final String TAG = "VmsClientManager";
     private static final String HAL_CLIENT_NAME = "VmsHalClient";
 
@@ -74,6 +79,7 @@ public class VmsClientManager implements CarServiceBase {
 
     private final Context mContext;
     private final Handler mHandler;
+    private final UserManager mUserManager;
     private final CarUserService mUserService;
     private final CarUserManagerHelper mUserManagerHelper;
     private final int mMillisBeforeRebind;
@@ -92,6 +98,9 @@ public class VmsClientManager implements CarServiceBase {
     @GuardedBy("mCurrentUserClients")
     private int mCurrentUser;
 
+    @GuardedBy("mRebindCounts")
+    private final Map<String, AtomicLong> mRebindCounts = new ArrayMap<>();
+
     @VisibleForTesting
     final Runnable mSystemUserUnlockedListener = () -> {
         synchronized (mSystemClients) {
@@ -105,16 +114,18 @@ public class VmsClientManager implements CarServiceBase {
         @Override
         public void onReceive(Context context, Intent intent) {
             if (DBG) Log.d(TAG, "Received " + intent);
-            switch (intent.getAction()) {
-                case Intent.ACTION_USER_SWITCHED:
-                    terminateUserClients();
-                    break;
-                case Intent.ACTION_USER_UNLOCKED:
+            synchronized (mCurrentUserClients) {
+                int currentUserId = mUserManagerHelper.getCurrentForegroundUserId();
+                if (mCurrentUser != currentUserId) {
+                    terminate(mCurrentUserClients);
+                }
+                mCurrentUser = currentUserId;
+
+                if (Intent.ACTION_USER_UNLOCKED.equals(intent.getAction())
+                        || mUserManager.isUserUnlocked(mCurrentUser)) {
                     bindToSystemClients();
                     bindToUserClients();
-                    break;
-                default:
-                    Log.e(TAG, "Unexpected intent received: " + intent);
+                }
             }
         }
     };
@@ -131,6 +142,7 @@ public class VmsClientManager implements CarServiceBase {
             CarUserManagerHelper userManagerHelper, VmsHalService halService) {
         mContext = context;
         mHandler = new Handler(Looper.getMainLooper());
+        mUserManager = (UserManager) mContext.getSystemService(Context.USER_SERVICE);
         mUserService = userService;
         mUserManagerHelper = userManagerHelper;
         mMillisBeforeRebind = mContext.getResources().getInteger(
@@ -163,11 +175,36 @@ public class VmsClientManager implements CarServiceBase {
 
     @Override
     public void dump(PrintWriter writer) {
+        dumpMetrics(writer);
+    }
+
+    @Override
+    public void dumpMetrics(PrintWriter writer) {
         writer.println("*" + getClass().getSimpleName() + "*");
-        writer.println("mListeners:" + mListeners);
-        writer.println("mSystemClients:" + mSystemClients.keySet());
-        writer.println("mCurrentUser:" + mCurrentUser);
-        writer.println("mCurrentUserClients:" + mCurrentUserClients.keySet());
+        synchronized (mSystemClients) {
+            writer.println("mHalClient: " + (mHalClient != null ? "connected" : "disconnected"));
+            writer.println("mSystemClients:");
+            dumpConnections(writer, mSystemClients);
+        }
+        synchronized (mCurrentUserClients) {
+            writer.println("mCurrentUserClients:");
+            dumpConnections(writer, mCurrentUserClients);
+            writer.println("mCurrentUser:" + mCurrentUser);
+        }
+        synchronized (mRebindCounts) {
+            writer.println("mRebindCounts:");
+            for (Map.Entry<String, AtomicLong> entry : mRebindCounts.entrySet()) {
+                writer.printf("\t%s: %s\n", entry.getKey(), entry.getValue());
+            }
+        }
+    }
+
+    private void dumpConnections(PrintWriter writer, Map<String, ClientConnection> connectionMap) {
+        for (ClientConnection connection : connectionMap.values()) {
+            writer.printf("\t%s: %s\n",
+                    connection.mName.getPackageName(),
+                    connection.mIsBound ? "connected" : "disconnected");
+        }
     }
 
     /**
@@ -211,8 +248,6 @@ public class VmsClientManager implements CarServiceBase {
 
     private void bindToUserClients() {
         synchronized (mCurrentUserClients) {
-            terminateUserClients();
-
             // To avoid the risk of double-binding, clients running as the system user must only
             // ever be bound in bindToSystemClients().
             // In a headless multi-user system, the system user will never be in the foreground.
@@ -231,16 +266,6 @@ public class VmsClientManager implements CarServiceBase {
         }
     }
 
-    private void terminateUserClients() {
-        synchronized (mCurrentUserClients) {
-            int currentUserId = mUserManagerHelper.getCurrentForegroundUserId();
-            if (mCurrentUser != currentUserId) {
-                terminate(mCurrentUserClients);
-            }
-            mCurrentUser = currentUserId;
-        }
-    }
-
     private void bind(Map<String, ClientConnection> connectionMap, String clientName,
             UserHandle userHandle) {
         if (connectionMap.containsKey(clientName)) {
@@ -254,8 +279,18 @@ public class VmsClientManager implements CarServiceBase {
             return;
         }
 
-        if (!mContext.getPackageManager().isPackageAvailable(name.getPackageName())) {
+        ServiceInfo serviceInfo;
+        try {
+            serviceInfo = mContext.getPackageManager().getServiceInfo(name,
+                    PackageManager.MATCH_DIRECT_BOOT_AUTO);
+        } catch (PackageManager.NameNotFoundException e) {
             Log.w(TAG, "Client not installed: " + clientName);
+            return;
+        }
+
+        if (!Car.PERMISSION_BIND_VMS_CLIENT.equals(serviceInfo.permission)) {
+            Log.w(TAG, "Client service: " + clientName
+                    + " does not require " + Car.PERMISSION_BIND_VMS_CLIENT + " permission");
             return;
         }
 
@@ -312,6 +347,9 @@ public class VmsClientManager implements CarServiceBase {
         synchronized (mSystemClients) {
             mHalClient = null;
             notifyListenersOnClientDisconnected(HAL_CLIENT_NAME);
+        }
+        synchronized (mRebindCounts) {
+            mRebindCounts.computeIfAbsent(HAL_CLIENT_NAME, k -> new AtomicLong()).incrementAndGet();
         }
     }
 
@@ -376,6 +414,10 @@ public class VmsClientManager implements CarServiceBase {
             }
             if (!mIsTerminated) {
                 mHandler.postDelayed(this::bind, mMillisBeforeRebind);
+                synchronized (mRebindCounts) {
+                    mRebindCounts.computeIfAbsent(mName.getPackageName(), k -> new AtomicLong())
+                            .incrementAndGet();
+                }
             }
         }
 
