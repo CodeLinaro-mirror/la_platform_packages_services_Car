@@ -132,7 +132,7 @@
     <string name="mock_audio_on" translatable="false">Audio Mocking On</string>
     <string name="mock_audio_off" translatable="false">Audio Mocking Off</string>
     <string name="select_zone" translatable="false">Select Zone</string>
-
+    <string name="select_display" translatable="false">Select Display</string>
 
     <!-- keyboard test fragment -->
     <string name="keyboard_test_title" translatable="false">Keyboard Test</string>
@@ -309,9 +309,6 @@
     <string name="usb_pref_delete_yes" translatable="false">Yes</string>
     <string name="usb_pref_delete_cancel" translatable="false">Cancel</string>
     <string name="usb_resolving_handlers" translatable="false">Getting supported handlers</string>
-
-    <!-- Action to start assistant activity -->
-    <string name="assistant_activity_action" translatable="false">"com.google.android.demandspace.START"</string>
 
     <!-- Virtual Display -->
     <string name="av_start_activity" translatable="false">Start Activity</string>
