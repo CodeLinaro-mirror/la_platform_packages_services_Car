@@ -58,7 +58,7 @@ public interface SystemStateInterface {
 
     default boolean isSystemSupportingDeepSleep() {
         //TODO should return by checking some kernel suspend control sysfs, bug: 32061842
-        return SystemProperties.getBoolean("persist.car.lpm", false);
+        return true;
     }
 
     default List<ProcessInfo> getRunningProcesses() {

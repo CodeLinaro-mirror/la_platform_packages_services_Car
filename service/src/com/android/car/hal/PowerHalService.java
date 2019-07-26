@@ -259,12 +259,12 @@ public class PowerHalService extends HalServiceBase {
     }
 
     public static boolean isCarPowerManagerEnabled() {
-        return SystemProperties.getBoolean("persist.car.lpm", false);
+        return true;
     }
 
     public synchronized boolean isPowerStateSupported() {
         VehiclePropConfig config = mProperties.get(VehicleProperty.AP_POWER_STATE_REQ);
-        return config != null && isCarPowerManagerEnabled();
+        return config != null;
     }
 
     private synchronized boolean isConfigFlagSet(int flag) {
