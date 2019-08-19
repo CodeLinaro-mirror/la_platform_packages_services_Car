@@ -36,6 +36,7 @@ allow carservice_app {
     surfaceflinger_service
     uimode_service
     voiceinteraction_service
+    wifi_service
 }:service_manager find;
 
 # Read and write /data/data subdirectory.
