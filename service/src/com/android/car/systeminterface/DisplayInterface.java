@@ -21,26 +21,23 @@ import static com.android.settingslib.display.BrightnessUtils.convertGammaToLine
 import static com.android.settingslib.display.BrightnessUtils.convertLinearToGamma;
 
 import android.app.ActivityManager;
-import android.car.userlib.CarUserManagerHelper;
-import android.car.userlib.CarUserManagerHelper.OnUsersUpdateListener;
+import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.database.ContentObserver;
 import android.hardware.display.DisplayManager;
 import android.hardware.display.DisplayManager.DisplayListener;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.PowerManager;
-import android.os.RemoteException;
-import android.os.ServiceManager;
 import android.os.SystemClock;
 import android.os.UserHandle;
 import android.provider.Settings.SettingNotFoundException;
 import android.provider.Settings.System;
 import android.util.Log;
 import android.view.Display;
-import android.view.DisplayAddress;
-import android.view.IWindowManager;
 
 import com.android.car.CarLog;
 import com.android.car.CarPowerManagementService;
@@ -63,15 +60,9 @@ public interface DisplayInterface {
     void refreshDisplayBrightness();
 
     /**
-     * Reconfigure all secondary displays due to b/131909551
-     */
-    void reconfigureSecondaryDisplays();
-    /**
      * Default implementation of display operations
      */
-    class DefaultImpl implements DisplayInterface, OnUsersUpdateListener {
-        static final String TAG = DisplayInterface.class.getSimpleName();
-
+    class DefaultImpl implements DisplayInterface {
         private final ActivityManager mActivityManager;
         private final ContentResolver mContentResolver;
         private final Context mContext;
@@ -82,7 +73,6 @@ public interface DisplayInterface {
         private final WakeLockInterface mWakeLockInterface;
         private CarPowerManagementService mService;
         private boolean mDisplayStateSet;
-        private CarUserManagerHelper mCarUserManagerHelper;
         private int mLastBrightnessLevel = -1;
 
         private ContentObserver mBrightnessObserver =
@@ -112,6 +102,13 @@ public interface DisplayInterface {
             }
         };
 
+        private final BroadcastReceiver mUserChangeReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                onUsersUpdate();
+            }
+        };
+
         DefaultImpl(Context context, WakeLockInterface wakeLockInterface) {
             mActivityManager = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
             mContext = context;
@@ -121,8 +118,13 @@ public interface DisplayInterface {
             mMaximumBacklight = mPowerManager.getMaximumScreenBrightnessSetting();
             mMinimumBacklight = mPowerManager.getMinimumScreenBrightnessSetting();
             mWakeLockInterface = wakeLockInterface;
-            mCarUserManagerHelper = new CarUserManagerHelper(context);
-            mCarUserManagerHelper.registerOnUsersUpdateListener(this);
+
+            mContext.registerReceiverAsUser(
+                    mUserChangeReceiver,
+                    UserHandle.ALL,
+                    new IntentFilter(Intent.ACTION_USER_SWITCHED),
+                    null,
+                    null);
         }
 
         @Override
@@ -132,7 +134,7 @@ public interface DisplayInterface {
                 int linear = System.getIntForUser(
                         mContentResolver,
                         System.SCREEN_BRIGHTNESS,
-                        mActivityManager.getCurrentUser());
+                        ActivityManager.getCurrentUser());
                 gamma = convertLinearToGamma(linear, mMinimumBacklight, mMaximumBacklight);
             } catch (SettingNotFoundException e) {
                 Log.e(CarLog.TAG_POWER, "Could not get SCREEN_BRIGHTNESS:  " + e);
@@ -171,7 +173,7 @@ public interface DisplayInterface {
                     mContentResolver,
                     System.SCREEN_BRIGHTNESS,
                     linear,
-                    mActivityManager.getCurrentUser());
+                    ActivityManager.getCurrentUser());
         }
 
         @Override
@@ -211,8 +213,7 @@ public interface DisplayInterface {
             }
         }
 
-        @Override
-        public void onUsersUpdate() {
+        private void onUsersUpdate() {
             if (mService == null) {
                 // CarPowerManagementService is not connected yet
                 return;
@@ -220,33 +221,6 @@ public interface DisplayInterface {
             // We need to reset last value
             mLastBrightnessLevel = -1;
             refreshDisplayBrightness();
-        }
-
-        @Override
-        public void reconfigureSecondaryDisplays() {
-            IWindowManager wm = IWindowManager.Stub
-                    .asInterface(ServiceManager.getService(Context.WINDOW_SERVICE));
-            if (wm == null) {
-                Log.e(TAG, "reconfigureSecondaryDisplays IWindowManager not available");
-                return;
-            }
-            Display[] displays = mDisplayManager.getDisplays();
-            for (Display display : displays) {
-                if (display.getDisplayId() == Display.DEFAULT_DISPLAY) { // skip main
-                    continue;
-                }
-                // Only use physical secondary displays
-                if (display.getAddress() instanceof DisplayAddress.Physical) {
-                    int displayId = display.getDisplayId();
-                    try {
-                        // Do not change the mode but this triggers reconfiguring.
-                        int windowingMode = wm.getWindowingMode(displayId);
-                        wm.setWindowingMode(displayId, windowingMode);
-                    } catch (RemoteException e) {
-                        Log.e(CarLog.TAG_SERVICE, "cannot access IWindowManager", e);
-                    }
-                }
-            }
         }
     }
 }

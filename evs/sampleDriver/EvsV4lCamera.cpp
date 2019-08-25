@@ -20,13 +20,14 @@
 
 #include <ui/GraphicBufferAllocator.h>
 #include <ui/GraphicBufferMapper.h>
+#include <android/hardware_buffer.h>
 
 
 namespace android {
 namespace hardware {
 namespace automotive {
 namespace evs {
-namespace V1_0 {
+namespace V1_1 {
 namespace implementation {
 
 
@@ -130,7 +131,7 @@ Return<EvsResult> EvsV4lCamera::setMaxFramesInFlight(uint32_t bufferCount) {
 }
 
 
-Return<EvsResult> EvsV4lCamera::startVideoStream(const ::android::sp<IEvsCameraStream>& stream)  {
+Return<EvsResult> EvsV4lCamera::startVideoStream(const ::android::sp<IEvsCameraStream_1_0>& stream)  {
     ALOGD("startVideoStream");
     std::lock_guard<std::mutex> lock(mAccessLock);
 
@@ -194,13 +195,16 @@ Return<EvsResult> EvsV4lCamera::startVideoStream(const ::android::sp<IEvsCameraS
 
     // Record the user's callback for use when we have a frame ready
     mStream = stream;
+    mStream_1_1 = IEvsCameraStream_1_1::castFrom(mStream).withDefault(nullptr);
 
     // Set up the video stream with a callback to our member function forwardFrame()
     if (!mVideo.startStream([this](VideoCapture*, imageBuffer* tgt, void* data) {
                                 this->forwardFrame(tgt, data);
                             })
     ) {
-        mStream = nullptr;  // No need to hold onto this if we failed to start
+        // No need to hold onto this if we failed to start
+        mStream = nullptr;
+        mStream_1_1 = nullptr;
         ALOGE("underlying camera start stream failed");
         return EvsResult::UNDERLYING_SERVICE_ERROR;
     }
@@ -209,41 +213,9 @@ Return<EvsResult> EvsV4lCamera::startVideoStream(const ::android::sp<IEvsCameraS
 }
 
 
-Return<void> EvsV4lCamera::doneWithFrame(const BufferDesc& buffer)  {
+Return<void> EvsV4lCamera::doneWithFrame(const BufferDesc_1_0& buffer)  {
     ALOGD("doneWithFrame");
-    std::lock_guard <std::mutex> lock(mAccessLock);
-
-    // If we've been displaced by another owner of the camera, then we can't do anything else
-    if (!mVideo.isOpen()) {
-        ALOGW("ignoring doneWithFrame call when camera has been lost.");
-    } else {
-        if (buffer.memHandle == nullptr) {
-            ALOGE("ignoring doneWithFrame called with null handle");
-        } else if (buffer.bufferId >= mBuffers.size()) {
-            ALOGE("ignoring doneWithFrame called with invalid bufferId %d (max is %zu)",
-                  buffer.bufferId, mBuffers.size()-1);
-        } else if (!mBuffers[buffer.bufferId].inUse) {
-            ALOGE("ignoring doneWithFrame called on frame %d which is already free",
-                  buffer.bufferId);
-        } else {
-            // Mark the frame as available
-            mBuffers[buffer.bufferId].inUse = false;
-            mFramesInUse--;
-
-            // If this frame's index is high in the array, try to move it down
-            // to improve locality after mFramesAllowed has been reduced.
-            if (buffer.bufferId >= mFramesAllowed) {
-                // Find an empty slot lower in the array (which should always exist in this case)
-                for (auto&& rec : mBuffers) {
-                    if (rec.handle == nullptr) {
-                        rec.handle = mBuffers[buffer.bufferId].handle;
-                        mBuffers[buffer.bufferId].handle = nullptr;
-                        break;
-                    }
-                }
-            }
-        }
-    }
+    doneWithFrame_impl(buffer.bufferId, buffer.memHandle);
 
     return Void();
 }
@@ -255,11 +227,27 @@ Return<void> EvsV4lCamera::stopVideoStream()  {
     // Tell the capture device to stop (and block until it does)
     mVideo.stopStream();
 
-    if (mStream != nullptr) {
+    if (mStream_1_1 != nullptr) {
+        // V1.1 client is waiting on STREAM_STOPPED event.
+        std::unique_lock <std::mutex> lock(mAccessLock);
+
+        EvsEvent event;
+        InfoEventDesc desc = {};
+        desc.aType = InfoEventType::STREAM_STOPPED;
+        event.info(desc);
+        auto result = mStream_1_1->notifyEvent(event);
+        if (!result.isOk()) {
+            ALOGE("Error delivering end of stream event");
+        }
+
+        // Drop our reference to the client's stream receiver
+        mStream_1_1 = nullptr;
+        mStream     = nullptr;
+    } else if (mStream != nullptr) {
         std::unique_lock <std::mutex> lock(mAccessLock);
 
         // Send one last NULL frame to signal the actual end of stream
-        BufferDesc nullBuff = {};
+        BufferDesc_1_0 nullBuff = {};
         auto result = mStream->deliverFrame(nullBuff);
         if (!result.isOk()) {
             ALOGE("Error delivering end of stream marker");
@@ -281,7 +269,7 @@ Return<int32_t> EvsV4lCamera::getExtendedInfo(uint32_t /*opaqueIdentifier*/)  {
 
 
 Return<EvsResult> EvsV4lCamera::setExtendedInfo(uint32_t /*opaqueIdentifier*/,
-                                                int32_t /*opaqueValue*/)  {
+                                                int32_t  /*opaqueValue*/)  {
     ALOGD("setExtendedInfo");
     std::lock_guard<std::mutex> lock(mAccessLock);
 
@@ -293,6 +281,129 @@ Return<EvsResult> EvsV4lCamera::setExtendedInfo(uint32_t /*opaqueIdentifier*/,
 
     // We don't store any device specific information in this implementation
     return EvsResult::INVALID_ARG;
+}
+
+
+// Methods from ::android::hardware::automotive::evs::V1_1::IEvsCamera follow.
+Return<EvsResult> EvsV4lCamera::doneWithFrame_1_1(const BufferDesc_1_1& desc)  {
+    ALOGD("doneWithFrame");
+
+    return doneWithFrame_impl(desc.bufferId, desc.buffer.nativeHandle);
+}
+
+
+Return<EvsResult> EvsV4lCamera::pauseVideoStream() {
+    return EvsResult::UNDERLYING_SERVICE_ERROR;
+}
+
+
+Return<EvsResult> EvsV4lCamera::resumeVideoStream() {
+    return EvsResult::UNDERLYING_SERVICE_ERROR;
+}
+
+
+Return<EvsResult> EvsV4lCamera::setMaster() {
+    /* Because EVS HW module reference implementation expects a single client at
+     * a time, this returns a success code always.
+     */
+    return EvsResult::OK;
+}
+
+
+Return<EvsResult> EvsV4lCamera::forceMaster(const sp<IEvsDisplay>&) {
+    /* Because EVS HW module reference implementation expects a single client at
+     * a time, this returns a success code always.
+     */
+    return EvsResult::OK;
+}
+
+
+Return<EvsResult> EvsV4lCamera::unsetMaster() {
+    /* Because EVS HW module reference implementation expects a single client at
+     * a time, there is no chance that this is called by a non-master client and
+     * therefore returns a success code always.
+     */
+    return EvsResult::OK;
+}
+
+
+Return<void> EvsV4lCamera::setParameter(CameraParam id, int32_t value,
+                                        setParameter_cb _hidl_cb) {
+    uint32_t v4l2cid = V4L2_CID_BASE;
+    if (!convertToV4l2CID(id, v4l2cid)) {
+        _hidl_cb(EvsResult::INVALID_ARG, 0);
+    } else {
+        EvsResult result = EvsResult::OK;
+        v4l2_control control = {v4l2cid, value};
+        if (mVideo.setParameter(control) < 0 ||
+            mVideo.getParameter(control) < 0) {
+            result = EvsResult::UNDERLYING_SERVICE_ERROR;
+        }
+
+        _hidl_cb(result, control.value);
+    }
+
+    return Void();
+}
+
+
+Return<void> EvsV4lCamera::getParameter(CameraParam id,
+                                        getParameter_cb _hidl_cb) {
+    uint32_t v4l2cid = V4L2_CID_BASE;
+    if (!convertToV4l2CID(id, v4l2cid)) {
+        _hidl_cb(EvsResult::INVALID_ARG, 0);
+    } else {
+        EvsResult result = EvsResult::OK;
+        v4l2_control control = {v4l2cid, 0};
+        if (mVideo.getParameter(control) < 0) {
+            result = EvsResult::INVALID_ARG;
+        }
+
+        // Report a result
+        _hidl_cb(result, control.value);
+    }
+
+    return Void();
+}
+
+
+EvsResult EvsV4lCamera::doneWithFrame_impl(const uint32_t bufferId,
+                                           const buffer_handle_t memHandle) {
+    std::lock_guard <std::mutex> lock(mAccessLock);
+
+    // If we've been displaced by another owner of the camera, then we can't do anything else
+    if (!mVideo.isOpen()) {
+        ALOGW("ignoring doneWithFrame call when camera has been lost.");
+    } else {
+        if (memHandle == nullptr) {
+            ALOGE("ignoring doneWithFrame called with null handle");
+        } else if (bufferId >= mBuffers.size()) {
+            ALOGE("ignoring doneWithFrame called with invalid bufferId %d (max is %zu)",
+                  bufferId, mBuffers.size()-1);
+        } else if (!mBuffers[bufferId].inUse) {
+            ALOGE("ignoring doneWithFrame called on frame %d which is already free",
+                  bufferId);
+        } else {
+            // Mark the frame as available
+            mBuffers[bufferId].inUse = false;
+            mFramesInUse--;
+
+            // If this frame's index is high in the array, try to move it down
+            // to improve locality after mFramesAllowed has been reduced.
+            if (bufferId >= mFramesAllowed) {
+                // Find an empty slot lower in the array (which should always exist in this case)
+                for (auto&& rec : mBuffers) {
+                    if (rec.handle == nullptr) {
+                        rec.handle = mBuffers[bufferId].handle;
+                        mBuffers[bufferId].handle = nullptr;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    return EvsResult::OK;
 }
 
 
@@ -461,22 +572,25 @@ void EvsV4lCamera::forwardFrame(imageBuffer* /*pV4lBuff*/, void* pData) {
         mVideo.markFrameConsumed();
     } else {
         // Assemble the buffer description we'll transmit below
-        BufferDesc buff = {};
-        buff.width      = mVideo.getWidth();
-        buff.height     = mVideo.getHeight();
-        buff.stride     = mStride;
-        buff.format     = mFormat;
-        buff.usage      = mUsage;
-        buff.bufferId   = idx;
-        buff.memHandle  = mBuffers[idx].handle;
+        BufferDesc_1_1 bufDesc_1_1 = {};
+        AHardwareBuffer_Desc* pDesc =
+            reinterpret_cast<AHardwareBuffer_Desc *>(&bufDesc_1_1.buffer.description);
+        pDesc->width  = mVideo.getWidth();
+        pDesc->height = mVideo.getHeight();
+        pDesc->layers = 1;
+        pDesc->format = mFormat;
+        pDesc->usage  = mUsage;
+        pDesc->stride = mStride;
+        bufDesc_1_1.buffer.nativeHandle = mBuffers[idx].handle;
+        bufDesc_1_1.bufferId = idx;
 
         // Lock our output buffer for writing
         void *targetPixels = nullptr;
         GraphicBufferMapper &mapper = GraphicBufferMapper::get();
-        mapper.lock(buff.memHandle,
+        mapper.lock(bufDesc_1_1.buffer.nativeHandle,
                     GRALLOC_USAGE_SW_WRITE_OFTEN | GRALLOC_USAGE_SW_READ_NEVER,
-                    android::Rect(buff.width, buff.height),
-                    (void **) &targetPixels);
+                    android::Rect(pDesc->width, pDesc->height),
+                    (void **)&targetPixels);
 
         // If we failed to lock the pixel buffer, we're about to crash, but log it first
         if (!targetPixels) {
@@ -485,21 +599,42 @@ void EvsV4lCamera::forwardFrame(imageBuffer* /*pV4lBuff*/, void* pData) {
 
         // Transfer the video image into the output buffer, making any needed
         // format conversion along the way
-        mFillBufferFromVideo(buff, (uint8_t*)targetPixels, pData, mVideo.getStride());
+        mFillBufferFromVideo(bufDesc_1_1, (uint8_t *)targetPixels, pData, mVideo.getStride());
 
         // Unlock the output buffer
-        mapper.unlock(buff.memHandle);
-
+        mapper.unlock(bufDesc_1_1.buffer.nativeHandle);
 
         // Give the video frame back to the underlying device for reuse
-        // Note that we do this before making the client callback to give the underlying
-        // camera more time to capture the next frame.
+        // Note that we do this before making the client callback to give the
+        // underlying camera more time to capture the next frame
         mVideo.markFrameConsumed();
 
-        // Issue the (asynchronous) callback to the client -- can't be holding the lock
-        auto result = mStream->deliverFrame(buff);
-        if (result.isOk()) {
-            ALOGD("Delivered %p as id %d", buff.memHandle.getNativeHandle(), buff.bufferId);
+        // Issue the (asynchronous) callback to the client -- can't be holding
+        // the lock
+        bool flag = false;
+        if (mStream_1_1 != nullptr) {
+            EvsEvent event;
+            event.buffer(bufDesc_1_1);
+            auto result = mStream_1_1->notifyEvent(event);
+            flag = result.isOk();
+        } else {
+            BufferDesc_1_0 bufDesc_1_0 = {
+                pDesc->width,
+                pDesc->height,
+                pDesc->stride,
+                bufDesc_1_1.pixelSize,
+                static_cast<uint32_t>(pDesc->format),
+                static_cast<uint32_t>(pDesc->usage),
+                bufDesc_1_1.bufferId,
+                bufDesc_1_1.buffer.nativeHandle
+            };
+
+            auto result = mStream->deliverFrame(bufDesc_1_0);
+            flag = result.isOk();
+        }
+
+        if (flag) {
+            ALOGD("Delivered %p as id %d", bufDesc_1_1.buffer.nativeHandle.getNativeHandle(), bufDesc_1_1.bufferId);
         } else {
             // This can happen if the client dies and is likely unrecoverable.
             // To avoid consuming resources generating failing calls, we stop sending
@@ -515,8 +650,44 @@ void EvsV4lCamera::forwardFrame(imageBuffer* /*pV4lBuff*/, void* pData) {
     }
 }
 
+
+bool EvsV4lCamera::convertToV4l2CID(CameraParam id, uint32_t& v4l2cid) {
+    switch (id) {
+        case CameraParam::BRIGHTNESS:
+            v4l2cid = V4L2_CID_BRIGHTNESS;
+            break;
+        case CameraParam::CONTRAST:
+            v4l2cid = V4L2_CID_CONTRAST;
+            break;
+        case CameraParam::AUTO_WHITE_BALANCE:
+            v4l2cid = V4L2_CID_AUTO_WHITE_BALANCE;
+            break;
+        case CameraParam::WHITE_BALANCE_TEMPERATURE:
+            v4l2cid = V4L2_CID_WHITE_BALANCE_TEMPERATURE;
+            break;
+        case CameraParam::SHARPNESS:
+            v4l2cid = V4L2_CID_SHARPNESS;
+            break;
+        case CameraParam::AUTO_EXPOSURE:
+            v4l2cid = V4L2_CID_EXPOSURE_AUTO;
+            break;
+        case CameraParam::ABSOLUTE_EXPOSURE:
+            v4l2cid = V4L2_CID_EXPOSURE_ABSOLUTE;
+            break;
+        case CameraParam::ABSOLUTE_ZOOM:
+            v4l2cid = V4L2_CID_ZOOM_ABSOLUTE;
+            break;
+        default:
+            ALOGE("Camera parameter %u is not supported.", id);
+            return false;
+    }
+
+    return true;
+}
+
+
 } // namespace implementation
-} // namespace V1_0
+} // namespace V1_1
 } // namespace evs
 } // namespace automotive
 } // namespace hardware

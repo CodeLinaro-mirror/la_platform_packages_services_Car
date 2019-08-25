@@ -32,8 +32,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.UserInfo;
-import android.graphics.Bitmap;
-import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.UserHandle;
@@ -45,12 +43,14 @@ import androidx.test.filters.SmallTest;
 import androidx.test.runner.AndroidJUnit4;
 
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.Mockito;
-import org.mockito.MockitoAnnotations;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoRule;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -68,16 +68,12 @@ import java.util.List;
 @RunWith(AndroidJUnit4.class)
 @SmallTest
 public class CarUserManagerHelperTest {
-    @Mock
-    private Context mContext;
-    @Mock
-    private UserManager mUserManager;
-    @Mock
-    private ActivityManager mActivityManager;
-    @Mock
-    private CarUserManagerHelper.OnUsersUpdateListener mTestListener;
-    @Mock
-    private TestableFrameworkWrapper mTestableFrameworkWrapper;
+    @Rule public MockitoRule mockitoRule = MockitoJUnit.rule();
+    @Mock private Context mContext;
+    @Mock private UserManager mUserManager;
+    @Mock private ActivityManager mActivityManager;
+    @Mock private CarUserManagerHelper.OnUsersUpdateListener mTestListener;
+    @Mock private TestableFrameworkWrapper mTestableFrameworkWrapper;
 
     private static final String GUEST_USER_NAME = "testGuest";
     private static final String TEST_USER_NAME = "testUser";
@@ -90,8 +86,7 @@ public class CarUserManagerHelperTest {
     private UserInfo mForegroundUser;
 
     @Before
-    public void setUpMocksAndVariables() throws Exception {
-        MockitoAnnotations.initMocks(this);
+    public void setUpMocksAndVariables() {
         doReturn(mUserManager).when(mContext).getSystemService(Context.USER_SERVICE);
         doReturn(mActivityManager).when(mContext).getSystemService(Context.ACTIVITY_SERVICE);
         doReturn(InstrumentationRegistry.getTargetContext().getResources())
@@ -121,17 +116,6 @@ public class CarUserManagerHelperTest {
     public void checkHeadlessSystemUserFlag() {
         // Make sure the headless system user flag is on.
         assertThat(mCarUserManagerHelper.isHeadlessSystemUser()).isTrue();
-    }
-
-    @Test
-    public void checkIsSystemUser() {
-        UserInfo testInfo = new UserInfo();
-
-        testInfo.id = UserHandle.USER_SYSTEM;
-        assertThat(mCarUserManagerHelper.isSystemUser(testInfo)).isTrue();
-
-        testInfo.id = UserHandle.USER_SYSTEM + 2; // Make it different than system id.
-        assertThat(mCarUserManagerHelper.isSystemUser(testInfo)).isFalse();
     }
 
     // System user will not be returned when calling get all users.
@@ -205,51 +189,6 @@ public class CarUserManagerHelperTest {
     }
 
     @Test
-    public void testUserCanBeRemoved() {
-        UserInfo testInfo = new UserInfo();
-
-        // System user cannot be removed.
-        testInfo.id = UserHandle.USER_SYSTEM;
-        assertThat(mCarUserManagerHelper.canUserBeRemoved(testInfo)).isFalse();
-
-        testInfo.id = UserHandle.USER_SYSTEM + 2; // Make it different than system id.
-        assertThat(mCarUserManagerHelper.canUserBeRemoved(testInfo)).isTrue();
-    }
-
-    @Test
-    public void testCurrentProcessCanAddUsers() {
-        doReturn(false).when(mUserManager)
-                .hasUserRestriction(UserManager.DISALLOW_ADD_USER);
-        assertThat(mCarUserManagerHelper.canCurrentProcessAddUsers()).isTrue();
-
-        doReturn(true).when(mUserManager)
-                .hasUserRestriction(UserManager.DISALLOW_ADD_USER);
-        assertThat(mCarUserManagerHelper.canCurrentProcessAddUsers()).isFalse();
-    }
-
-    @Test
-    public void testCurrentProcessCanRemoveUsers() {
-        doReturn(false).when(mUserManager)
-                .hasUserRestriction(UserManager.DISALLOW_REMOVE_USER);
-        assertThat(mCarUserManagerHelper.canCurrentProcessRemoveUsers()).isTrue();
-
-        doReturn(true).when(mUserManager)
-                .hasUserRestriction(UserManager.DISALLOW_REMOVE_USER);
-        assertThat(mCarUserManagerHelper.canCurrentProcessRemoveUsers()).isFalse();
-    }
-
-    @Test
-    public void testCurrentProcessCanSwitchUsers() {
-        doReturn(false).when(mUserManager)
-                .hasUserRestriction(UserManager.DISALLOW_USER_SWITCH);
-        assertThat(mCarUserManagerHelper.canCurrentProcessSwitchUsers()).isTrue();
-
-        doReturn(true).when(mUserManager)
-                .hasUserRestriction(UserManager.DISALLOW_USER_SWITCH);
-        assertThat(mCarUserManagerHelper.canCurrentProcessSwitchUsers()).isFalse();
-    }
-
-    @Test
     public void testCurrentGuestProcessCannotModifyAccounts() {
         assertThat(mCarUserManagerHelper.canCurrentProcessModifyAccounts()).isTrue();
 
@@ -275,14 +214,6 @@ public class CarUserManagerHelperTest {
                 .hasUserRestriction(UserManager.DISALLOW_MODIFY_ACCOUNTS);
 
         assertThat(mCarUserManagerHelper.canCurrentProcessModifyAccounts()).isFalse();
-    }
-
-    @Test
-    public void testGetMaxSupportedUsers() {
-        setMaxSupportedUsers(11);
-
-        // Max users - headless system user.
-        assertThat(mCarUserManagerHelper.getMaxSupportedUsers()).isEqualTo(10);
     }
 
     @Test
@@ -346,103 +277,6 @@ public class CarUserManagerHelperTest {
         // Add normal user. Limit is reached
         mockGetUsers(user1, user2, user3, user4, user5, user6);
         assertThat(mCarUserManagerHelper.isUserLimitReached()).isTrue();
-    }
-
-    @Test
-    public void testCreateNewAdminUserCallsCreateUser() {
-        // Make sure current user is admin, since only admins can create other admins.
-        doReturn(true).when(mUserManager).isAdminUser();
-
-        mCarUserManagerHelper.createNewAdminUser(TEST_USER_NAME);
-        verify(mUserManager).createUser(TEST_USER_NAME, UserInfo.FLAG_ADMIN);
-    }
-
-    @Test
-    public void testCreateNewAdminUserReturnsNullUsers() {
-        // Make sure current user is admin, since only admins can create other admins.
-        doReturn(true).when(mUserManager).isAdminUser();
-
-        doReturn(null).when(mUserManager).createUser(TEST_USER_NAME, UserInfo.FLAG_ADMIN);
-        assertThat(mCarUserManagerHelper.createNewAdminUser(TEST_USER_NAME)).isNull();
-    }
-
-    @Test
-    public void testCreateNewAdminUserReturnsCreatedUser() {
-        // Make sure current user is admin, since only admins can create other admins.
-        doReturn(true).when(mUserManager).isAdminUser();
-
-        UserInfo newUser = new UserInfo();
-        newUser.name = TEST_USER_NAME;
-        doReturn(newUser).when(mUserManager).createUser(TEST_USER_NAME, UserInfo.FLAG_ADMIN);
-        assertThat(mCarUserManagerHelper.createNewAdminUser(TEST_USER_NAME)).isEqualTo(newUser);
-    }
-
-    @Test
-    public void testCreateNewAdminUserWithDefaultUserNameCallsCreateUser() {
-        // Make sure current user is admin, since only admins can create other admins.
-        doReturn(true).when(mUserManager).isAdminUser();
-
-        mCarUserManagerHelper.createNewAdminUser();
-        verify(mUserManager).createUser(DEFAULT_ADMIN_NAME, UserInfo.FLAG_ADMIN);
-    }
-
-    @Test
-    public void testCreateNewAdminUserWithDefaultUserNameReturnsNullUsers() {
-        // Make sure current user is admin, since only admins can create other admins.
-        doReturn(true).when(mUserManager).isAdminUser();
-
-        doReturn(null).when(mUserManager).createUser(DEFAULT_ADMIN_NAME, UserInfo.FLAG_ADMIN);
-        assertThat(mCarUserManagerHelper.createNewAdminUser(DEFAULT_ADMIN_NAME)).isNull();
-    }
-
-    @Test
-    public void testCreateNewAdminUserWithDefaultUserNameReturnsCreatedUser() {
-        // Make sure current user is admin, since only admins can create other admins.
-        doReturn(true).when(mUserManager).isAdminUser();
-
-        UserInfo newUser = new UserInfo();
-        newUser.name = DEFAULT_ADMIN_NAME;
-        doReturn(newUser).when(mUserManager).createUser(DEFAULT_ADMIN_NAME, UserInfo.FLAG_ADMIN);
-        assertThat(mCarUserManagerHelper.createNewAdminUser()).isEqualTo(newUser);
-    }
-
-    @Test
-    public void testAdminsCanCreateAdmins() {
-        String newAdminName = "Test new admin";
-        UserInfo expectedAdmin = new UserInfo();
-        expectedAdmin.name = newAdminName;
-        doReturn(expectedAdmin).when(mUserManager).createUser(newAdminName, UserInfo.FLAG_ADMIN);
-
-        // Admins can create other admins.
-        doReturn(true).when(mUserManager).isAdminUser();
-        UserInfo actualAdmin = mCarUserManagerHelper.createNewAdminUser(newAdminName);
-        assertThat(actualAdmin).isEqualTo(expectedAdmin);
-    }
-
-    @Test
-    public void testNonAdminsCanNotCreateAdmins() {
-        String newAdminName = "Test new admin";
-        UserInfo expectedAdmin = new UserInfo();
-        expectedAdmin.name = newAdminName;
-        doReturn(expectedAdmin).when(mUserManager).createUser(newAdminName, UserInfo.FLAG_ADMIN);
-
-        // Test that non-admins cannot create new admins.
-        doReturn(false).when(mUserManager).isAdminUser(); // Current user non-admin.
-        assertThat(mCarUserManagerHelper.createNewAdminUser(newAdminName)).isNull();
-    }
-
-    @Test
-    public void testSystemUserCanCreateAdmins() {
-        String newAdminName = "Test new admin";
-        UserInfo expectedAdmin = new UserInfo();
-        expectedAdmin.name = newAdminName;
-
-        doReturn(expectedAdmin).when(mUserManager).createUser(newAdminName, UserInfo.FLAG_ADMIN);
-
-        // System user can create admins.
-        doReturn(true).when(mUserManager).isSystemUser();
-        UserInfo actualAdmin = mCarUserManagerHelper.createNewAdminUser(newAdminName);
-        assertThat(actualAdmin).isEqualTo(expectedAdmin);
     }
 
     @Test
@@ -591,31 +425,6 @@ public class CarUserManagerHelperTest {
     }
 
     @Test
-    public void testScaleUserIcon() {
-        Bitmap fakeIcon = Bitmap.createBitmap(100, 100, Bitmap.Config.ARGB_8888);
-        Drawable scaledIcon = mCarUserManagerHelper.scaleUserIcon(fakeIcon, 300);
-        assertThat(scaledIcon.getIntrinsicWidth()).isEqualTo(300);
-        assertThat(scaledIcon.getIntrinsicHeight()).isEqualTo(300);
-    }
-
-    @Test
-    public void testSetUserName() {
-        UserInfo testInfo = createUserInfoForId(mCurrentProcessUser.id + 3);
-        String newName = "New Test Name";
-        mCarUserManagerHelper.setUserName(testInfo, newName);
-        verify(mUserManager).setUserName(mCurrentProcessUser.id + 3, newName);
-    }
-
-    @Test
-    public void testIsCurrentProcessSystemUser() {
-        doReturn(true).when(mUserManager).isAdminUser();
-        assertThat(mCarUserManagerHelper.isCurrentProcessAdminUser()).isTrue();
-
-        doReturn(false).when(mUserManager).isAdminUser();
-        assertThat(mCarUserManagerHelper.isCurrentProcessAdminUser()).isFalse();
-    }
-
-    @Test
     public void testGrantAdminPermissions() {
         int userId = 30;
         UserInfo testInfo = createUserInfoForId(userId);
@@ -629,22 +438,6 @@ public class CarUserManagerHelperTest {
         doReturn(true).when(mUserManager).isAdminUser();
         mCarUserManagerHelper.grantAdminPermissions(testInfo);
         verify(mUserManager).setUserAdmin(userId);
-    }
-
-    @Test
-    public void testSetUserRestriction() {
-        int userId = 20;
-        UserInfo testInfo = createUserInfoForId(userId);
-
-        mCarUserManagerHelper.setUserRestriction(
-                testInfo, UserManager.DISALLOW_ADD_USER, /* enable= */ true);
-        verify(mUserManager).setUserRestriction(
-                UserManager.DISALLOW_ADD_USER, true, UserHandle.of(userId));
-
-        mCarUserManagerHelper.setUserRestriction(
-                testInfo, UserManager.DISALLOW_REMOVE_USER, /* enable= */ false);
-        verify(mUserManager).setUserRestriction(
-                UserManager.DISALLOW_REMOVE_USER, false, UserHandle.of(userId));
     }
 
     @Test

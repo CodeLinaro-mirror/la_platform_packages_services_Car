@@ -13,8 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#ifndef ANDROID_HARDWARE_AUTOMOTIVE_EVS_V1_0_VIDEOCAPTURE_H
-#define ANDROID_HARDWARE_AUTOMOTIVE_EVS_V1_0_VIDEOCAPTURE_H
+#ifndef ANDROID_HARDWARE_AUTOMOTIVE_EVS_V1_1_VIDEOCAPTURE_H
+#define ANDROID_HARDWARE_AUTOMOTIVE_EVS_V1_1_VIDEOCAPTURE_H
 
 #include <atomic>
 #include <thread>
@@ -46,6 +46,9 @@ public:
     void markFrameConsumed()    { returnFrame(); };
 
     bool isOpen()               { return mDeviceFd >= 0; };
+
+    int setParameter(struct v4l2_control& control);
+    int getParameter(struct v4l2_control& control);
 
 private:
     void collectFrames();

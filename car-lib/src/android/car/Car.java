@@ -90,6 +90,9 @@ public final class Car {
     /** Service name for {@link CarNavigationStatusManager} */
     public static final String CAR_NAVIGATION_SERVICE = "car_navigation_service";
 
+    /** Service name for {@link CarOccupantZoneManager} */
+    public static final String CAR_OCCUPANT_ZONE_SERVICE = "car_occupant_zone_service";
+
     /**
      * Service name for {@link CarInstrumentClusterManager}
      *
@@ -222,6 +225,14 @@ public final class Car {
 
     /** Permission necessary to access car's energy information. */
     public static final String PERMISSION_ENERGY = "android.car.permission.CAR_ENERGY";
+
+    /**
+     * Permission necessary to change value of car's range remaining.
+     * @hide
+     */
+    @SystemApi
+    public static final String PERMISSION_ADJUST_RANGE_REMAINING =
+            "android.car.permission.ADJUST_RANGE_REMAINING";
 
     /** Permission necessary to access car's VIN information */
     public static final String PERMISSION_IDENTIFICATION =
@@ -538,8 +549,8 @@ public final class Car {
     /**
      * Activity Action: Provide media playing through a media template app.
      * <p>Input: String extra mapped by {@link android.app.SearchManager#QUERY} is the query
-     * used to start the media. String extra mapped by {@link #CAR_EXTRA_MEDIA_PACKAGE} is the
-     * package name of the media app which user wants to play media on.
+     * used to start the media. String extra mapped by {@link #CAR_EXTRA_MEDIA_COMPONENT} is the
+     * component name of the media app which user wants to play media on.
      * <p>Output: nothing.
      */
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
@@ -548,9 +559,29 @@ public final class Car {
 
     /**
      * Used as a string extra field with {@link #CAR_INTENT_ACTION_MEDIA_TEMPLATE} to specify the
+     * MediaBrowserService that user wants to start the media on.
+     *
+     * @hide
+     */
+    public static final String CAR_EXTRA_MEDIA_COMPONENT =
+            "android.car.intent.extra.MEDIA_COMPONENT";
+
+    /**
+     * Used as a string extra field with {@link #CAR_INTENT_ACTION_MEDIA_TEMPLATE} to specify the
      * media app that user wants to start the media on. Note: this is not the templated media app.
+     *
+     * This is being deprecated. Use {@link #CAR_EXTRA_MEDIA_COMPONENT} instead.
      */
     public static final String CAR_EXTRA_MEDIA_PACKAGE = "android.car.intent.extra.MEDIA_PACKAGE";
+
+    /**
+     * Used as a string extra field of media session to specify the service corresponding to the
+     * session.
+     *
+     * @hide
+     */
+    public static final String CAR_EXTRA_BROWSE_SERVICE_FOR_SESSION =
+            "android.media.session.BROWSE_SERVICE";
 
     /** @hide */
     public static final String CAR_SERVICE_INTERFACE_NAME = "android.car.ICar";
@@ -878,6 +909,9 @@ public final class Car {
                 break;
             case PACKAGE_SERVICE:
                 manager = new CarPackageManager(binder, mContext);
+                break;
+            case CAR_OCCUPANT_ZONE_SERVICE:
+                manager = new CarOccupantZoneManager(binder, mContext, mEventHandler);
                 break;
             case CAR_NAVIGATION_SERVICE:
                 manager = new CarNavigationStatusManager(binder);

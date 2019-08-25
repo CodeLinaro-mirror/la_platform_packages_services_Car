@@ -18,6 +18,7 @@ package android.car {
     field public static final String CAR_EXTRA_MEDIA_PACKAGE = "android.car.intent.extra.MEDIA_PACKAGE";
     field public static final String CAR_INTENT_ACTION_MEDIA_TEMPLATE = "android.car.intent.action.MEDIA_TEMPLATE";
     field public static final String CAR_NAVIGATION_SERVICE = "car_navigation_service";
+    field public static final String CAR_OCCUPANT_ZONE_SERVICE = "car_occupant_zone_service";
     field public static final String CAR_UX_RESTRICTION_SERVICE = "uxrestriction";
     field public static final int CONNECTION_TYPE_EMBEDDED = 5; // 0x5
     field public static final String INFO_SERVICE = "info";
@@ -86,14 +87,50 @@ package android.car {
     ctor @Deprecated public CarNotConnectedException(Exception);
   }
 
+  public class CarOccupantZoneManager {
+    method @NonNull public java.util.List<android.view.Display> getAllDisplaysForOccupant(@NonNull android.car.CarOccupantZoneManager.OccupantZoneInfo);
+    method @NonNull public java.util.List<android.car.CarOccupantZoneManager.OccupantZoneInfo> getAllOccupantZones();
+    method @Nullable public android.view.Display getDisplayForOccupant(@NonNull android.car.CarOccupantZoneManager.OccupantZoneInfo, int);
+    method public int getDisplayType(@NonNull android.view.Display);
+    method public int getUserForOccupant(@NonNull android.car.CarOccupantZoneManager.OccupantZoneInfo);
+    method public void registerOccupantZoneConfigChangeListener(@NonNull android.car.CarOccupantZoneManager.OccupantZoneConfigChangeListener);
+    method public void unregisterOccupantZoneConfigChangeListener(@NonNull android.car.CarOccupantZoneManager.OccupantZoneConfigChangeListener);
+    field public static final int DISPLAY_TYPE_AUXILIARY = 5; // 0x5
+    field public static final int DISPLAY_TYPE_HUD = 3; // 0x3
+    field public static final int DISPLAY_TYPE_INPUT = 4; // 0x4
+    field public static final int DISPLAY_TYPE_INSTRUMENT_CLUSTER = 2; // 0x2
+    field public static final int DISPLAY_TYPE_MAIN = 1; // 0x1
+    field public static final int DISPLAY_TYPE_UNKNOWN = 0; // 0x0
+    field public static final int OCCUPANT_TYPE_DRIVER = 0; // 0x0
+    field public static final int OCCUPANT_TYPE_FRONT_PASSENGER = 1; // 0x1
+    field public static final int OCCUPANT_TYPE_REAR_PASSENGER = 2; // 0x2
+    field public static final int ZONE_CONFIG_CHANGE_FLAG_DISPLAY = 1; // 0x1
+    field public static final int ZONE_CONFIG_CHANGE_FLAG_USER = 2; // 0x2
+  }
+
+  public static interface CarOccupantZoneManager.OccupantZoneConfigChangeListener {
+    method public void onOccupantZoneConfigChanged(int);
+  }
+
+  public static final class CarOccupantZoneManager.OccupantZoneInfo implements android.os.Parcelable {
+    method public int describeContents();
+    method public void writeToParcel(android.os.Parcel, int);
+    field public static final android.os.Parcelable.Creator<android.car.CarOccupantZoneManager.OccupantZoneInfo> CREATOR;
+    field public final int occupantType;
+    field public final int seat;
+    field public int zoneId;
+  }
+
   public final class EvConnectorType {
     field public static final int CHADEMO = 3; // 0x3
     field public static final int COMBO_1 = 4; // 0x4
     field public static final int COMBO_2 = 5; // 0x5
     field public static final int GBT = 9; // 0x9
+    field public static final int GBT_DC = 10; // 0xa
     field public static final int J1772 = 1; // 0x1
     field public static final int MENNEKES = 2; // 0x2
     field public static final int OTHER = 101; // 0x65
+    field public static final int SCAME = 11; // 0xb
     field public static final int TESLA_HPWC = 7; // 0x7
     field public static final int TESLA_ROADSTER = 6; // 0x6
     field public static final int TESLA_SUPERCHARGER = 8; // 0x8
@@ -146,6 +183,24 @@ package android.car {
     field public static final int VEHICLE_AREA_TYPE_SEAT = 3; // 0x3
     field public static final int VEHICLE_AREA_TYPE_WHEEL = 6; // 0x6
     field public static final int VEHICLE_AREA_TYPE_WINDOW = 2; // 0x2
+  }
+
+  public final class VehicleGear {
+    method public static String toString(int);
+    field public static final int GEAR_DRIVE = 8; // 0x8
+    field public static final int GEAR_EIGHTH = 2048; // 0x800
+    field public static final int GEAR_FIFTH = 256; // 0x100
+    field public static final int GEAR_FIRST = 16; // 0x10
+    field public static final int GEAR_FOURTH = 128; // 0x80
+    field public static final int GEAR_NEUTRAL = 1; // 0x1
+    field public static final int GEAR_NINTH = 4096; // 0x1000
+    field public static final int GEAR_PARK = 4; // 0x4
+    field public static final int GEAR_REVERSE = 2; // 0x2
+    field public static final int GEAR_SECOND = 32; // 0x20
+    field public static final int GEAR_SEVENTH = 1024; // 0x400
+    field public static final int GEAR_SIXTH = 512; // 0x200
+    field public static final int GEAR_THIRD = 64; // 0x40
+    field public static final int GEAR_UNKNOWN = 0; // 0x0
   }
 
   public final class VehiclePropertyIds {
@@ -238,7 +293,7 @@ package android.car {
     field @RequiresPermission(android.car.Car.PERMISSION_READ_STEERING_STATE) public static final int PERF_STEERING_ANGLE = 291504649; // 0x11600209
     field @RequiresPermission(android.car.Car.PERMISSION_SPEED) public static final int PERF_VEHICLE_SPEED = 291504647; // 0x11600207
     field @RequiresPermission(android.car.Car.PERMISSION_SPEED) public static final int PERF_VEHICLE_SPEED_DISPLAY = 291504648; // 0x11600208
-    field @RequiresPermission(android.car.Car.PERMISSION_ENERGY) public static final int RANGE_REMAINING = 291504904; // 0x11600308
+    field @RequiresPermission.Read(@androidx.annotation.RequiresPermission(android.car.Car.PERMISSION_ENERGY)) @RequiresPermission.Write(@androidx.annotation.RequiresPermission("android.car.permission.ADJUST_RANGE_REMAINING")) public static final int RANGE_REMAINING = 291504904; // 0x11600308
     field @RequiresPermission(android.car.Car.PERMISSION_READ_INTERIOR_LIGHTS) public static final int READING_LIGHTS_STATE = 356519683; // 0x15400f03
     field @RequiresPermission(android.car.Car.PERMISSION_CONTROL_INTERIOR_LIGHTS) public static final int READING_LIGHTS_SWITCH = 356519684; // 0x15400f04
     field @RequiresPermission("android.car.permission.CONTROL_CAR_SEATS") public static final int SEAT_BACKREST_ANGLE_1_MOVE = 356518792; // 0x15400b88

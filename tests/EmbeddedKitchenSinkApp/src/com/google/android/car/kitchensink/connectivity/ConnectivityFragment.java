@@ -18,7 +18,9 @@ package com.google.android.car.kitchensink.connectivity;
 
 import android.annotation.Nullable;
 import android.annotation.SuppressLint;
+import android.bluetooth.BluetoothAdapter;
 import android.content.Context;
+import android.content.Intent;
 import android.graphics.Color;
 import android.location.LocationManager;
 import android.net.ConnectivityManager;
