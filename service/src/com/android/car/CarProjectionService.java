@@ -985,6 +985,12 @@ class CarProjectionService extends ICarProjection.Stub implements CarServiceBase
         public void onNumClientsChanged(int numClients) {
             Log.i(TAG, "ProjectionSoftApCallback, onNumClientsChanged: " + numClients);
         }
+
+        // TODO(b/141018445): Implement these methods.
+        @Override
+        public void onStaConnected(String Macaddr, int numClients) {}
+        @Override
+        public void onStaDisconnected(String Macaddr, int numClients) {}
     }
 
     private static class WirelessClient {
