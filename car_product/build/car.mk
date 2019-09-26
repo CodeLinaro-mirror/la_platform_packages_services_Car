@@ -33,9 +33,7 @@ PRODUCT_PACKAGES += \
 PRODUCT_PACKAGES += \
     EmbeddedKitchenSinkApp \
     VmsPublisherClientSample \
-    VmsSubscriberClientSample \
-    android.car.cluster.loggingrenderer \
-    DirectRenderingClusterSample \
+    VmsSubscriberClientSample
 
 PRODUCT_COPY_FILES := \
     frameworks/av/media/libeffects/data/audio_effects.conf:system/etc/audio_effects.conf \
@@ -75,21 +73,8 @@ PRODUCT_PROPERTY_OVERRIDES += \
 # Automotive specific packages
 PRODUCT_PACKAGES += \
     vehicle_monitor_service \
-    CarService \
-    CarTrustAgentService \
-    CarDialerApp \
-    CarRadioApp \
-    OverviewApp \
-    CarLensPickerApp \
     LocalMediaPlayer \
-    CarMediaApp \
-    CarMessengerApp \
-    CarHvacApp \
-    CarMapsPlaceholder \
-    CarLatinIME \
-    CarUsbHandler \
-    android.car \
-    libvehiclemonitor-native \
+    libvehiclemonitor-native
 
 # Boot animation
 PRODUCT_COPY_FILES += \
