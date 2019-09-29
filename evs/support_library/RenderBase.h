@@ -26,6 +26,13 @@
 
 #include <android/hardware/automotive/evs/1.0/IEvsEnumerator.h>
 
+#include <BaseRenderCallback.h>
+
+namespace android {
+namespace automotive {
+namespace evs {
+namespace support {
+
 using namespace ::android::hardware::automotive::evs::V1_0;
 using ::android::sp;
 
@@ -41,7 +48,7 @@ public:
     virtual bool activate() = 0;
     virtual void deactivate() = 0;
 
-    virtual bool drawFrame(const BufferDesc& tgtBuffer) = 0;
+    virtual bool drawFrame(const BufferDesc& tgtBuffer, const BufferDesc& imageBuffer) = 0;
 
 protected:
     static bool prepareGL();
@@ -64,5 +71,9 @@ protected:
     static float        sAspectRatio;
 };
 
+}  // namespace support
+}  // namespace evs
+}  // namespace automotive
+}  // namespace android
 
 #endif //CAR_EVS_APP_RENDERBASE_H

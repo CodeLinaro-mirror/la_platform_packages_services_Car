@@ -76,6 +76,15 @@ public class CarSettings {
          */
         public static final String DEFAULT_USER_RESTRICTIONS_SET =
                 "android.car.DEFAULT_USER_RESTRICTIONS_SET";
+
+        /**
+         * Developer settings String used to explicitly disable the instrumentation service (when
+         * set to {@code "true"}.
+         *
+         * @hide
+         */
+        public static final String DISABLE_INSTRUMENTATION_SERVICE =
+                "android.car.DISABLE_INSTRUMENTATION_SERVICE";
     }
 
     /**
@@ -144,5 +153,14 @@ public class CarSettings {
          */
         public static final String KEY_BLUETOOTH_PROFILES_INHIBITED =
                 "android.car.BLUETOOTH_PROFILES_INHIBITED";
+
+        /**
+         * Key to enable / disable initial notice screen that will be shown for all user-starting
+         * moments including cold boot, wake up from suspend, and user switching.
+         * The value is boolean (1 or 0).
+         * @hide
+         */
+        public static final String KEY_ENABLE_INITIAL_NOTICE_SCREEN_TO_USER =
+                "android.car.ENABLE_INITIAL_NOTICE_SCREEN_TO_USER";
     }
 }
