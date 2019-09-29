@@ -27,8 +27,6 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.UserInfo;
 import android.graphics.Bitmap;
-import android.graphics.drawable.BitmapDrawable;
-import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.os.UserHandle;
 import android.os.UserManager;
@@ -187,21 +185,6 @@ public final class CarUserManagerHelper {
     }
 
     /**
-     * Set last active user.
-     *
-     * @param userId last active user id.
-     * @param skipGlobalSetting whether to skip set the global settings value.
-     * @deprecated Use {@link #setLastActiveUser(int)} instead.
-     */
-    @Deprecated
-    public void setLastActiveUser(int userId, boolean skipGlobalSetting) {
-        if (!skipGlobalSetting) {
-            Settings.Global.putInt(
-                    mContext.getContentResolver(), Settings.Global.LAST_ACTIVE_USER_ID, userId);
-        }
-    }
-
-    /**
      * Get user id for the last active user.
      *
      * @return user id of the last active user.
@@ -293,15 +276,6 @@ public final class CarUserManagerHelper {
      */
     public boolean isHeadlessSystemUser() {
         return RoSystemProperties.MULTIUSER_HEADLESS_SYSTEM_USER;
-    }
-
-    /**
-     * Gets UserInfo for the system user.
-     *
-     * @return {@link UserInfo} for the system user.
-     */
-    public UserInfo getSystemUserInfo() {
-        return mUserManager.getUserInfo(UserHandle.USER_SYSTEM);
     }
 
     /**
@@ -473,7 +447,7 @@ public final class CarUserManagerHelper {
      *
      * @return Maximum number of users that can be present on the device.
      */
-    public int getMaxSupportedUsers() {
+    private int getMaxSupportedUsers() {
         if (isHeadlessSystemUser()) {
             return mTestableFrameworkWrapper.userManagerGetMaxSupportedUsers() - 1;
         }
@@ -524,36 +498,6 @@ public final class CarUserManagerHelper {
     // User information accessors
 
     /**
-     * Checks whether the user is system user.
-     *
-     * @param userInfo User to check against system user.
-     * @return {@code true} if system user, {@code false} otherwise.
-     */
-    public boolean isSystemUser(UserInfo userInfo) {
-        return userInfo.id == UserHandle.USER_SYSTEM;
-    }
-
-    /**
-     * Checks whether the user is last active user.
-     *
-     * @param userInfo User to check against last active user.
-     * @return {@code true} if is last active user, {@code false} otherwise.
-     */
-    public boolean isLastActiveUser(UserInfo userInfo) {
-        return userInfo.id == getLastActiveUser();
-    }
-
-    /**
-     * Checks whether passed in user is the foreground user.
-     *
-     * @param userInfo User to check.
-     * @return {@code true} if foreground user, {@code false} otherwise.
-     */
-    public boolean isForegroundUser(UserInfo userInfo) {
-        return getCurrentForegroundUserId() == userInfo.id;
-    }
-
-    /**
      * Checks whether passed in user is the user that's running the current process.
      *
      * @param userInfo User to check.
@@ -566,65 +510,14 @@ public final class CarUserManagerHelper {
     // Foreground user information accessors.
 
     /**
-     * Checks if the foreground user is a guest user.
-     */
-    public boolean isForegroundUserGuest() {
-        return getCurrentForegroundUserInfo().isGuest();
-    }
-
-    /**
-     * Checks if the foreground user is a demo user.
-     */
-    public boolean isForegroundUserDemo() {
-        return getCurrentForegroundUserInfo().isDemo();
-    }
-
-    /**
-     * Checks if the foreground user is ephemeral.
-     */
-    public boolean isForegroundUserEphemeral() {
-        return getCurrentForegroundUserInfo().isEphemeral();
-    }
-
-    /**
-     * Checks if the given user is non-ephemeral.
-     *
-     * @param userId User to check
-     * @return {@code true} if given user is persistent user.
-     */
-    public boolean isPersistentUser(int userId) {
-        UserInfo user = mUserManager.getUserInfo(userId);
-        return !user.isEphemeral();
-    }
-
-    /**
-     * Returns whether this user can be removed from the system.
-     *
-     * @param userInfo User to be removed
-     * @return {@code true} if they can be removed, {@code false} otherwise.
-     */
-    public boolean canUserBeRemoved(UserInfo userInfo) {
-        return !isSystemUser(userInfo);
-    }
-
-    /**
-     * Returns whether a user has a restriction.
-     *
-     * @param restriction Restriction to check. Should be a UserManager.* restriction.
-     * @param userInfo the user whose restriction is to be checked
-     */
-    public boolean hasUserRestriction(String restriction, UserInfo userInfo) {
-        return mUserManager.hasUserRestriction(restriction, userInfo.getUserHandle());
-    }
-
-    /**
      * Return whether the foreground user has a restriction.
      *
      * @param restriction Restriction to check. Should be a UserManager.* restriction.
      * @return Whether that restriction exists for the foreground user.
      */
-    public boolean foregroundUserHasUserRestriction(String restriction) {
-        return hasUserRestriction(restriction, getCurrentForegroundUserInfo());
+    private boolean foregroundUserHasUserRestriction(String restriction) {
+        return mUserManager.hasUserRestriction(
+                restriction, UserHandle.of(getCurrentForegroundUserId()));
     }
 
     /**
@@ -632,16 +525,6 @@ public final class CarUserManagerHelper {
      */
     public boolean canForegroundUserAddUsers() {
         return !foregroundUserHasUserRestriction(UserManager.DISALLOW_ADD_USER);
-    }
-
-    /**
-     * Checks if the current process user can modify accounts. Demo and Guest users cannot modify
-     * accounts even if the DISALLOW_MODIFY_ACCOUNTS restriction is not applied.
-     */
-    public boolean canForegroundUserModifyAccounts() {
-        return !foregroundUserHasUserRestriction(UserManager.DISALLOW_MODIFY_ACCOUNTS)
-            && !isForegroundUserDemo()
-            && !isForegroundUserGuest();
     }
 
     /**
@@ -656,44 +539,6 @@ public final class CarUserManagerHelper {
         boolean disallowUserSwitching =
                 foregroundUserHasUserRestriction(UserManager.DISALLOW_USER_SWITCH);
         return (inIdleCallState && !disallowUserSwitching);
-    }
-
-    // Current process user information accessors
-
-    /**
-     * Checks whether this process is running under the system user.
-     */
-    public boolean isCurrentProcessSystemUser() {
-        return mUserManager.isSystemUser();
-    }
-
-    /**
-     * Checks if the calling app is running in a demo user.
-     */
-    public boolean isCurrentProcessDemoUser() {
-        return mUserManager.isDemoUser();
-    }
-
-    /**
-     * Checks if the calling app is running as an admin user.
-     */
-    public boolean isCurrentProcessAdminUser() {
-        return mUserManager.isAdminUser();
-    }
-
-    /**
-     * Checks if the calling app is running as a guest user.
-     */
-    public boolean isCurrentProcessGuestUser() {
-        return mUserManager.isGuestUser();
-    }
-
-    /**
-     * Check is the calling app is running as a restricted profile user (ie. a LinkedUser).
-     * Restricted profiles are only available when {@link #isHeadlessSystemUser()} is false.
-     */
-    public boolean isCurrentProcessRestrictedProfileUser() {
-        return mUserManager.isRestrictedProfile();
     }
 
     // Current process user restriction accessors
@@ -714,22 +559,8 @@ public final class CarUserManagerHelper {
      */
     public boolean canCurrentProcessModifyAccounts() {
         return !isCurrentProcessUserHasRestriction(UserManager.DISALLOW_MODIFY_ACCOUNTS)
-            && !isCurrentProcessDemoUser()
-            && !isCurrentProcessGuestUser();
-    }
-
-    /**
-     * Checks if the user running the current process can add new users.
-     */
-    public boolean canCurrentProcessAddUsers() {
-        return !isCurrentProcessUserHasRestriction(UserManager.DISALLOW_ADD_USER);
-    }
-
-    /**
-     * Checks if the user running the current process can remove users.
-     */
-    public boolean canCurrentProcessRemoveUsers() {
-        return !isCurrentProcessUserHasRestriction(UserManager.DISALLOW_REMOVE_USER);
+            && !mUserManager.isDemoUser()
+            && !mUserManager.isGuestUser();
     }
 
     /**
@@ -738,7 +569,7 @@ public final class CarUserManagerHelper {
      * <p>For instance switching users is not allowed if the user is in a phone call,
      * or {@link #{UserManager.DISALLOW_USER_SWITCH} is set.
      */
-    public boolean canCurrentProcessSwitchUsers() {
+    private boolean canCurrentProcessSwitchUsers() {
         boolean inIdleCallState = TelephonyManager.getDefault().getCallState()
                 == TelephonyManager.CALL_STATE_IDLE;
         boolean disallowUserSwitching =
@@ -756,7 +587,7 @@ public final class CarUserManagerHelper {
             Manifest.permission.MANAGE_USERS
     })
     public void grantAdminPermissions(UserInfo user) {
-        if (!isCurrentProcessAdminUser()) {
+        if (!mUserManager.isAdminUser()) {
             Log.w(TAG, "Only admin users can assign admin permissions.");
             return;
         }
@@ -769,18 +600,6 @@ public final class CarUserManagerHelper {
     }
 
     /**
-     * Creates a new user on the system with a default user name. This user name is set during
-     * constrution. The created user would be granted admin role. Only admins can create other
-     * admins.
-     *
-     * @return Newly created admin user, null if failed to create a user.
-     */
-    @Nullable
-    public UserInfo createNewAdminUser() {
-        return createNewAdminUser(getDefaultAdminName());
-    }
-
-    /**
      * Creates a new user on the system, the created user would be granted admin role.
      * Only admins can create other admins.
      *
@@ -788,8 +607,8 @@ public final class CarUserManagerHelper {
      * @return Newly created admin user, null if failed to create a user.
      */
     @Nullable
-    public UserInfo createNewAdminUser(String userName) {
-        if (!(isCurrentProcessAdminUser() || isCurrentProcessSystemUser())) {
+    private UserInfo createNewAdminUser(String userName) {
+        if (!(mUserManager.isAdminUser() || mUserManager.isSystemUser())) {
             // Only Admins or System user can create other privileged users.
             Log.e(TAG, "Only admin users and system user can create other admins.");
             return null;
@@ -824,8 +643,10 @@ public final class CarUserManagerHelper {
 
         // Each non-admin has sms and outgoing call restrictions applied by the UserManager on
         // creation. We want to enable these permissions by default in the car.
-        setUserRestriction(user, UserManager.DISALLOW_SMS, /* enable= */ false);
-        setUserRestriction(user, UserManager.DISALLOW_OUTGOING_CALLS, /* enable= */ false);
+        mUserManager.setUserRestriction(
+                UserManager.DISALLOW_SMS, /* enable= */ false, user.getUserHandle());
+        mUserManager.setUserRestriction(
+                UserManager.DISALLOW_OUTGOING_CALLS, /* enable= */ false, user.getUserHandle());
 
         assignDefaultIcon(user);
         return user;
@@ -839,7 +660,7 @@ public final class CarUserManagerHelper {
      */
     private void setDefaultNonAdminRestrictions(UserInfo userInfo, boolean enable) {
         for (String restriction : DEFAULT_NON_ADMIN_RESTRICTIONS) {
-            setUserRestriction(userInfo, restriction, enable);
+            mUserManager.setUserRestriction(restriction, enable, userInfo.getUserHandle());
         }
     }
 
@@ -851,21 +672,8 @@ public final class CarUserManagerHelper {
      */
     private void setOptionalNonAdminRestrictions(UserInfo userInfo, boolean enable) {
         for (String restriction : OPTIONAL_NON_ADMIN_RESTRICTIONS) {
-            setUserRestriction(userInfo, restriction, enable);
+            mUserManager.setUserRestriction(restriction, enable, userInfo.getUserHandle());
         }
-    }
-
-    /**
-     * Sets the value of the specified restriction for the specified user.
-     *
-     * @param userInfo the user whose restriction is to be changed
-     * @param restriction the key of the restriction
-     * @param enable the value for the restriction. if true, turns the restriction ON, if false,
-     *               turns the restriction OFF.
-     */
-    public void setUserRestriction(UserInfo userInfo, String restriction, boolean enable) {
-        UserHandle userHandle = UserHandle.of(userInfo.id);
-        mUserManager.setUserRestriction(restriction, enable, userHandle);
     }
 
     /**
@@ -879,7 +687,7 @@ public final class CarUserManagerHelper {
      * @return {@code true} if user is successfully removed, {@code false} otherwise.
      */
     public boolean removeUser(UserInfo userInfo, String guestUserName) {
-        if (isSystemUser(userInfo)) {
+        if (userInfo.id == UserHandle.USER_SYSTEM) {
             Log.w(TAG, "User " + userInfo.id + " is system user, could not be removed.");
             return false;
         }
@@ -889,7 +697,7 @@ public final class CarUserManagerHelper {
             return removeLastAdmin(userInfo);
         }
 
-        if (!isCurrentProcessAdminUser() && !isCurrentProcessUser(userInfo)) {
+        if (!mUserManager.isAdminUser() && !isCurrentProcessUser(userInfo)) {
             // If the caller is non-admin, they can only delete themselves.
             Log.e(TAG, "Non-admins cannot remove other users.");
             return false;
@@ -1011,7 +819,7 @@ public final class CarUserManagerHelper {
      * @param userInfo User whose avatar should be returned.
      * @return Default user icon
      */
-    public Bitmap getUserDefaultIcon(UserInfo userInfo) {
+    private Bitmap getUserDefaultIcon(UserInfo userInfo) {
         return UserIcons.convertToBitmap(
             UserIcons.getDefaultUserIcon(mContext.getResources(), userInfo.id, false));
     }
@@ -1043,29 +851,6 @@ public final class CarUserManagerHelper {
         }
 
         return picture;
-    }
-
-    /**
-     * Method for scaling a Bitmap icon to a desirable size.
-     *
-     * @param icon Bitmap to scale.
-     * @param desiredSize Wanted size for the icon.
-     * @return Drawable for the icon, scaled to the new size.
-     */
-    public Drawable scaleUserIcon(Bitmap icon, int desiredSize) {
-        Bitmap scaledIcon = Bitmap.createScaledBitmap(
-                icon, desiredSize, desiredSize, true /* filter */);
-        return new BitmapDrawable(mContext.getResources(), scaledIcon);
-    }
-
-    /**
-     * Sets new Username for the user.
-     *
-     * @param user User whose name should be changed.
-     * @param name New username.
-     */
-    public void setUserName(UserInfo user, String name) {
-        mUserManager.setUserName(user.id, name);
     }
 
     private void registerReceiver() {

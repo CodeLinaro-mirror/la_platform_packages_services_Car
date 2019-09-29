@@ -122,6 +122,8 @@ public class MockedCarTestBase {
     protected synchronized void configureResourceOverrides(MockResources resources) {
         resources.overrideResource(com.android.car.R.string.instrumentClusterRendererService, "");
         resources.overrideResource(com.android.car.R.bool.audioUseDynamicRouting, false);
+        resources.overrideResource(com.android.car.R.array.config_earlyStartupServices,
+                new String[0]);
     }
 
     protected Context getContext() {
@@ -311,9 +313,6 @@ public class MockedCarTestBase {
 
         @Override
         public void refreshDisplayBrightness() {}
-
-        @Override
-        public void reconfigureSecondaryDisplays() {}
     }
 
     static final class MockIOInterface implements IOInterface {

@@ -183,6 +183,9 @@ public class PropertyHalServiceIds {
         mProps.put(VehicleProperty.HVAC_DEFROSTER, new Pair<>(
                     Car.PERMISSION_CONTROL_CAR_CLIMATE,
                     Car.PERMISSION_CONTROL_CAR_CLIMATE));
+        mProps.put(VehicleProperty.HVAC_ELECTRIC_DEFROSTER_ON, new Pair<>(
+                    Car.PERMISSION_CONTROL_CAR_CLIMATE,
+                    Car.PERMISSION_CONTROL_CAR_CLIMATE));
         mProps.put(VehicleProperty.HVAC_AC_ON, new Pair<>(
                     Car.PERMISSION_CONTROL_CAR_CLIMATE,
                     Car.PERMISSION_CONTROL_CAR_CLIMATE));
@@ -309,7 +312,7 @@ public class PropertyHalServiceIds {
                 null));
         mProps.put(VehicleProperty.RANGE_REMAINING, new Pair<>(
                 Car.PERMISSION_ENERGY,
-                null));
+                Car.PERMISSION_ADJUST_RANGE_REMAINING));
         mProps.put(VehicleProperty.TIRE_PRESSURE, new Pair<>(
                 Car.PERMISSION_TIRES,
                 null));
@@ -407,7 +410,7 @@ public class PropertyHalServiceIds {
 
     /**
      * @param propId Property ID
-     * @return Read permission string for given property ID. NULL if property ID dose not exist or
+     * @return Read permission string for given property ID. NULL if property ID does not exist or
      * the property is not available for reading.
      */
     @Nullable
@@ -426,7 +429,7 @@ public class PropertyHalServiceIds {
 
     /**
      * @param propId Property ID
-     * @return Write permission string for given property ID. NULL if property ID dose not exist or
+     * @return Write permission string for given property ID. NULL if property ID does not exist or
      * the property is not writable.
      */
     @Nullable

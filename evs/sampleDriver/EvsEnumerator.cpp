@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2016-2019 The Android Open Source Project
+ * Copyright (C) 2016 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,12 +25,13 @@
 
 
 using namespace std::chrono_literals;
+using CameraDesc_1_0 = ::android::hardware::automotive::evs::V1_0::CameraDesc;
 
 namespace android {
 namespace hardware {
 namespace automotive {
 namespace evs {
-namespace V1_0 {
+namespace V1_1 {
 namespace implementation {
 
 
@@ -48,7 +49,9 @@ const auto kEnumerationTimeout = 10s;
 
 bool EvsEnumerator::checkPermission() {
     hardware::IPCThreadState *ipc = hardware::IPCThreadState::self();
-    if (AID_AUTOMOTIVE_EVS != ipc->getCallingUid()) {
+    if (AID_AUTOMOTIVE_EVS != ipc->getCallingUid() &&
+        AID_ROOT != ipc->getCallingUid()) {
+
         ALOGE("EVS access denied: pid = %d, uid = %d", ipc->getCallingPid(), ipc->getCallingUid());
         return false;
     }
@@ -191,7 +194,7 @@ Return<void> EvsEnumerator::getCameraList(getCameraList_cb _hidl_cb)  {
     const unsigned numCameras = sCameraList.size();
 
     // Build up a packed array of CameraDesc for return
-    hidl_vec<CameraDesc> hidlCameras;
+    hidl_vec<CameraDesc_1_0> hidlCameras;
     hidlCameras.resize(numCameras);
     unsigned i = 0;
     for (const auto& [key, cam] : sCameraList) {
@@ -207,7 +210,7 @@ Return<void> EvsEnumerator::getCameraList(getCameraList_cb _hidl_cb)  {
 }
 
 
-Return<sp<IEvsCamera>> EvsEnumerator::openCamera(const hidl_string& cameraId) {
+Return<sp<IEvsCamera_1_0>> EvsEnumerator::openCamera(const hidl_string& cameraId) {
     ALOGD("openCamera");
     if (!checkPermission()) {
         return nullptr;
@@ -234,7 +237,7 @@ Return<sp<IEvsCamera>> EvsEnumerator::openCamera(const hidl_string& cameraId) {
 }
 
 
-Return<void> EvsEnumerator::closeCamera(const ::android::sp<IEvsCamera>& pCamera) {
+Return<void> EvsEnumerator::closeCamera(const ::android::sp<IEvsCamera_1_0>& pCamera) {
     ALOGD("closeCamera");
 
     if (pCamera == nullptr) {
@@ -244,31 +247,12 @@ Return<void> EvsEnumerator::closeCamera(const ::android::sp<IEvsCamera>& pCamera
 
     // Get the camera id so we can find it in our list
     std::string cameraId;
-    pCamera->getCameraInfo([&cameraId](CameraDesc desc) {
+    pCamera->getCameraInfo([&cameraId](CameraDesc_1_0 desc) {
                                cameraId = desc.cameraId;
                            }
     );
 
-    // Find the named camera
-    CameraRecord *pRecord = findCameraById(cameraId);
-
-    // Is the display being destroyed actually the one we think is active?
-    if (!pRecord) {
-        ALOGE("Asked to close a camera whose name isn't recognized");
-    } else {
-        sp<EvsV4lCamera> pActiveCamera = pRecord->activeInstance.promote();
-
-        if (pActiveCamera == nullptr) {
-            ALOGE("Somehow a camera is being destroyed when the enumerator didn't know one existed");
-        } else if (pActiveCamera != pCamera) {
-            // This can happen if the camera was aggressively reopened, orphaning this previous instance
-            ALOGW("Ignoring close of previously orphaned camera - why did a client steal?");
-        } else {
-            // Drop the active camera
-            pActiveCamera->shutdown();
-            pRecord->activeInstance = nullptr;
-        }
-    }
+    closeCamera_impl(pCamera, cameraId);
 
     return Void();
 }
@@ -316,10 +300,10 @@ Return<void> EvsEnumerator::closeDisplay(const ::android::sp<IEvsDisplay>& pDisp
 }
 
 
-Return<DisplayState> EvsEnumerator::getDisplayState()  {
+Return<EvsDisplayState> EvsEnumerator::getDisplayState()  {
     ALOGD("getDisplayState");
     if (!checkPermission()) {
-        return DisplayState::DEAD;
+        return EvsDisplayState::DEAD;
     }
 
     // Do we still have a display object we think should be active?
@@ -327,8 +311,37 @@ Return<DisplayState> EvsEnumerator::getDisplayState()  {
     if (pActiveDisplay != nullptr) {
         return pActiveDisplay->getDisplayState();
     } else {
-        return DisplayState::NOT_OPEN;
+        return EvsDisplayState::NOT_OPEN;
     }
+}
+
+
+void EvsEnumerator::closeCamera_impl(const sp<IEvsCamera_1_0>& pCamera,
+                                     const std::string& cameraId) {
+    // Find the named camera
+    CameraRecord *pRecord = findCameraById(cameraId);
+
+    // Is the display being destroyed actually the one we think is active?
+    if (!pRecord) {
+        ALOGE("Asked to close a camera whose name isn't recognized");
+    } else {
+        sp<EvsV4lCamera> pActiveCamera = pRecord->activeInstance.promote();
+
+        if (pActiveCamera == nullptr) {
+            ALOGE("Somehow a camera is being destroyed "
+                  "when the enumerator didn't know one existed");
+        } else if (pActiveCamera != pCamera) {
+            // This can happen if the camera was aggressively reopened,
+            // orphaning this previous instance
+            ALOGW("Ignoring close of previously orphaned camera - why did a client steal?");
+        } else {
+            // Drop the active camera
+            pActiveCamera->shutdown();
+            pRecord->activeInstance = nullptr;
+        }
+    }
+
+    return;
 }
 
 
@@ -407,7 +420,7 @@ EvsEnumerator::CameraRecord* EvsEnumerator::findCameraById(const std::string& ca
 
 
 } // namespace implementation
-} // namespace V1_0
+} // namespace V1_1
 } // namespace evs
 } // namespace automotive
 } // namespace hardware

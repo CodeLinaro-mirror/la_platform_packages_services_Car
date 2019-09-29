@@ -23,6 +23,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -32,6 +33,7 @@ import android.hardware.automotive.vehicle.V2_0.VehiclePropValue;
 import android.hardware.automotive.vehicle.V2_0.VehicleProperty;
 import android.view.KeyEvent;
 
+import androidx.test.filters.RequiresDevice;
 import androidx.test.runner.AndroidJUnit4;
 
 import com.android.car.vehiclehal.test.VehiclePropConfigBuilder;
@@ -184,6 +186,7 @@ public class InputHalServiceTest {
     /**
      * Test for handling rotary knob event.
      */
+    @RequiresDevice
     @Test
     public void handlesRepeatedKeyWithIndents() {
         subscribeListener();
@@ -276,7 +279,7 @@ public class InputHalServiceTest {
         reset(mInputListener);
         mInputHalService.handleHalEvents(
                 ImmutableList.of(makeKeyPropValueWithIndents(code, indents)));
-        verify(mInputListener).onKeyEvent(captor.capture(), eq(DISPLAY));
+        verify(mInputListener, times(indents)).onKeyEvent(captor.capture(), eq(DISPLAY));
         reset(mInputListener);
         return captor.getValue();
     }

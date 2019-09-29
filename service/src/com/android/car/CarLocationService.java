@@ -116,7 +116,7 @@ public class CarLocationService extends BroadcastReceiver implements CarServiceB
 
                 @Override
                 public void onPreUnbind() {
-                    logd("Before Unbinding from PerCarUserService");
+                    logd("Before Unbinding from PerUserCarService");
                     synchronized (mLocationManagerProxyLock) {
                         mILocationManagerProxy = null;
                     }
@@ -216,7 +216,17 @@ public class CarLocationService extends BroadcastReceiver implements CarServiceB
                 });
                 break;
             case CarPowerStateListener.SUSPEND_EXIT:
-                deleteCacheFile();
+                if (mCarDrivingStateService != null) {
+                    CarDrivingStateEvent event = mCarDrivingStateService.getCurrentDrivingState();
+                    if (event != null
+                            && event.eventValue == CarDrivingStateEvent.DRIVING_STATE_MOVING) {
+                        deleteCacheFile();
+                    } else {
+                        logd("Registering to receive driving state.");
+                        mCarDrivingStateService.registerDrivingStateChangeListener(
+                                mICarDrivingStateChangeEventListener);
+                    }
+                }
                 if (future != null) {
                     future.complete(null);
                 }
@@ -264,7 +274,8 @@ public class CarLocationService extends BroadcastReceiver implements CarServiceB
     /** Tells whether the current foreground user is the headless system user. */
     private boolean isCurrentUserHeadlessSystemUser() {
         int currentUserId = ActivityManager.getCurrentUser();
-        return mCarUserManagerHelper.isHeadlessSystemUser() && currentUserId == 0;
+        return mCarUserManagerHelper.isHeadlessSystemUser()
+                && currentUserId == UserHandle.USER_SYSTEM;
     }
 
     /**

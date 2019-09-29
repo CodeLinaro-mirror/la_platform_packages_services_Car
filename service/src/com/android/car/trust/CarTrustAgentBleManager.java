@@ -26,27 +26,23 @@ import android.bluetooth.le.AdvertiseCallback;
 import android.bluetooth.le.AdvertiseData;
 import android.bluetooth.le.AdvertiseSettings;
 import android.content.Context;
-import android.os.Handler;
-import android.os.Looper;
 import android.os.ParcelUuid;
 import android.util.Log;
 
 import androidx.annotation.Nullable;
+import androidx.collection.SimpleArrayMap;
 
-import com.android.car.BLEStreamProtos.BLEMessageProto.BLEMessage;
 import com.android.car.BLEStreamProtos.BLEOperationProto.OperationType;
 import com.android.car.BLEStreamProtos.VersionExchangeProto.BLEVersionExchange;
-import com.android.car.CarLocalServices;
 import com.android.car.R;
 import com.android.car.Utils;
 import com.android.car.protobuf.InvalidProtocolBufferException;
+import com.android.internal.annotations.VisibleForTesting;
 
-import java.io.IOException;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
-import java.util.LinkedList;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Queue;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -56,8 +52,7 @@ import java.util.concurrent.TimeUnit;
  * device feature. It has knowledge on the GATT services and characteristics that are specific to
  * the Trusted Device feature.
  */
-class CarTrustAgentBleManager extends BleManager {
-
+class CarTrustAgentBleManager extends BleManager implements BleMessageStreamCallback {
     private static final String TAG = "CarTrustBLEManager";
 
     /**
@@ -69,6 +64,15 @@ class CarTrustAgentBleManager extends BleManager {
      */
     private static final UUID CLIENT_CHARACTERISTIC_CONFIG =
             UUID.fromString("00002902-0000-1000-8000-00805f9b34fb");
+
+    /**
+     * Reserved bytes for an ATT write request payload.
+     *
+     * <p>The attribute protocol uses 3 bytes to encode the command type and attribute ID. These
+     * bytes need to be subtracted from the reported MTU size and the resulting value will
+     * represent the total amount of bytes that can be sent in a write.
+     */
+    private static final int ATT_PAYLOAD_RESERVED_BYTES = 3;
 
     /** @hide */
     @IntDef(prefix = {"TRUSTED_DEVICE_OPERATION_"}, value = {
@@ -83,18 +87,30 @@ class CarTrustAgentBleManager extends BleManager {
     private static final int TRUSTED_DEVICE_OPERATION_NONE = 0;
     private static final int TRUSTED_DEVICE_OPERATION_ENROLLMENT = 1;
     private static final int TRUSTED_DEVICE_OPERATION_UNLOCK = 2;
-    private static final long BLE_MESSAGE_RETRY_DELAY_MS = TimeUnit.SECONDS.toMillis(2);
-    private static final int BLE_MESSAGE_RETRY_LIMIT = 20;
+    @VisibleForTesting
+    static final long BLE_MESSAGE_RETRY_DELAY_MS = TimeUnit.SECONDS.toMillis(2);
 
     @TrustedDeviceOperation
     private int mCurrentTrustedDeviceOperation = TRUSTED_DEVICE_OPERATION_NONE;
-    private CarTrustedDeviceService mCarTrustedDeviceService;
-    private CarTrustAgentEnrollmentService mCarTrustAgentEnrollmentService;
-    private CarTrustAgentUnlockService mCarTrustAgentUnlockService;
     private String mOriginalBluetoothName;
     private byte[] mUniqueId;
-    private String mEnrollmentDeviceName;
-    private int mMtuSize = 20;
+
+    /**
+     * The maximum amount of bytes that can be written over BLE.
+     *
+     * <p>This initial value is 20 because BLE has a default write of 23 bytes. However, 3 bytes
+     * are subtracted due to bytes being reserved for the command type and attribute ID.
+     *
+     * @see #ATT_PAYLOAD_RESERVED_BYTES
+     */
+    private int mMaxWriteSize = 20;
+
+    @VisibleForTesting
+    int mBleMessageRetryLimit = 20;
+
+    private final List<BleEventCallback> mBleEventCallbacks = new ArrayList<>();
+    private AdvertiseCallback mEnrollmentAdvertisingCallback;
+    private SendMessageCallback mSendMessageCallback;
 
     // Enrollment Service and Characteristic UUIDs
     private UUID mEnrollmentServiceUuid;
@@ -108,23 +124,28 @@ class CarTrustAgentBleManager extends BleManager {
     private UUID mUnlockServerWriteUuid;
     private BluetoothGattService mUnlockGattService;
 
-    private Queue<BLEMessage> mMessageQueue = new LinkedList<>();
-    private BLEMessagePayloadStream mBleMessagePayloadStream = new BLEMessagePayloadStream();
+    private BleMessageStream mMessageStream;
 
-    // This is a boolean because there's only one supported version.
-    private boolean mIsVersionExchanged;
-    private int mBleMessageRetryStartCount;
-    private Handler mHandler = new Handler(Looper.getMainLooper());
-    private Runnable mSendRepeatedBleMessage;
+    // A map of enrollment/unlock client write uuid -> listener
+    private final SimpleArrayMap<UUID, DataReceivedListener> mDataReceivedListeners =
+            new SimpleArrayMap<>();
 
     CarTrustAgentBleManager(Context context) {
         super(context);
     }
 
+    /**
+     * This should be called before starting unlock advertising
+     */
+    void setUniqueId(UUID uniqueId) {
+        mUniqueId = Utils.uuidToBytes(uniqueId);
+    }
+
     // Overriding some of the {@link BLEManager} methods to be specific for Trusted Device feature.
     @Override
     public void onRemoteDeviceConnected(BluetoothDevice device) {
-        if (getTrustedDeviceService() == null) {
+        if (mBleEventCallbacks.isEmpty()) {
+            Log.e(TAG, "No valid BleEventCallback for trust device.");
             return;
         }
 
@@ -135,41 +156,48 @@ class CarTrustAgentBleManager extends BleManager {
             retrieveDeviceName(device);
         }
 
-        mMessageQueue.clear();
-        mIsVersionExchanged = false;
-        getTrustedDeviceService().onRemoteDeviceConnected(device);
-        if (mSendRepeatedBleMessage != null) {
-            mHandler.removeCallbacks(mSendRepeatedBleMessage);
-            mSendRepeatedBleMessage = null;
+        if (mMessageStream != null) {
+            mMessageStream.setCallback(null);
+            mMessageStream = null;
         }
+
+        mSendMessageCallback = null;
+
+        mBleEventCallbacks.forEach(bleEventCallback ->
+                bleEventCallback.onRemoteDeviceConnected(device));
     }
 
     @Override
     public void onRemoteDeviceDisconnected(BluetoothDevice device) {
-        if (getTrustedDeviceService() != null) {
-            getTrustedDeviceService().onRemoteDeviceDisconnected(device);
+        mBleEventCallbacks.forEach(bleEventCallback ->
+                bleEventCallback.onRemoteDeviceDisconnected(device));
+
+        if (mMessageStream != null) {
+            mMessageStream.setCallback(null);
+            mMessageStream = null;
         }
 
-        mMessageQueue.clear();
-        mIsVersionExchanged = false;
-        mBleMessagePayloadStream.reset();
-
-        if (mSendRepeatedBleMessage != null) {
-            mHandler.removeCallbacks(mSendRepeatedBleMessage);
-        }
-        mSendRepeatedBleMessage = null;
+        mSendMessageCallback = null;
     }
 
     @Override
     protected void onDeviceNameRetrieved(@Nullable String deviceName) {
-        if (getTrustedDeviceService() != null) {
-            getTrustedDeviceService().onDeviceNameRetrieved(deviceName);
-        }
+        mBleEventCallbacks.forEach(bleEventCallback ->
+                bleEventCallback.onClientDeviceNameRetrieved(deviceName));
     }
 
     @Override
     protected void onMtuSizeChanged(int size) {
-        mMtuSize = size;
+        mMaxWriteSize = size - ATT_PAYLOAD_RESERVED_BYTES;
+
+        if (mMessageStream != null) {
+            mMessageStream.setMaxWriteSize(mMaxWriteSize);
+        }
+
+        if (Log.isLoggable(TAG, Log.DEBUG)) {
+            Log.d(TAG, "MTU size changed to: " + size
+                    + "; setting max payload size to: " + mMaxWriteSize);
+        }
     }
 
     @Override
@@ -181,51 +209,25 @@ class CarTrustAgentBleManager extends BleManager {
             Log.d(TAG, "onCharacteristicWrite received uuid: " + uuid);
         }
 
-        if (!mIsVersionExchanged) {
+        if (mMessageStream == null) {
             resolveBLEVersion(device, value, uuid);
             return;
         }
 
-        BLEMessage message;
-        try {
-            message = BLEMessage.parseFrom(value);
-        } catch (InvalidProtocolBufferException e) {
-            Log.e(TAG, "Can not parse BLE message", e);
+        // Retrieve the read characteristic that corresponds to the characteristic that was just
+        // written to.
+        BluetoothGattCharacteristic readCharacteristic = uuid.equals(mEnrollmentClientWriteUuid)
+                ? mEnrollmentGattService.getCharacteristic(uuid)
+                : mUnlockGattService.getCharacteristic(uuid);
+
+        // If this occurs, then there is a bug in the retrieval code above.
+        if (readCharacteristic == null) {
+            Log.e(TAG, "No characteristic corresponding to UUID (" + uuid + ") "
+                    + "that was written to. So message cannot be processed.");
             return;
         }
 
-        if (message.getOperation() == OperationType.ACK) {
-            handleClientAckMessage(device, uuid);
-            return;
-        }
-
-        // This write operation is not thread safe individually, but is guarded by the callback
-        // here.
-        try {
-            mBleMessagePayloadStream.write(message);
-        } catch (IOException e) {
-            Log.e(TAG, "Can write the BLE message's payload", e);
-            return;
-        }
-
-        if (!mBleMessagePayloadStream.isComplete()) {
-            // If it's not complete, make sure the client knows that this message was received.
-            sendAcknowledgmentMessage(device, uuid);
-            return;
-        }
-
-        if (uuid.equals(mEnrollmentClientWriteUuid)) {
-            if (getEnrollmentService() != null) {
-                getEnrollmentService().onEnrollmentDataReceived(
-                        mBleMessagePayloadStream.toByteArray());
-            }
-        } else if (uuid.equals(mUnlockClientWriteUuid)) {
-            if (getUnlockService() != null) {
-                getUnlockService().onUnlockDataReceived(mBleMessagePayloadStream.toByteArray());
-            }
-        }
-
-        mBleMessagePayloadStream.reset();
+        mMessageStream.processClientMessage(value, readCharacteristic);
     }
 
     @Override
@@ -234,69 +236,17 @@ class CarTrustAgentBleManager extends BleManager {
         // Ignored read requests.
     }
 
-    @Nullable
-    private CarTrustedDeviceService getTrustedDeviceService() {
-        if (mCarTrustedDeviceService == null) {
-            mCarTrustedDeviceService = CarLocalServices.getService(CarTrustedDeviceService.class);
-        }
-        return mCarTrustedDeviceService;
-    }
-
-    @Nullable
-    private CarTrustAgentEnrollmentService getEnrollmentService() {
-        if (mCarTrustAgentEnrollmentService != null) {
-            return mCarTrustAgentEnrollmentService;
-        }
-
-        if (getTrustedDeviceService() != null) {
-            mCarTrustAgentEnrollmentService =
-                    getTrustedDeviceService().getCarTrustAgentEnrollmentService();
-        }
-        return mCarTrustAgentEnrollmentService;
-    }
-
-    @Nullable
-    private CarTrustAgentUnlockService getUnlockService() {
-        if (mCarTrustAgentUnlockService != null) {
-            return mCarTrustAgentUnlockService;
-        }
-
-        if (getTrustedDeviceService() != null) {
-            mCarTrustAgentUnlockService = getTrustedDeviceService().getCarTrustAgentUnlockService();
-        }
-        return mCarTrustAgentUnlockService;
-    }
-
-    @Nullable
-    private byte[] getUniqueId() {
-        if (mUniqueId != null) {
-            return mUniqueId;
-        }
-
-        if (getTrustedDeviceService() != null && getTrustedDeviceService().getUniqueId() != null) {
-            mUniqueId = Utils.uuidToBytes(getTrustedDeviceService().getUniqueId());
-        }
-        return mUniqueId;
-    }
-
-    @Nullable
-    private String getEnrollmentDeviceName() {
-        if (mEnrollmentDeviceName != null) {
-            return mEnrollmentDeviceName;
-        }
-
-        if (getTrustedDeviceService() != null) {
-            mEnrollmentDeviceName = getTrustedDeviceService().getEnrollmentDeviceName();
-        }
-        return mEnrollmentDeviceName;
+    @VisibleForTesting
+    void setBleMessageRetryLimit(int limit) {
+        mBleMessageRetryLimit = limit;
     }
 
     private void resolveBLEVersion(BluetoothDevice device, byte[] value,
             UUID clientCharacteristicUUID) {
-        BluetoothGattCharacteristic characteristic =
+        BluetoothGattCharacteristic writeCharacteristic =
                 getCharacteristicForWrite(clientCharacteristicUUID);
 
-        if (characteristic == null) {
+        if (writeCharacteristic == null) {
             Log.e(TAG, "Invalid UUID (" + clientCharacteristicUUID
                     + ") during version exchange; disconnecting from remote device.");
             disconnectRemoteDevice();
@@ -312,20 +262,27 @@ class CarTrustAgentBleManager extends BleManager {
             return;
         }
 
-        if (!BLEVersionExchangeResolver.hasSupportedVersion(deviceVersion)) {
-            Log.e(TAG, "No supported version found during version exchange.");
+        mMessageStream = BLEVersionExchangeResolver.resolveToStream(
+                deviceVersion, device, getGattServer(), writeCharacteristic);
+        mMessageStream.setMaxWriteSize(mMaxWriteSize);
+        mMessageStream.setCallback(this);
+
+        if (mMessageStream == null) {
+            Log.e(TAG, "No supported version found during version exchange. "
+                    +  "Could not create message stream.");
             disconnectRemoteDevice();
             return;
         }
 
+        // The message stream is not used to send the IHU's version, but will be used for
+        // any subsequent messages.
         BLEVersionExchange headunitVersion = BLEVersionExchangeResolver.makeVersionExchange();
-        setValueOnCharacteristicAndNotify(device, headunitVersion.toByteArray(), characteristic);
+        setValueOnCharacteristicAndNotify(device, headunitVersion.toByteArray(),
+                writeCharacteristic);
 
         if (Log.isLoggable(TAG, Log.DEBUG)) {
             Log.d(TAG, "Sent supported version to the phone.");
         }
-
-        mIsVersionExchanged = true;
     }
 
     /**
@@ -347,7 +304,8 @@ class CarTrustAgentBleManager extends BleManager {
         // Characteristic the connected bluetooth device will write to.
         BluetoothGattCharacteristic clientCharacteristic =
                 new BluetoothGattCharacteristic(mEnrollmentClientWriteUuid,
-                        BluetoothGattCharacteristic.PROPERTY_WRITE,
+                        BluetoothGattCharacteristic.PROPERTY_WRITE
+                                | BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE,
                         BluetoothGattCharacteristic.PERMISSION_WRITE);
 
         // Characteristic that this manager will write to.
@@ -380,7 +338,8 @@ class CarTrustAgentBleManager extends BleManager {
         // Characteristic the connected bluetooth device will write to.
         BluetoothGattCharacteristic clientCharacteristic = new BluetoothGattCharacteristic(
                 mUnlockClientWriteUuid,
-                BluetoothGattCharacteristic.PROPERTY_WRITE,
+                BluetoothGattCharacteristic.PROPERTY_WRITE
+                        | BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE,
                 BluetoothGattCharacteristic.PERMISSION_WRITE);
 
         // Characteristic that this manager will write to.
@@ -395,6 +354,25 @@ class CarTrustAgentBleManager extends BleManager {
         mUnlockGattService.addCharacteristic(serverCharacteristic);
     }
 
+    @Override
+    public void onMessageReceivedError(UUID uuid) {
+        Log.e(TAG, "Error parsing the message from the client on UUID: " + uuid);
+    }
+
+    @Override
+    public void onMessageReceived(byte[] message, UUID uuid) {
+        if (mDataReceivedListeners.containsKey(uuid)) {
+            mDataReceivedListeners.get(uuid).onDataReceived(message);
+        }
+    }
+
+    @Override
+    public void onWriteMessageError() {
+        if (mSendMessageCallback != null) {
+            mSendMessageCallback.onSendMessageFailure();
+        }
+    }
+
     private void addDescriptorToCharacteristic(BluetoothGattCharacteristic characteristic) {
         BluetoothGattDescriptor descriptor = new BluetoothGattDescriptor(
                 CLIENT_CHARACTERISTIC_CONFIG,
@@ -403,19 +381,33 @@ class CarTrustAgentBleManager extends BleManager {
         characteristic.addDescriptor(descriptor);
     }
 
-    void startEnrollmentAdvertising() {
+    /**
+     * Begins advertising for enrollment
+     *
+     * @param deviceName device name to advertise
+     * @param enrollmentAdvertisingCallback callback for advertiser
+     */
+    void startEnrollmentAdvertising(@Nullable String deviceName,
+            AdvertiseCallback enrollmentAdvertisingCallback) {
+        if (enrollmentAdvertisingCallback == null) {
+            if (Log.isLoggable(TAG, Log.DEBUG)) {
+                Log.d(TAG, "Enrollment Advertising not started: "
+                        + "enrollmentAdvertisingCallback is null");
+            }
+            return;
+        }
         mCurrentTrustedDeviceOperation = TRUSTED_DEVICE_OPERATION_ENROLLMENT;
+        mEnrollmentAdvertisingCallback = enrollmentAdvertisingCallback;
         // Replace name to ensure it is small enough to be advertised
-        String name = getEnrollmentDeviceName();
-        if (name != null) {
+        if (deviceName != null) {
             BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
             if (mOriginalBluetoothName == null) {
                 mOriginalBluetoothName = adapter.getName();
             }
-            adapter.setName(name);
+            adapter.setName(deviceName);
             if (Log.isLoggable(TAG, Log.DEBUG)) {
                 Log.d(TAG, "Changing bluetooth adapter name from "
-                        + mOriginalBluetoothName + " to " + name);
+                        + mOriginalBluetoothName + " to " + deviceName);
             }
         }
         startAdvertising(mEnrollmentGattService,
@@ -434,15 +426,21 @@ class CarTrustAgentBleManager extends BleManager {
             }
             BluetoothAdapter.getDefaultAdapter().setName(mOriginalBluetoothName);
         }
-        stopAdvertising(mEnrollmentAdvertisingCallback);
+        if (mEnrollmentAdvertisingCallback != null) {
+            stopAdvertising(mEnrollmentAdvertisingCallback);
+        }
     }
 
     void startUnlockAdvertising() {
+        if (mUniqueId == null) {
+            Log.e(TAG, "unique id is null");
+            return;
+        }
         mCurrentTrustedDeviceOperation = TRUSTED_DEVICE_OPERATION_UNLOCK;
         startAdvertising(mUnlockGattService,
                 new AdvertiseData.Builder()
                         .setIncludeDeviceName(false)
-                        .addServiceData(new ParcelUuid(mUnlockServiceUuid), getUniqueId())
+                        .addServiceData(new ParcelUuid(mUnlockServiceUuid), mUniqueId)
                         .addServiceUuid(new ParcelUuid(mUnlockServiceUuid))
                         .build(),
                 mUnlockAdvertisingCallback);
@@ -457,137 +455,16 @@ class CarTrustAgentBleManager extends BleManager {
         stopGattServer();
     }
 
-    void sendUnlockMessage(BluetoothDevice device, byte[] message, OperationType operation,
-            boolean isPayloadEncrypted) {
-        BluetoothGattCharacteristic writeCharacteristic = mUnlockGattService
-                .getCharacteristic(mUnlockServerWriteUuid);
-
-        sendMessage(device, writeCharacteristic, message, operation, isPayloadEncrypted);
-    }
-
-    void sendEnrollmentMessage(BluetoothDevice device, byte[] message, OperationType operation,
-            boolean isPayloadEncrypted) {
-        BluetoothGattCharacteristic writeCharacteristic = mEnrollmentGattService
-                .getCharacteristic(mEnrollmentServerWriteUuid);
-
-        sendMessage(device, writeCharacteristic, message, operation, isPayloadEncrypted);
-    }
-
-    /**
-     * Handles an ACK from the client.
-     *
-     * <p>An ACK means that the client has successfully received a partial BLEMessage, meaning the
-     * next part of the message can be sent.
-     *
-     * @param device                   The client device.
-     * @param clientCharacteristicUUID The UUID of the characteristic on the device that the ACK
-     *                                 was written to.
-     */
-    private void handleClientAckMessage(BluetoothDevice device, UUID clientCharacteristicUUID) {
-        if (Log.isLoggable(TAG, Log.DEBUG)) {
-            Log.d(TAG, "Received ACK from client. Attempting to write next message in queue. "
-                    + "UUID: " + clientCharacteristicUUID);
-        }
-
-        BluetoothGattCharacteristic writeCharacteristic =
-                getCharacteristicForWrite(clientCharacteristicUUID);
-
-        if (writeCharacteristic == null) {
-            Log.e(TAG, "No corresponding write characteristic found for writing next message in"
-                    + " queue. UUID: " + clientCharacteristicUUID);
-            return;
-        }
-        if (mSendRepeatedBleMessage != null) {
-            mHandler.removeCallbacks(mSendRepeatedBleMessage);
-            mSendRepeatedBleMessage = null;
-        }
-        // Previous message has been sent successfully so we can start the next message.
-        mMessageQueue.remove();
-        writeNextMessageInQueue(device, writeCharacteristic);
-    }
-
-    /**
-     * Sends the given message to the specified device and characteristic.
-     * The message will be splited into multiple messages wrapped in BLEMessage proto.
-     *
-     * @param device             The device to send the message to.
-     * @param characteristic     The characteristic to write to.
-     * @param message            A message to send.
-     * @param operation          The type of operation this message represents.
-     * @param isPayloadEncrypted {@code true} if the message is encrypted.
-     */
-    private void sendMessage(BluetoothDevice device, BluetoothGattCharacteristic characteristic,
-            byte[] message, OperationType operation, boolean isPayloadEncrypted) {
-        if (Log.isLoggable(TAG, Log.DEBUG)) {
-            Log.d(TAG, "sendMessage to: " + device.getAddress() + "; and characteristic UUID: "
-                    + characteristic.getUuid());
-        }
-
-        List<BLEMessage> bleMessages = BLEMessageV1Factory.makeBLEMessages(message, operation,
-                mMtuSize, isPayloadEncrypted);
-
-        if (Log.isLoggable(TAG, Log.DEBUG)) {
-            Log.d(TAG, "sending " + bleMessages.size() + " messages to device");
-        }
-
-        mMessageQueue.addAll(bleMessages);
-        writeNextMessageInQueue(device, characteristic);
-    }
-
-    /**
-     * Writes the next message in {@link #mMessageQueue} to the given characteristic.
-     *
-     * <p>If the message queue is empty, then this method will do nothing.
-     */
-    private void writeNextMessageInQueue(BluetoothDevice device,
-            BluetoothGattCharacteristic characteristic) {
-        if (mMessageQueue.isEmpty()) {
-            Log.e(TAG, "Call to write next message in queue, but the message queue is empty");
-            return;
-        }
-        // When there is only one message, no ACKs are sent, so we no need to retry based on ACKs.
-        if (mMessageQueue.size() == 1) {
-            setValueOnCharacteristicAndNotify(device, mMessageQueue.remove().toByteArray(),
-                    characteristic);
-            return;
-        }
-        mBleMessageRetryStartCount = 0;
-        mSendRepeatedBleMessage = new Runnable() {
-            @Override
-            public void run() {
-                if (Log.isLoggable(TAG, Log.DEBUG)) {
-                    Log.d(TAG, "BLE message sending... " + "retry count: "
-                            + mBleMessageRetryStartCount);
-                }
-                if (mBleMessageRetryStartCount < BLE_MESSAGE_RETRY_LIMIT) {
-                    setValueOnCharacteristicAndNotify(device, mMessageQueue.peek().toByteArray(),
-                            characteristic);
-                    mBleMessageRetryStartCount++;
-                    mHandler.postDelayed(this, BLE_MESSAGE_RETRY_DELAY_MS);
-                } else {
-                    Log.e(TAG, "Error during BLE message sending - exceeded retry limit.");
-                    mHandler.removeCallbacks(this);
-                    mCarTrustAgentEnrollmentService.terminateEnrollmentHandshake();
-                    mSendRepeatedBleMessage = null;
-                }
-            }
-        };
-        mHandler.post(mSendRepeatedBleMessage);
-    }
-
-    private void sendAcknowledgmentMessage(BluetoothDevice device, UUID clientCharacteristicUUID) {
-        BluetoothGattCharacteristic writeCharacteristic =
-                getCharacteristicForWrite(clientCharacteristicUUID);
-
-        if (writeCharacteristic == null) {
-            Log.e(TAG, "No corresponding write characteristic found for sending ACK. UUID: "
-                    + clientCharacteristicUUID);
+    void sendMessage(byte[] message, OperationType operation, boolean isPayloadEncrypted,
+            SendMessageCallback callback) {
+        if (mMessageStream == null) {
+            Log.e(TAG, "Request to send message, but no valid message stream.");
             return;
         }
 
-        setValueOnCharacteristicAndNotify(device,
-                BLEMessageV1Factory.makeAcknowledgementMessage().toByteArray(),
-                writeCharacteristic);
+        mSendMessageCallback = callback;
+
+        mMessageStream.writeMessage(message, operation, isPayloadEncrypted);
     }
 
     /**
@@ -627,29 +504,6 @@ class CarTrustAgentBleManager extends BleManager {
         return null;
     }
 
-    private final AdvertiseCallback mEnrollmentAdvertisingCallback = new AdvertiseCallback() {
-        @Override
-        public void onStartSuccess(AdvertiseSettings settingsInEffect) {
-            super.onStartSuccess(settingsInEffect);
-            if (getEnrollmentService() != null) {
-                getEnrollmentService().onEnrollmentAdvertiseStartSuccess();
-            }
-            if (Log.isLoggable(TAG, Log.DEBUG)) {
-                Log.d(TAG, "Successfully started advertising service");
-            }
-        }
-
-        @Override
-        public void onStartFailure(int errorCode) {
-            Log.e(TAG, "Failed to advertise, errorCode: " + errorCode);
-
-            super.onStartFailure(errorCode);
-            if (getEnrollmentService() != null) {
-                getEnrollmentService().onEnrollmentAdvertiseStartFailure();
-            }
-        }
-    };
-
     private final AdvertiseCallback mUnlockAdvertisingCallback = new AdvertiseCallback() {
         @Override
         public void onStartSuccess(AdvertiseSettings settingsInEffect) {
@@ -673,4 +527,93 @@ class CarTrustAgentBleManager extends BleManager {
             startUnlockAdvertising();
         }
     };
+
+    /**
+     * Adds the given listener to be notified when the characteristic with the given uuid has
+     * received data.
+     */
+    void addDataReceivedListener(UUID uuid, DataReceivedListener listener) {
+        mDataReceivedListeners.put(uuid, listener);
+        if (Log.isLoggable(TAG, Log.DEBUG)) {
+            Log.d(TAG, "Register DataReceivedListener: " + listener + "for uuid "
+                    + uuid.toString());
+        }
+    }
+
+    void removeDataReceivedListener(UUID uuid) {
+        if (!mDataReceivedListeners.containsKey(uuid)) {
+            if (Log.isLoggable(TAG, Log.DEBUG)) {
+                Log.d(TAG, "No DataReceivedListener for uuid " + uuid.toString()
+                        + " to unregister.");
+            }
+            return;
+        }
+        mDataReceivedListeners.remove(uuid);
+        if (Log.isLoggable(TAG, Log.DEBUG)) {
+            Log.d(TAG, "Unregister DataReceivedListener for uuid " + uuid.toString());
+        }
+    }
+
+    void addBleEventCallback(BleEventCallback callback) {
+        mBleEventCallbacks.add(callback);
+    }
+
+    void removeBleEventCallback(BleEventCallback callback) {
+        if (!mBleEventCallbacks.remove(callback)) {
+            if (Log.isLoggable(TAG, Log.DEBUG)) {
+                Log.d(TAG, "Remove BleEventCallback that does not exist.");
+            }
+        }
+    }
+
+    /**
+     * Callback to be invoked for enrollment events
+     */
+    interface SendMessageCallback {
+
+        /**
+         * Called when enrollment handshake needs to be terminated
+         */
+        void onSendMessageFailure();
+    }
+
+    /**
+     * Callback to be invoked when BLE receives data from remote device.
+     */
+    interface DataReceivedListener {
+
+        /**
+         * Called when data has been received from a remote device.
+         *
+         * @param value received data
+         */
+        void onDataReceived(byte[] value);
+    }
+
+    /**
+     * The interface that device service has to implement to get notified when BLE events occur
+     */
+    interface BleEventCallback {
+
+        /**
+         * Called when a remote device is connected
+         *
+         * @param device the remote device
+         */
+        void onRemoteDeviceConnected(BluetoothDevice device);
+
+        /**
+         * Called when a remote device is disconnected
+         *
+         * @param device the remote device
+         */
+        void onRemoteDeviceDisconnected(BluetoothDevice device);
+
+        /**
+         * Called when the device name of the remote device is retrieved
+         *
+         * @param deviceName device name of the remote device
+         */
+        void onClientDeviceNameRetrieved(String deviceName);
+    }
 }

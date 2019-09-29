@@ -44,17 +44,19 @@ LOCAL_JAVA_LIBRARIES := \
     android.car.userlib \
     android.test.runner \
     android.test.base \
-    android.test.mock
+    android.test.mock \
+    EncryptionRunner
 
 LOCAL_STATIC_JAVA_LIBRARIES := \
     androidx.test.core \
+    androidx.test.ext.junit \
     androidx.test.rules \
     car-frameworks-service \
     car-service-lib-for-test \
     com.android.car.test.utils \
-    junit \
-    mockito-target-inline-minus-junit4 \
     frameworks-base-testutils \
+    mockito-target-extended \
+    testng \
     truth-prebuilt
 
 # mockito-target-inline dependency
