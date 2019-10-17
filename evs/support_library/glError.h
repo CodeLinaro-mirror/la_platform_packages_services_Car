@@ -17,8 +17,18 @@
 #ifndef GLERROR_H
 #define GLERROR_H
 
+namespace android {
+namespace automotive {
+namespace evs {
+namespace support {
+
 const char *getEGLError(void);
 
 const char *getGLFramebufferError(void);
 
-#endif // GLERROR_H
+}  // namespace support
+}  // namespace evs
+}  // namespace automotive
+}  // namespace android
+
+#endif  // GLERROR_H

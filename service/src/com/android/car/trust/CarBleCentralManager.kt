@@ -28,14 +28,11 @@ import android.bluetooth.le.ScanSettings
 import android.content.Context
 import android.os.ParcelUuid
 import android.util.Log
-
 import com.android.car.Utils
 import com.android.car.guard
 import com.android.internal.annotations.GuardedBy
-
 import java.math.BigInteger
 import java.util.UUID
-
 import kotlin.concurrent.thread
 
 private const val TAG = "CarBleManager"
@@ -46,7 +43,8 @@ private const val MAX_CONNECTIONS = 7
 private val CHARACTERISTIC_CONFIG = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
 
 /**
- * Extension of [BleManager] for a car as a BLE central device.
+ * Communication manager for a car that maintains continuous connections with all phones in the car
+ * for the duration of a drive.
  *
  * @param context Application's [Context].
  * @param serviceUuid [UUID] of peripheral's service.
@@ -55,13 +53,13 @@ private val CHARACTERISTIC_CONFIG = UUID.fromString("00002902-0000-1000-8000-008
  * @param readCharacteristicUuid [UUID] of characteristic the peripheral will write to.
  */
 internal class CarBleCentralManager(
-    context: Context,
+    private val context: Context,
+    private val bleCentralManager: BleCentralManager,
     private val serviceUuid: UUID,
     private val bgServiceMask: String,
     private val writeCharacteristicUuid: UUID,
     private val readCharacteristicUuid: UUID
-) : BleManager(context) {
-
+) {
     @GuardedBy("connectedDevices")
     private val connectedDevices = mutableSetOf<BleDevice>()
 
@@ -91,14 +89,14 @@ internal class CarBleCentralManager(
     }
 
     private fun startScanning() {
-        startScanning(null, scanSettings, scanCallback)
+        bleCentralManager.startScanning(null, scanSettings, scanCallback)
     }
 
     /**
      * Stop process and disconnect from any connected devices.
      */
     fun stop() {
-        stopScanning()
+        bleCentralManager.stopScanning()
         synchronized(connectedDevices) {
             connectedDevices.forEach { it.gatt.close() }
             connectedDevices.clear()
@@ -235,7 +233,7 @@ internal class CarBleCentralManager(
         }
 
         // Connect to any device that is advertising our service UUID.
-        if (result.scanRecord.serviceUuids?.contains(ParcelUuid(serviceUuid)) == true ||
+        if (result.scanRecord?.serviceUuids?.contains(ParcelUuid(serviceUuid)) == true ||
             result.containsUuidsInOverflow(parsedBgServiceBitMask)) {
             return true
         }
@@ -246,7 +244,7 @@ internal class CarBleCentralManager(
         }
 
         // Can safely ignore devices advertising unrecognized service uuids.
-        if (result.scanRecord.serviceUuids?.isNotEmpty() == true) {
+        if (result.scanRecord?.serviceUuids?.isNotEmpty() == true) {
             return false
         }
 
@@ -387,7 +385,7 @@ internal class CarBleCentralManager(
 
         // Stop scanning if we have reached the maximum connections
         if (countConnectedDevices() >= MAX_CONNECTIONS) {
-            stopScanning()
+            bleCentralManager.stopScanning()
         }
     }
 
@@ -416,7 +414,7 @@ internal class CarBleCentralManager(
         }
 
         // Start scanning if dropping down from max
-        if (!isScanning && connectedCount < MAX_CONNECTIONS) {
+        if (!bleCentralManager.isScanning() && connectedCount < MAX_CONNECTIONS) {
             startScanning()
         }
     }

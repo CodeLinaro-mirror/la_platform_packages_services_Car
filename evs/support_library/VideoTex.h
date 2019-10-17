@@ -25,42 +25,34 @@
 
 #include <android/hardware/automotive/evs/1.0/IEvsEnumerator.h>
 
-#include "TexWrapper.h"
+#include "BaseRenderCallback.h"
 #include "StreamHandler.h"
+#include "TexWrapper.h"
 
+namespace android {
+namespace automotive {
+namespace evs {
+namespace support {
 
 using namespace ::android::hardware::automotive::evs::V1_0;
 
 
 class VideoTex: public TexWrapper {
-    friend VideoTex* createVideoTexture(sp<IEvsEnumerator> pEnum,
-                                        const char * evsCameraId,
-                                        EGLDisplay glDisplay);
-
 public:
     VideoTex() = delete;
+    VideoTex(EGLDisplay glDisplay);
     virtual ~VideoTex();
 
-    bool refresh();     // returns true if the texture contents were updated
+    // returns true if the texture contents were updated
+    bool refresh(const BufferDesc& imageBuffer);
 
 private:
-    VideoTex(sp<IEvsEnumerator> pEnum,
-             sp<IEvsCamera> pCamera,
-             sp<StreamHandler> pStreamHandler,
-             EGLDisplay glDisplay);
-
-    sp<IEvsEnumerator>  mEnumerator;
-    sp<IEvsCamera>      mCamera;
-    sp<StreamHandler>   mStreamHandler;
-    BufferDesc          mImageBuffer;
-
     EGLDisplay          mDisplay;
     EGLImageKHR mKHRimage = EGL_NO_IMAGE_KHR;
 };
+}  // namespace support
+}  // namespace evs
+}  // namespace automotive
+}  // namespace android
 
-
-VideoTex* createVideoTexture(sp<IEvsEnumerator> pEnum,
-                             const char * deviceName,
-                             EGLDisplay glDisplay);
-
-#endif // VIDEOTEX_H
+#endif  // VIDEOTEX_H

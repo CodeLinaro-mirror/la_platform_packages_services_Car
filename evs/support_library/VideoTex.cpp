@@ -24,8 +24,16 @@
 
 #include "VideoTex.h"
 #include "glError.h"
+#include "StreamHandlerManager.h"
 
 #include <ui/GraphicBuffer.h>
+#include <ui/GraphicBufferAllocator.h>
+#include <ui/GraphicBufferMapper.h>
+
+namespace android {
+namespace automotive {
+namespace evs {
+namespace support {
 
 // Eventually we shouldn't need this dependency, but for now the
 // graphics allocator interface isn't fully supported on all platforms
@@ -33,25 +41,13 @@
 using ::android::GraphicBuffer;
 
 
-VideoTex::VideoTex(sp<IEvsEnumerator> pEnum,
-                   sp<IEvsCamera> pCamera,
-                   sp<StreamHandler> pStreamHandler,
-                   EGLDisplay glDisplay)
+VideoTex::VideoTex(EGLDisplay glDisplay)
     : TexWrapper()
-    , mEnumerator(pEnum)
-    , mCamera(pCamera)
-    , mStreamHandler(pStreamHandler)
     , mDisplay(glDisplay) {
     // Nothing but initialization here...
 }
 
 VideoTex::~VideoTex() {
-    // Tell the stream to stop flowing
-    mStreamHandler->asyncStopStream();
-
-    // Close the camera
-    mEnumerator->closeCamera(mCamera);
-
     // Drop our device texture image
     if (mKHRimage != EGL_NO_IMAGE_KHR) {
         eglDestroyImageKHR(mDisplay, mKHRimage);
@@ -61,51 +57,42 @@ VideoTex::~VideoTex() {
 
 
 // Return true if the texture contents are changed
-bool VideoTex::refresh() {
-    if (!mStreamHandler->newFrameAvailable()) {
-        // No new image has been delivered, so there's nothing to do here
+bool VideoTex::refresh(const BufferDesc& imageBuffer) {
+    // No new image has been delivered, so there's nothing to do here
+    if (imageBuffer.memHandle.getNativeHandle() == nullptr) {
         return false;
     }
 
-    // If we already have an image backing us, then it's time to return it
-    if (mImageBuffer.memHandle.getNativeHandle() != nullptr) {
-        // Drop our device texture image
-        if (mKHRimage != EGL_NO_IMAGE_KHR) {
-            eglDestroyImageKHR(mDisplay, mKHRimage);
-            mKHRimage = EGL_NO_IMAGE_KHR;
-        }
-
-        // Return it since we're done with it
-        mStreamHandler->doneWithFrame(mImageBuffer);
+    // Drop our device texture image
+    if (mKHRimage != EGL_NO_IMAGE_KHR) {
+        eglDestroyImageKHR(mDisplay, mKHRimage);
+        mKHRimage = EGL_NO_IMAGE_KHR;
     }
 
-    // Get the new image we want to use as our contents
-    mImageBuffer = mStreamHandler->getNewFrame();
-
-
     // create a GraphicBuffer from the existing handle
-    sp<GraphicBuffer> pGfxBuffer = new GraphicBuffer(mImageBuffer.memHandle,
-                                                     GraphicBuffer::CLONE_HANDLE,
-                                                     mImageBuffer.width, mImageBuffer.height,
-                                                     mImageBuffer.format, 1, // layer count
-                                                     GRALLOC_USAGE_HW_TEXTURE,
-                                                     mImageBuffer.stride);
-    if (pGfxBuffer.get() == nullptr) {
+    sp<GraphicBuffer> imageGraphicBuffer = new GraphicBuffer(
+        imageBuffer.memHandle, GraphicBuffer::CLONE_HANDLE, imageBuffer.width,
+        imageBuffer.height, imageBuffer.format, 1, // layer count
+        GRALLOC_USAGE_HW_TEXTURE, imageBuffer.stride);
+
+    if (imageGraphicBuffer.get() == nullptr) {
         ALOGE("Failed to allocate GraphicBuffer to wrap image handle");
         // Returning "true" in this error condition because we already released the
         // previous image (if any) and so the texture may change in unpredictable ways now!
         return true;
     }
 
+
     // Get a GL compatible reference to the graphics buffer we've been given
     EGLint eglImageAttributes[] = {EGL_IMAGE_PRESERVED_KHR, EGL_TRUE, EGL_NONE};
-    EGLClientBuffer clientBuf = static_cast<EGLClientBuffer>(pGfxBuffer->getNativeBuffer());
+    EGLClientBuffer clientBuf = static_cast<EGLClientBuffer>(imageGraphicBuffer->getNativeBuffer());
     mKHRimage = eglCreateImageKHR(mDisplay, EGL_NO_CONTEXT,
                                   EGL_NATIVE_BUFFER_ANDROID, clientBuf,
                                   eglImageAttributes);
     if (mKHRimage == EGL_NO_IMAGE_KHR) {
         const char *msg = getEGLError();
         ALOGE("error creating EGLImage: %s", msg);
+        return false;
     } else {
         // Update the texture handle we already created to refer to this gralloc buffer
         glActiveTexture(GL_TEXTURE0);
@@ -125,31 +112,7 @@ bool VideoTex::refresh() {
 
     return true;
 }
-
-
-VideoTex* createVideoTexture(sp<IEvsEnumerator> pEnum,
-                             const char* evsCameraId,
-                             EGLDisplay glDisplay) {
-    // Set up the camera to feed this texture
-    sp<IEvsCamera> pCamera = pEnum->openCamera(evsCameraId);
-    if (pCamera.get() == nullptr) {
-        ALOGE("Failed to allocate new EVS Camera interface for %s", evsCameraId);
-        return nullptr;
-    }
-
-    // Initialize the stream that will help us update this texture's contents
-    sp<StreamHandler> pStreamHandler = new StreamHandler(pCamera);
-    if (pStreamHandler.get() == nullptr) {
-        ALOGE("failed to allocate FrameHandler");
-        return nullptr;
-    }
-
-    // Start the video stream
-    if (!pStreamHandler->startStream()) {
-        printf("Couldn't start the camera stream (%s)\n", evsCameraId);
-        ALOGE("start stream failed for %s", evsCameraId);
-        return nullptr;
-    }
-
-    return new VideoTex(pEnum, pCamera, pStreamHandler, glDisplay);
-}
+}  // namespace support
+}  // namespace evs
+}  // namespace automotive
+}  // namespace android

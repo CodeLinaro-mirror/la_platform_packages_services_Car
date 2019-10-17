@@ -24,6 +24,10 @@
 #include "ConfigManager.h"
 #include "VideoTex.h"
 
+namespace android {
+namespace automotive {
+namespace evs {
+namespace support {
 
 using namespace ::android::hardware::automotive::evs::V1_0;
 
@@ -33,21 +37,21 @@ using namespace ::android::hardware::automotive::evs::V1_0;
  */
 class RenderDirectView: public RenderBase {
 public:
-    RenderDirectView(sp<IEvsEnumerator> enumerator, const ConfigManager::CameraInfo& cam);
-
     virtual bool activate() override;
     virtual void deactivate() override;
 
-    virtual bool drawFrame(const BufferDesc& tgtBuffer);
+    virtual bool drawFrame(const BufferDesc& tgtBuffer,
+                           const BufferDesc& imageBuffer) override;
 
 protected:
-    sp<IEvsEnumerator>              mEnumerator;
-    ConfigManager::CameraInfo       mCameraInfo;
-
     std::unique_ptr<VideoTex>       mTexture;
 
     GLuint                          mShaderProgram = 0;
 };
 
+}  // namespace support
+}  // namespace evs
+}  // namespace automotive
+}  // namespace android
 
 #endif //CAR_EVS_APP_RENDERDIRECTVIEW_H
