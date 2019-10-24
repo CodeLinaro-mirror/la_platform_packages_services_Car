@@ -16,16 +16,20 @@
 
 package com.android.car.user;
 
+import static com.android.car.CarLog.TAG_USER;
+
+import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.UserIdInt;
 import android.app.ActivityManager;
 import android.app.IActivityManager;
+import android.car.ICarUserService;
 import android.car.settings.CarSettings;
 import android.car.userlib.CarUserManagerHelper;
-import android.content.BroadcastReceiver;
 import android.content.Context;
-import android.content.Intent;
-import android.content.IntentFilter;
+import android.content.pm.UserInfo;
 import android.location.LocationManager;
+import android.os.Binder;
 import android.os.RemoteException;
 import android.os.UserHandle;
 import android.os.UserManager;
@@ -35,21 +39,25 @@ import android.util.Log;
 import com.android.car.CarServiceBase;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.util.Preconditions;
 
 import java.io.PrintWriter;
 import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * User service for cars. Manages users at boot time. Including:
  *
  * <ol>
+ *   <li> Creates a user used as driver.
+ *   <li> Creates a user used as passenger.
  *   <li> Creates a secondary admin user on first run.
- *   <li> Log in to the last active user.
+ *   <li> Switch drivers.
  * <ol/>
  */
-public class CarUserService extends BroadcastReceiver implements CarServiceBase {
-    private static final String TAG = "CarUserService";
+public final class CarUserService extends ICarUserService.Stub implements CarServiceBase {
     private final Context mContext;
     private final CarUserManagerHelper mCarUserManagerHelper;
     private final IActivityManager mAm;
@@ -78,16 +86,16 @@ public class CarUserService extends BroadcastReceiver implements CarServiceBase 
     /** Interface for callbacks related to user activities. */
     public interface UserCallback {
         /** Gets called when user lock status has been changed. */
-        void onUserLockChanged(int userId, boolean unlocked);
+        void onUserLockChanged(@UserIdInt int userId, boolean unlocked);
         /** Called when new foreground user started to boot. */
-        void onSwitchUser(int userId);
+        void onSwitchUser(@UserIdInt int userId);
     }
 
     public CarUserService(
-            @Nullable Context context, @Nullable CarUserManagerHelper carUserManagerHelper,
-            UserManager userManager, IActivityManager am, int maxRunningUsers) {
-        if (Log.isLoggable(TAG, Log.DEBUG)) {
-            Log.d(TAG, "constructed");
+            @NonNull Context context, @NonNull CarUserManagerHelper carUserManagerHelper,
+            @NonNull UserManager userManager, @NonNull IActivityManager am, int maxRunningUsers) {
+        if (Log.isLoggable(TAG_USER, Log.DEBUG)) {
+            Log.d(TAG_USER, "constructed");
         }
         mContext = context;
         mCarUserManagerHelper = carUserManagerHelper;
@@ -98,100 +106,202 @@ public class CarUserService extends BroadcastReceiver implements CarServiceBase 
 
     @Override
     public void init() {
-        if (Log.isLoggable(TAG, Log.DEBUG)) {
-            Log.d(TAG, "init");
+        if (Log.isLoggable(TAG_USER, Log.DEBUG)) {
+            Log.d(TAG_USER, "init");
         }
-        IntentFilter filter = new IntentFilter();
-        filter.addAction(Intent.ACTION_USER_SWITCHED);
-
-        mContext.registerReceiver(this, filter);
     }
 
     @Override
     public void release() {
-        if (Log.isLoggable(TAG, Log.DEBUG)) {
-            Log.d(TAG, "release");
+        if (Log.isLoggable(TAG_USER, Log.DEBUG)) {
+            Log.d(TAG_USER, "release");
         }
-        mContext.unregisterReceiver(this);
     }
 
     @Override
-    public void dump(PrintWriter writer) {
-        writer.println(TAG);
-        boolean user0Unlocked;
-        ArrayList<Integer> backgroundUsersToRestart;
-        ArrayList<Integer> backgroundUsersRestarted;
+    public void dump(@NonNull PrintWriter writer) {
+        writer.println("*CarUserService*");
         synchronized (mLock) {
-            user0Unlocked = mUser0Unlocked;
-            backgroundUsersToRestart = new ArrayList<>(mBackgroundUsersToRestart);
-            backgroundUsersRestarted = new ArrayList<>(mBackgroundUsersRestartedHere);
-
+            writer.println("User0Unlocked: " + mUser0Unlocked);
+            writer.println("MaxRunningUsers: " + mMaxRunningUsers);
+            writer.println("BackgroundUsersToRestart: " + mBackgroundUsersToRestart);
+            writer.println("BackgroundUsersRestarted: " + mBackgroundUsersRestartedHere);
+            writer.println("NumberOfDrivers: " + getAllDrivers().size());
         }
-        writer.println("User0Unlocked: " + user0Unlocked);
-        writer.println("maxRunningUsers:" + mMaxRunningUsers);
-        writer.println("BackgroundUsersToRestart:" + backgroundUsersToRestart);
-        writer.println("BackgroundUsersRestarted:" + backgroundUsersRestarted);
+    }
+
+    /**
+     * @see CarUserManager.createDriver
+     */
+    @Override
+    @Nullable
+    public UserInfo createDriver(@NonNull String name, boolean admin) {
+        checkManageUsersPermission("createDriver");
+        Preconditions.checkNotNull(name, "name cannot be null");
+        if (admin) {
+            return createNewAdminUser(name);
+        }
+        return mCarUserManagerHelper.createNewNonAdminUser(name);
+    }
+
+    /**
+     * @see CarUserManager.createPassenger
+     */
+    @Override
+    @Nullable
+    public UserInfo createPassenger(@NonNull String name, @UserIdInt int driverId) {
+        checkManageUsersPermission("createPassenger");
+        Preconditions.checkNotNull(name, "name cannot be null");
+        UserInfo driver = mUserManager.getUserInfo(driverId);
+        if (driver == null) {
+            Log.w(TAG_USER, "the driver is invalid");
+            return null;
+        }
+        if (driver.isGuest()) {
+            Log.w(TAG_USER, "a guest driver cannot create a passenger");
+            return null;
+        }
+        UserInfo user = mUserManager.createProfileForUser(name, UserInfo.FLAG_MANAGED_PROFILE,
+                driverId);
+        if (user == null) {
+            // Couldn't create user, most likely because there are too many.
+            Log.w(TAG_USER, "can't create a profile for user" + driverId);
+            return null;
+        }
+        // Passenger user should be a non-admin user.
+        mCarUserManagerHelper.setDefaultNonAdminRestrictions(user, /* enable= */ true);
+        mCarUserManagerHelper.assignDefaultIcon(user);
+        return user;
+    }
+
+    /**
+     * @see CarUserManager.switchDriver
+     */
+    @Override
+    public boolean switchDriver(@UserIdInt int driverId) {
+        checkManageUsersPermission("switchDriver");
+        if (driverId == UserHandle.USER_SYSTEM && UserManager.isHeadlessSystemUserMode()) {
+            // System user doesn't associate with real person, can not be switched to.
+            Log.w(TAG_USER, "switching to system user in headless system user mode is not allowed");
+            return false;
+        }
+        int userSwitchable = mUserManager.getUserSwitchability();
+        if (userSwitchable != UserManager.SWITCHABILITY_STATUS_OK) {
+            Log.w(TAG_USER, "current process is not allowed to switch user");
+            return false;
+        }
+        if (driverId == ActivityManager.getCurrentUser()) {
+            // The current user is already the given user.
+            return true;
+        }
+        try {
+            return mAm.switchUser(driverId);
+        } catch (RemoteException e) {
+            // ignore
+            Log.w(TAG_USER, "error while switching user", e);
+        }
+        return false;
+    }
+
+    /**
+     * @see CarUserManager.getAllDrivers
+     */
+    @Override
+    @NonNull
+    public List<UserInfo> getAllDrivers() {
+        checkManageUsersPermission("getAllDrivers");
+        return getUsers((user) -> {
+            return !isSystemUser(user.id) && user.isEnabled() && !user.isManagedProfile()
+                    && !user.isEphemeral();
+        });
+    }
+
+    /**
+     * @see CarUserManager.getPassengers
+     */
+    @Override
+    @NonNull
+    public List<UserInfo> getPassengers(@UserIdInt int driverId) {
+        checkManageUsersPermission("getPassengers");
+        return getUsers((user) -> {
+            return !isSystemUser(user.id) && user.isEnabled() && user.isManagedProfile()
+                    && user.profileGroupId == driverId;
+        });
+    }
+
+    /**
+     * @see CarUserManager.startPassenger
+     */
+    @Override
+    public boolean startPassenger(@UserIdInt int passengerId, int zoneId) {
+        checkManageUsersPermission("startPassenger");
+        // TODO(b/139190199): this method will be implemented when dynamic profile group is enabled.
+        return false;
+    }
+
+    /**
+     * @see CarUserManager.stopPassenger
+     */
+    @Override
+    public boolean stopPassenger(@UserIdInt int passengerId) {
+        checkManageUsersPermission("stopPassenger");
+        // TODO(b/139190199): this method will be implemented when dynamic profile group is enabled.
+        return false;
+    }
+
+    /** Returns whether the given user is a system user. */
+    private static boolean isSystemUser(@UserIdInt int userId) {
+        return userId == UserHandle.USER_SYSTEM;
     }
 
     private void updateDefaultUserRestriction() {
         // We want to set restrictions on system and guest users only once. These are persisted
         // onto disk, so it's sufficient to do it once + we minimize the number of disk writes.
         if (Settings.Global.getInt(mContext.getContentResolver(),
-                CarSettings.Global.DEFAULT_USER_RESTRICTIONS_SET, /* default= */ 0) == 0) {
-            // Only apply the system user restrictions if the system user is headless.
-            if (mCarUserManagerHelper.isHeadlessSystemUser()) {
-                setSystemUserRestrictions();
-            }
-            mCarUserManagerHelper.initDefaultGuestRestrictions();
-            Settings.Global.putInt(mContext.getContentResolver(),
-                    CarSettings.Global.DEFAULT_USER_RESTRICTIONS_SET, 1);
+                CarSettings.Global.DEFAULT_USER_RESTRICTIONS_SET, /* default= */ 0) != 0) {
+            return;
         }
+        // Only apply the system user restrictions if the system user is headless.
+        if (UserManager.isHeadlessSystemUserMode()) {
+            setSystemUserRestrictions();
+        }
+        mCarUserManagerHelper.initDefaultGuestRestrictions();
+        Settings.Global.putInt(mContext.getContentResolver(),
+                CarSettings.Global.DEFAULT_USER_RESTRICTIONS_SET, 1);
     }
 
-    @Override
-    public void onReceive(Context context, Intent intent) {
-        if (Log.isLoggable(TAG, Log.DEBUG)) {
-            Log.d(TAG, "onReceive " + intent);
-        }
-
-        if (Intent.ACTION_USER_SWITCHED.equals(intent.getAction())) {
-            // Update last active user if the switched-to user is a persistent, non-system user.
-            final int currentUser = intent.getIntExtra(Intent.EXTRA_USER_HANDLE, -1);
-            if (currentUser > UserHandle.USER_SYSTEM && isPersistentUser(currentUser)) {
-                mCarUserManagerHelper.setLastActiveUser(currentUser);
-            }
-        }
-    }
-
-    private boolean isPersistentUser(int userId) {
+    private boolean isPersistentUser(@UserIdInt int userId) {
         return !mUserManager.getUserInfo(userId).isEphemeral();
     }
 
-    /** Add callback to listen to user activity events. */
-    public void addUserCallback(UserCallback callback) {
+    /** Adds callback to listen to user activity events. */
+    public void addUserCallback(@NonNull UserCallback callback) {
+        Preconditions.checkNotNull(callback, "callback cannot be null");
         mUserCallbacks.add(callback);
     }
 
     /** Removes previously added callback to listen user events. */
-    public void removeUserCallback(UserCallback callback) {
+    public void removeUserCallback(@NonNull UserCallback callback) {
+        Preconditions.checkNotNull(callback, "callback cannot be null");
         mUserCallbacks.remove(callback);
     }
 
     /**
-     * Set user lock / unlocking status. This is coming from system server through ICar binder call.
-     * @param userHandle Handle of user
-     * @param unlocked unlocked (=true) or locked (=false)
+     * Sets user lock/unlocking status. This is coming from system server through ICar binder call.
+     *
+     * @param userId User id whoes lock status is changed.
+     * @param unlocked Unlocked (={@code true}) or locked (={@code false}).
      */
-    public void setUserLockStatus(int userHandle, boolean unlocked) {
+    public void setUserLockStatus(@UserIdInt int userId, boolean unlocked) {
         for (UserCallback callback : mUserCallbacks) {
-            callback.onUserLockChanged(userHandle, unlocked);
+            callback.onUserLockChanged(userId, unlocked);
         }
         if (!unlocked) { // nothing else to do when it is locked back.
             return;
         }
         ArrayList<Runnable> tasks = null;
         synchronized (mLock) {
-            if (userHandle == UserHandle.USER_SYSTEM) {
+            if (userId == UserHandle.USER_SYSTEM) {
                 if (!mUser0Unlocked) { // user 0, unlocked, do this only once
                     updateDefaultUserRestriction();
                     tasks = new ArrayList<>(mUser0UnlockTasks);
@@ -199,18 +309,18 @@ public class CarUserService extends BroadcastReceiver implements CarServiceBase 
                     mUser0Unlocked = unlocked;
                 }
             } else { // none user0
-                Integer user = userHandle;
-                if (isPersistentUser(userHandle)) {
+                Integer user = userId;
+                if (isPersistentUser(userId)) {
                     // current foreground user should stay in top priority.
-                    if (userHandle == mCarUserManagerHelper.getCurrentForegroundUserId()) {
+                    if (userId == ActivityManager.getCurrentUser()) {
                         mBackgroundUsersToRestart.remove(user);
                         mBackgroundUsersToRestart.add(0, user);
                     }
                     // -1 for user 0
                     if (mBackgroundUsersToRestart.size() > (mMaxRunningUsers - 1)) {
-                        final int userToDrop = mBackgroundUsersToRestart.get(
+                        int userToDrop = mBackgroundUsersToRestart.get(
                                 mBackgroundUsersToRestart.size() - 1);
-                        Log.i(TAG, "New user unlocked:" + userHandle
+                        Log.i(TAG_USER, "New user unlocked:" + userId
                                 + ", dropping least recently user from restart list:" + userToDrop);
                         // Drop the least recently used user.
                         mBackgroundUsersToRestart.remove(mBackgroundUsersToRestart.size() - 1);
@@ -219,7 +329,7 @@ public class CarUserService extends BroadcastReceiver implements CarServiceBase 
             }
         }
         if (tasks != null && tasks.size() > 0) {
-            Log.d(TAG, "User0 unlocked, run queued tasks:" + tasks.size());
+            Log.d(TAG_USER, "User0 unlocked, run queued tasks:" + tasks.size());
             for (Runnable r : tasks) {
                 r.run();
             }
@@ -227,9 +337,11 @@ public class CarUserService extends BroadcastReceiver implements CarServiceBase 
     }
 
     /**
-     * Start all background users that were active in system.
+     * Starts all background users that were active in system.
+     *
      * @return list of background users started successfully.
      */
+    @NonNull
     public ArrayList<Integer> startAllBackgroundUsers() {
         ArrayList<Integer> users;
         synchronized (mLock) {
@@ -239,7 +351,7 @@ public class CarUserService extends BroadcastReceiver implements CarServiceBase 
         }
         ArrayList<Integer> startedUsers = new ArrayList<>();
         for (Integer user : users) {
-            if (user == mCarUserManagerHelper.getCurrentForegroundUserId()) {
+            if (user == ActivityManager.getCurrentUser()) {
                 continue;
             }
             try {
@@ -250,7 +362,7 @@ public class CarUserService extends BroadcastReceiver implements CarServiceBase 
                     } else if (mAm.unlockUser(user, null, null, null)) {
                         startedUsers.add(user);
                     } else { // started but cannot unlock
-                        Log.w(TAG, "Background user started but cannot be unlocked:" + user);
+                        Log.w(TAG_USER, "Background user started but cannot be unlocked:" + user);
                         if (mUserManager.isUserRunning(user)) {
                             // add to started list so that it can be stopped later.
                             startedUsers.add(user);
@@ -259,6 +371,7 @@ public class CarUserService extends BroadcastReceiver implements CarServiceBase 
                 }
             } catch (RemoteException e) {
                 // ignore
+                Log.w(TAG_USER, "error while starting user in background", e);
             }
         }
         // Keep only users that were re-started in mBackgroundUsersRestartedHere
@@ -275,15 +388,16 @@ public class CarUserService extends BroadcastReceiver implements CarServiceBase 
     }
 
     /**
-     * Stop all background users that were active in system.
-     * @return true if stopping succeeds.
+     * Stops all background users that were active in system.
+     *
+     * @return whether stopping succeeds.
      */
-    public boolean stopBackgroundUser(int userId) {
+    public boolean stopBackgroundUser(@UserIdInt int userId) {
         if (userId == UserHandle.USER_SYSTEM) {
             return false;
         }
-        if (userId == mCarUserManagerHelper.getCurrentForegroundUserId()) {
-            Log.i(TAG, "stopBackgroundUser, already a fg user:" + userId);
+        if (userId == ActivityManager.getCurrentUser()) {
+            Log.i(TAG_USER, "stopBackgroundUser, already a FG user:" + userId);
             return false;
         }
         try {
@@ -296,11 +410,12 @@ public class CarUserService extends BroadcastReceiver implements CarServiceBase 
             } else if (r == ActivityManager.USER_OP_IS_CURRENT) {
                 return false;
             } else {
-                Log.i(TAG, "stopBackgroundUser failed, user:" + userId + " err:" + r);
+                Log.i(TAG_USER, "stopBackgroundUser failed, user:" + userId + " err:" + r);
                 return false;
             }
         } catch (RemoteException e) {
             // ignore
+            Log.w(TAG_USER, "error while stopping user", e);
         }
         return true;
     }
@@ -308,20 +423,25 @@ public class CarUserService extends BroadcastReceiver implements CarServiceBase 
     /**
      * Called when new foreground user started to boot.
      *
-     * @param userHandle user handle of new user
+     * @param userId User id of new user.
      */
-    public void onSwitchUser(int userHandle) {
+    public void onSwitchUser(@UserIdInt int userId) {
+        if (!isSystemUser(userId) && isPersistentUser(userId)) {
+            mCarUserManagerHelper.setLastActiveUser(userId);
+        }
         for (UserCallback callback : mUserCallbacks) {
-            callback.onSwitchUser(userHandle);
+            callback.onSwitchUser(userId);
         }
     }
 
     /**
-     * Run give runnable when user 0 is unlocked. If user 0 is already unlocked, it is
+     * Runs the given runnable when user 0 is unlocked. If user 0 is already unlocked, it is
      * run inside this call.
+     *
      * @param r Runnable to run.
      */
-    public void runOnUser0Unlock(Runnable r) {
+    public void runOnUser0Unlock(@NonNull Runnable r) {
+        Preconditions.checkNotNull(r, "runnable cannot be null");
         boolean runNow = false;
         synchronized (mLock) {
             if (mUser0Unlocked) {
@@ -336,8 +456,9 @@ public class CarUserService extends BroadcastReceiver implements CarServiceBase 
     }
 
     @VisibleForTesting
-    protected ArrayList<Integer> getBackgroundUsersToRestart() {
-        ArrayList<Integer> backgroundUsersToRestart;
+    @NonNull
+    ArrayList<Integer> getBackgroundUsersToRestart() {
+        ArrayList<Integer> backgroundUsersToRestart = null;
         synchronized (mLock) {
             backgroundUsersToRestart = new ArrayList<>(mBackgroundUsersToRestart);
         }
@@ -354,5 +475,69 @@ public class CarUserService extends BroadcastReceiver implements CarServiceBase 
         LocationManager locationManager =
                 (LocationManager) mContext.getSystemService(Context.LOCATION_SERVICE);
         locationManager.setLocationEnabledForUser(/* enabled= */ false, systemUserHandle);
+    }
+
+    /**
+     * Creates a new user on the system, the created user would be granted admin role.
+     *
+     * @param name Name to be given to the newly created user.
+     * @return newly created admin user, {@code null} if it fails to create a user.
+     */
+    @Nullable
+    private UserInfo createNewAdminUser(String name) {
+        if (!(mUserManager.isAdminUser() || mUserManager.isSystemUser())) {
+            // Only admins or system user can create other privileged users.
+            Log.e(TAG_USER, "Only admin users and system user can create other admins.");
+            return null;
+        }
+
+        UserInfo user = mUserManager.createUser(name, UserInfo.FLAG_ADMIN);
+        if (user == null) {
+            // Couldn't create user, most likely because there are too many.
+            Log.w(TAG_USER, "can't create admin user.");
+            return null;
+        }
+        mCarUserManagerHelper.assignDefaultIcon(user);
+
+        return user;
+    }
+
+    private interface UserFilter {
+        boolean isEligibleUser(UserInfo user);
+    }
+
+    /** Returns all users who are matched by the given filter. */
+    private List<UserInfo> getUsers(UserFilter filter) {
+        List<UserInfo> users = mUserManager.getUsers(/* excludeDying= */ true);
+
+        for (Iterator<UserInfo> iterator = users.iterator(); iterator.hasNext(); ) {
+            UserInfo user = iterator.next();
+            if (!filter.isEligibleUser(user)) {
+                iterator.remove();
+            }
+        }
+        return users;
+    }
+
+    /**
+     * Enforces that apps which have the
+     * {@link android.Manifest.permission#MANAGE_USERS MANAGE_USERS}
+     * can make certain calls to the CarUserManager.
+     *
+     * @param message used as message if SecurityException is thrown.
+     * @throws SecurityException if the caller is not system or root.
+     */
+    private static void checkManageUsersPermission(String message) {
+        int callingUid = Binder.getCallingUid();
+        if (!hasPermissionGranted(android.Manifest.permission.MANAGE_USERS, callingUid)) {
+            throw new SecurityException(
+                    "You need MANAGE_USERS permission to: " + message);
+        }
+    }
+
+    private static boolean hasPermissionGranted(String permission, int uid) {
+        return ActivityManager.checkComponentPermission(
+                permission, uid, /* owningUid = */-1, /* exported = */ true)
+                == android.content.pm.PackageManager.PERMISSION_GRANTED;
     }
 }

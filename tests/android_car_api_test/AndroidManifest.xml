@@ -18,7 +18,6 @@
         xmlns:androidprv="http://schemas.android.com/apk/prv/res/android"
         package="android.car.apitest"
         android:sharedUserId="android.uid.system"
-        coreApp="true"
         android:debuggable="true" >
 
     <instrumentation android:name="android.test.InstrumentationTestRunner"

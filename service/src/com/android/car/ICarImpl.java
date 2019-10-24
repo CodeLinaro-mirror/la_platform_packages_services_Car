@@ -38,6 +38,7 @@ import android.util.Log;
 import android.util.Slog;
 import android.util.TimingsTraceLog;
 
+import com.android.car.am.FixedActivityService;
 import com.android.car.audio.CarAudioService;
 import com.android.car.cluster.InstrumentClusterService;
 import com.android.car.garagemode.GarageModeService;
@@ -82,6 +83,7 @@ public class ICarImpl extends ICar.Stub {
     private final CarPropertyService mCarPropertyService;
     private final CarNightService mCarNightService;
     private final AppFocusService mAppFocusService;
+    private final FixedActivityService mFixedActivityService;
     private final GarageModeService mGarageModeService;
     private final InstrumentClusterService mInstrumentClusterService;
     private final CarLocationService mCarLocationService;
@@ -144,8 +146,7 @@ public class ICarImpl extends ICar.Stub {
                 mCarDrivingStateService, mCarPropertyService);
         mCarPackageManagerService = new CarPackageManagerService(serviceContext,
                 mCarUXRestrictionsService,
-                mSystemActivityMonitoringService,
-                mUserManagerHelper);
+                mSystemActivityMonitoringService);
         mPerUserCarServiceHelper = new PerUserCarServiceHelper(serviceContext);
         mCarBluetoothService = new CarBluetoothService(serviceContext, mPerUserCarServiceHelper);
         mCarInputService = new CarInputService(serviceContext, mHal.getInputHal());
@@ -155,14 +156,14 @@ public class ICarImpl extends ICar.Stub {
         mAppFocusService = new AppFocusService(serviceContext, mSystemActivityMonitoringService);
         mCarAudioService = new CarAudioService(serviceContext);
         mCarNightService = new CarNightService(serviceContext, mCarPropertyService);
+        mFixedActivityService = new FixedActivityService(serviceContext);
         mInstrumentClusterService = new InstrumentClusterService(serviceContext,
                 mAppFocusService, mCarInputService);
         mSystemStateControllerService = new SystemStateControllerService(
                 serviceContext, mCarAudioService, this);
         mVmsBrokerService = new VmsBrokerService();
         mVmsClientManager = new VmsClientManager(
-                serviceContext, mVmsBrokerService, mCarUserService, mUserManagerHelper,
-                mHal.getVmsHal());
+                serviceContext, mVmsBrokerService, mCarUserService, mHal.getVmsHal());
         mVmsSubscriberService = new VmsSubscriberService(
                 serviceContext, mVmsBrokerService, mVmsClientManager, mHal.getVmsHal());
         mVmsPublisherService = new VmsPublisherService(
@@ -172,7 +173,7 @@ public class ICarImpl extends ICar.Stub {
                 systemInterface);
         mCarConfigurationService =
                 new CarConfigurationService(serviceContext, new JsonReaderImpl());
-        mCarLocationService = new CarLocationService(mContext, mUserManagerHelper);
+        mCarLocationService = new CarLocationService(serviceContext);
         mCarTrustedDeviceService = new CarTrustedDeviceService(serviceContext);
         mCarMediaService = new CarMediaService(serviceContext);
         mCarBugreportManagerService = new CarBugreportManagerService(serviceContext);
@@ -184,6 +185,7 @@ public class ICarImpl extends ICar.Stub {
         CarLocalServices.addService(SystemInterface.class, mSystemInterface);
         CarLocalServices.addService(CarDrivingStateService.class, mCarDrivingStateService);
         CarLocalServices.addService(PerUserCarServiceHelper.class, mPerUserCarServiceHelper);
+        CarLocalServices.addService(FixedActivityService.class, mFixedActivityService);
 
         // Be careful with order. Service depending on other service should be inited later.
         List<CarServiceBase> allServices = new ArrayList<>();
@@ -201,6 +203,7 @@ public class ICarImpl extends ICar.Stub {
         allServices.add(mAppFocusService);
         allServices.add(mCarAudioService);
         allServices.add(mCarNightService);
+        allServices.add(mFixedActivityService);
         allServices.add(mInstrumentClusterService);
         allServices.add(mSystemStateControllerService);
         allServices.add(mPerUserCarServiceHelper);
@@ -258,18 +261,18 @@ public class ICarImpl extends ICar.Stub {
     }
 
     @Override
-    public void setUserLockStatus(int userHandle, int unlocked) {
+    public void setUserLockStatus(int userId, int unlocked) {
         assertCallingFromSystemProcess();
-        mCarUserService.setUserLockStatus(userHandle, unlocked == 1);
-        mCarMediaService.setUserLockStatus(userHandle, unlocked == 1);
+        mCarUserService.setUserLockStatus(userId, unlocked == 1);
+        mCarMediaService.setUserLockStatus(userId, unlocked == 1);
     }
 
     @Override
-    public void onSwitchUser(int userHandle) {
+    public void onSwitchUser(int userId) {
         assertCallingFromSystemProcess();
 
-        Log.i(TAG, "Foreground user switched to " + userHandle);
-        mCarUserService.onSwitchUser(userHandle);
+        Log.i(TAG, "Foreground user switched to " + userId);
+        mCarUserService.onSwitchUser(userId);
     }
 
     static void assertCallingFromSystemProcess() {
@@ -357,6 +360,8 @@ public class ICarImpl extends ICar.Stub {
                 return mCarOccupantZoneService;
             case Car.CAR_BUGREPORT_SERVICE:
                 return mCarBugreportManagerService;
+            case Car.CAR_USER_SERVICE:
+                return mCarUserService;
             default:
                 Log.w(CarLog.TAG_SERVICE, "getCarService for unknown service:" + serviceName);
                 return null;
@@ -729,8 +734,7 @@ public class ICarImpl extends ICar.Stub {
                     break;
                 case COMMAND_REMOVE_TRUSTED_DEVICES:
                     mCarTrustedDeviceService.getCarTrustAgentEnrollmentService()
-                            .removeAllTrustedDevices(
-                                    mUserManagerHelper.getCurrentForegroundUserId());
+                            .removeAllTrustedDevices(ActivityManager.getCurrentUser());
                     break;
                 case COMMAND_SET_UID_TO_ZONE:
                     if (args.length != 3) {

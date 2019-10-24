@@ -16,8 +16,8 @@
 
 package com.android.car.vms;
 
+import android.app.ActivityManager;
 import android.car.Car;
-import android.car.userlib.CarUserManagerHelper;
 import android.car.vms.IVmsPublisherClient;
 import android.car.vms.IVmsSubscriberClient;
 import android.content.BroadcastReceiver;
@@ -73,7 +73,6 @@ public class VmsClientManager implements CarServiceBase {
     private final Handler mHandler;
     private final UserManager mUserManager;
     private final CarUserService mUserService;
-    private final CarUserManagerHelper mUserManagerHelper;
     private final int mMillisBeforeRebind;
     private final IntSupplier mGetCallingUid;
 
@@ -116,7 +115,7 @@ public class VmsClientManager implements CarServiceBase {
         public void onReceive(Context context, Intent intent) {
             if (DBG) Log.d(TAG, "Received " + intent);
             synchronized (mLock) {
-                int currentUserId = mUserManagerHelper.getCurrentForegroundUserId();
+                int currentUserId = ActivityManager.getCurrentUser();
                 if (mCurrentUser != currentUserId) {
                     terminate(mCurrentUserClients);
                     terminate(mSubscribers.values().stream()
@@ -139,27 +138,24 @@ public class VmsClientManager implements CarServiceBase {
      * @param context           Context to use for registering receivers and binding services.
      * @param brokerService     Service managing the VMS publisher/subscriber state.
      * @param userService       User service for registering system unlock listener.
-     * @param userManagerHelper User manager for querying current user state.
      * @param halService        Service providing the HAL client interface
      */
     public VmsClientManager(Context context, VmsBrokerService brokerService,
-            CarUserService userService, CarUserManagerHelper userManagerHelper,
-            VmsHalService halService) {
-        this(context, brokerService, userService, userManagerHelper, halService,
-                Binder::getCallingUid);
+            CarUserService userService, VmsHalService halService) {
+        this(context, brokerService, userService, halService,
+                new Handler(Looper.getMainLooper()), Binder::getCallingUid);
     }
 
     @VisibleForTesting
     VmsClientManager(Context context, VmsBrokerService brokerService,
-            CarUserService userService, CarUserManagerHelper userManagerHelper,
-            VmsHalService halService, IntSupplier getCallingUid) {
+            CarUserService userService, VmsHalService halService, Handler handler,
+            IntSupplier getCallingUid) {
         mContext = context;
         mPackageManager = context.getPackageManager();
-        mHandler = new Handler(Looper.getMainLooper());
+        mHandler = handler;
         mUserManager = (UserManager) mContext.getSystemService(Context.USER_SERVICE);
         mUserService = userService;
-        mUserManagerHelper = userManagerHelper;
-        mCurrentUser = mUserManagerHelper.getCurrentForegroundUserId();
+        mCurrentUser = ActivityManager.getCurrentUser();
         mBrokerService = brokerService;
         mMillisBeforeRebind = mContext.getResources().getInteger(
                 com.android.car.R.integer.millisecondsBeforeRebindToVmsPublisher);
@@ -286,9 +282,11 @@ public class VmsClientManager implements CarServiceBase {
      * Returns all active subscriber clients.
      */
     public Collection<IVmsSubscriberClient> getAllSubscribers() {
-        return mSubscribers.values().stream()
-                .map(subscriber -> subscriber.mClient)
-                .collect(Collectors.toList());
+        synchronized (mLock) {
+            return mSubscribers.values().stream()
+                    .map(subscriber -> subscriber.mClient)
+                    .collect(Collectors.toList());
+        }
     }
 
     /**
