@@ -22,18 +22,13 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Matchers.any;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import android.app.ActivityManager;
-import android.content.BroadcastReceiver;
 import android.content.Context;
-import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.pm.UserInfo;
 import android.os.Bundle;
-import android.os.Handler;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.provider.Settings;
@@ -48,7 +43,6 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
-import org.mockito.Mockito;
 import org.mockito.junit.MockitoJUnit;
 import org.mockito.junit.MockitoRule;
 
@@ -63,7 +57,6 @@ import java.util.List;
  * 1. {@link Context} provides system services and resources.
  * 2. {@link UserManager} provides dummy users and user info.
  * 3. {@link ActivityManager} to verify user switch is invoked.
- * 4. {@link CarUserManagerHelper.OnUsersUpdateListener} registers a listener for user updates.
  */
 @RunWith(AndroidJUnit4.class)
 @SmallTest
@@ -72,7 +65,6 @@ public class CarUserManagerHelperTest {
     @Mock private Context mContext;
     @Mock private UserManager mUserManager;
     @Mock private ActivityManager mActivityManager;
-    @Mock private CarUserManagerHelper.OnUsersUpdateListener mTestListener;
     @Mock private TestableFrameworkWrapper mTestableFrameworkWrapper;
 
     private static final String GUEST_USER_NAME = "testGuest";
@@ -83,7 +75,6 @@ public class CarUserManagerHelperTest {
     private UserInfo mCurrentProcessUser;
     private UserInfo mSystemUser;
     private int mForegroundUserId;
-    private UserInfo mForegroundUser;
 
     @Before
     public void setUpMocksAndVariables() {
@@ -105,115 +96,10 @@ public class CarUserManagerHelperTest {
         // We cannot mock the foreground user since getCurrentUser is static.
         // We cannot rely on foreground_id != system_id, they could be the same user.
         mForegroundUserId = ActivityManager.getCurrentUser();
-        mForegroundUser = createUserInfoForId(mForegroundUserId);
 
         // Clear boot override for every test by returning the default value passed to the method
         when(mTestableFrameworkWrapper.getBootUserOverrideId(anyInt()))
                 .thenAnswer(stub -> stub.getArguments()[0]);
-    }
-
-    @Test
-    public void checkHeadlessSystemUserFlag() {
-        // Make sure the headless system user flag is on.
-        assertThat(mCarUserManagerHelper.isHeadlessSystemUser()).isTrue();
-    }
-
-    // System user will not be returned when calling get all users.
-    @Test
-    public void testHeadlessUser0GetAllUsers_NotReturnSystemUser() {
-        UserInfo otherUser1 = createUserInfoForId(10);
-        UserInfo otherUser2 = createUserInfoForId(11);
-        UserInfo otherUser3 = createUserInfoForId(12);
-
-        mockGetUsers(mSystemUser, otherUser1, otherUser2, otherUser3);
-
-        assertThat(mCarUserManagerHelper.getAllUsers())
-                .containsExactly(otherUser1, otherUser2, otherUser3);
-    }
-
-    @Test
-    public void testGetAllSwitchableUsers() {
-        // Create two non-foreground users.
-        UserInfo user1 = createUserInfoForId(mForegroundUserId + 1);
-        UserInfo user2 = createUserInfoForId(mForegroundUserId + 2);
-
-        mockGetUsers(mForegroundUser, user1, user2);
-
-        // Should return all non-foreground users.
-        assertThat(mCarUserManagerHelper.getAllSwitchableUsers()).containsExactly(user1, user2);
-    }
-
-    @Test
-    public void testGetAllPersistentUsers() {
-        // Create two non-ephemeral users.
-        UserInfo user1 = createUserInfoForId(mForegroundUserId);
-        UserInfo user2 = createUserInfoForId(mForegroundUserId + 1);
-        // Create two ephemeral users.
-        UserInfo user3 = new UserInfo(
-                /* id= */mForegroundUserId + 2, /* name = */ "user3", UserInfo.FLAG_EPHEMERAL);
-        UserInfo user4 = new UserInfo(
-                /* id= */mForegroundUserId + 3, /* name = */ "user4", UserInfo.FLAG_EPHEMERAL);
-
-        mockGetUsers(user1, user2, user3, user4);
-
-        // Should return all non-ephemeral users.
-        assertThat(mCarUserManagerHelper.getAllPersistentUsers()).containsExactly(user1, user2);
-    }
-
-    @Test
-    public void testGetAllAdminUsers() {
-        // Create two admin, and two non-admin users.
-        UserInfo user1 = new UserInfo(/* id= */ 10, /* name = */ "user10", UserInfo.FLAG_ADMIN);
-        UserInfo user2 = createUserInfoForId(11);
-        UserInfo user3 = createUserInfoForId(12);
-        UserInfo user4 = new UserInfo(/* id= */ 13, /* name = */ "user13", UserInfo.FLAG_ADMIN);
-
-        mockGetUsers(user1, user2, user3, user4);
-
-        // Should return only admin users.
-        assertThat(mCarUserManagerHelper.getAllAdminUsers()).containsExactly(user1, user4);
-    }
-
-    @Test
-    public void testGetAllUsersExceptGuests() {
-        // Create two users and a guest user.
-        UserInfo user1 = createUserInfoForId(10);
-        UserInfo user2 = createUserInfoForId(12);
-        UserInfo user3 = new UserInfo(/* id= */ 13, /* name = */ "user13", UserInfo.FLAG_GUEST);
-
-        mockGetUsers(user1, user2, user3);
-
-        // Should not return guests.
-        assertThat(mCarUserManagerHelper.getAllUsersExceptGuests())
-                .containsExactly(user1, user2);
-    }
-
-    @Test
-    public void testCurrentGuestProcessCannotModifyAccounts() {
-        assertThat(mCarUserManagerHelper.canCurrentProcessModifyAccounts()).isTrue();
-
-        doReturn(true).when(mUserManager).isGuestUser();
-
-        assertThat(mCarUserManagerHelper.canCurrentProcessModifyAccounts()).isFalse();
-    }
-
-    @Test
-    public void testCurrentDemoProcessCannotModifyAccounts() {
-        assertThat(mCarUserManagerHelper.canCurrentProcessModifyAccounts()).isTrue();
-
-        doReturn(true).when(mUserManager).isDemoUser();
-
-        assertThat(mCarUserManagerHelper.canCurrentProcessModifyAccounts()).isFalse();
-    }
-
-    @Test
-    public void testCurrentDisallowModifyAccountsProcessIsEnforced() {
-        assertThat(mCarUserManagerHelper.canCurrentProcessModifyAccounts()).isTrue();
-
-        doReturn(true).when(mUserManager)
-                .hasUserRestriction(UserManager.DISALLOW_MODIFY_ACCOUNTS);
-
-        assertThat(mCarUserManagerHelper.canCurrentProcessModifyAccounts()).isFalse();
     }
 
     @Test
@@ -234,49 +120,6 @@ public class CarUserManagerHelperTest {
 
         // Max users - # managed profiles - headless system user.
         assertThat(mCarUserManagerHelper.getMaxSupportedRealUsers()).isEqualTo(3);
-    }
-
-    @Test
-    public void testHeadlessSystemUser_IsUserLimitReached() {
-        UserInfo user1 = createUserInfoForId(10);
-        UserInfo user2 =
-                new UserInfo(/* id= */ 11, /* name = */ "user11", UserInfo.FLAG_MANAGED_PROFILE);
-        UserInfo user3 =
-                new UserInfo(/* id= */ 12, /* name = */ "user12", UserInfo.FLAG_MANAGED_PROFILE);
-        UserInfo user4 = createUserInfoForId(13);
-
-        mockGetUsers(mSystemUser, user1, user2, user3, user4);
-
-        setMaxSupportedUsers(6);
-        assertThat(mCarUserManagerHelper.isUserLimitReached()).isFalse();
-
-        setMaxSupportedUsers(5);
-        assertThat(mCarUserManagerHelper.isUserLimitReached()).isTrue();
-    }
-
-    @Test
-    public void testIsUserLimitReachedIgnoresGuests() {
-        setMaxSupportedUsers(6);
-
-        UserInfo user1 = createUserInfoForId(10);
-        UserInfo user2 =
-                new UserInfo(/* id= */ 11, /* name = */ "user11", UserInfo.FLAG_MANAGED_PROFILE);
-        UserInfo user3 =
-                new UserInfo(/* id= */ 12, /* name = */ "user12", UserInfo.FLAG_MANAGED_PROFILE);
-        UserInfo user4 = createUserInfoForId(13);
-        UserInfo user5 = new UserInfo(/* id= */ 14, /* name = */ "user14", UserInfo.FLAG_GUEST);
-        UserInfo user6 = createUserInfoForId(15);
-
-        mockGetUsers(user1, user2, user3, user4);
-        assertThat(mCarUserManagerHelper.isUserLimitReached()).isFalse();
-
-        // Add guest user. Verify it doesn't affect the limit.
-        mockGetUsers(user1, user2, user3, user4, user5);
-        assertThat(mCarUserManagerHelper.isUserLimitReached()).isFalse();
-
-        // Add normal user. Limit is reached
-        mockGetUsers(user1, user2, user3, user4, user5, user6);
-        assertThat(mCarUserManagerHelper.isUserLimitReached()).isTrue();
     }
 
     @Test
@@ -491,146 +334,6 @@ public class CarUserManagerHelperTest {
 
         verify(mUserManager).setUserRestriction(
                 UserManager.DISALLOW_FACTORY_RESET, restrictionEnabled, UserHandle.of(testUserId));
-    }
-
-    @Test
-    public void testRegisterUserChangeReceiver() {
-        mCarUserManagerHelper.registerOnUsersUpdateListener(mTestListener);
-
-        ArgumentCaptor<BroadcastReceiver> receiverCaptor =
-                ArgumentCaptor.forClass(BroadcastReceiver.class);
-        ArgumentCaptor<UserHandle> handleCaptor = ArgumentCaptor.forClass(UserHandle.class);
-        ArgumentCaptor<IntentFilter> filterCaptor = ArgumentCaptor.forClass(IntentFilter.class);
-        ArgumentCaptor<String> permissionCaptor = ArgumentCaptor.forClass(String.class);
-        ArgumentCaptor<Handler> handlerCaptor = ArgumentCaptor.forClass(Handler.class);
-
-        verify(mContext).registerReceiverAsUser(
-                receiverCaptor.capture(),
-                handleCaptor.capture(),
-                filterCaptor.capture(),
-                permissionCaptor.capture(),
-                handlerCaptor.capture());
-
-        // Verify we're listening to Intents from ALL users.
-        assertThat(handleCaptor.getValue()).isEqualTo(UserHandle.ALL);
-
-        // Verify the presence of each intent in the filter.
-        // Verify the exact number of filters. Every time a new intent is added, this test should
-        // get updated.
-        assertThat(filterCaptor.getValue().countActions()).isEqualTo(6);
-        assertThat(filterCaptor.getValue().hasAction(Intent.ACTION_USER_REMOVED)).isTrue();
-        assertThat(filterCaptor.getValue().hasAction(Intent.ACTION_USER_ADDED)).isTrue();
-        assertThat(filterCaptor.getValue().hasAction(Intent.ACTION_USER_INFO_CHANGED)).isTrue();
-        assertThat(filterCaptor.getValue().hasAction(Intent.ACTION_USER_SWITCHED)).isTrue();
-        assertThat(filterCaptor.getValue().hasAction(Intent.ACTION_USER_STOPPED)).isTrue();
-        assertThat(filterCaptor.getValue().hasAction(Intent.ACTION_USER_UNLOCKED)).isTrue();
-
-        // Verify that calling the receiver calls the listener.
-        receiverCaptor.getValue().onReceive(mContext, new Intent());
-        verify(mTestListener).onUsersUpdate();
-
-        assertThat(permissionCaptor.getValue()).isNull();
-        assertThat(handlerCaptor.getValue()).isNull();
-
-        // Unregister the receiver.
-        mCarUserManagerHelper.unregisterOnUsersUpdateListener(mTestListener);
-        verify(mContext).unregisterReceiver(receiverCaptor.getValue());
-    }
-
-    @Test
-    public void testMultipleRegistrationsOfSameListener() {
-        CarUserManagerHelper.OnUsersUpdateListener listener =
-                Mockito.mock(CarUserManagerHelper.OnUsersUpdateListener.class);
-
-        ArgumentCaptor<BroadcastReceiver> receiverCaptor =
-                ArgumentCaptor.forClass(BroadcastReceiver.class);
-
-        mCarUserManagerHelper.registerOnUsersUpdateListener(listener);
-        mCarUserManagerHelper.registerOnUsersUpdateListener(listener);
-        // Even for multiple registrations of the same listener, broadcast receiver registered once.
-        verify(mContext, times(1))
-                .registerReceiverAsUser(receiverCaptor.capture(), any(), any(), any(), any());
-
-        // Verify that calling the receiver calls the listener.
-        receiverCaptor.getValue().onReceive(mContext, new Intent());
-        verify(listener).onUsersUpdate();
-
-        // Verify that a single removal unregisters the listener.
-        mCarUserManagerHelper.unregisterOnUsersUpdateListener(listener);
-        verify(mContext).unregisterReceiver(any());
-    }
-
-    @Test
-    public void testMultipleUnregistrationsOfTheSameListener() {
-        CarUserManagerHelper.OnUsersUpdateListener listener =
-                Mockito.mock(CarUserManagerHelper.OnUsersUpdateListener.class);
-        mCarUserManagerHelper.registerOnUsersUpdateListener(listener);
-
-        // Verify that a multiple unregistrations cause only one unregister for broadcast receiver.
-        mCarUserManagerHelper.unregisterOnUsersUpdateListener(listener);
-        mCarUserManagerHelper.unregisterOnUsersUpdateListener(listener);
-        mCarUserManagerHelper.unregisterOnUsersUpdateListener(listener);
-        verify(mContext, times(1)).unregisterReceiver(any());
-    }
-
-    @Test
-    public void testUnregisterReceiverCalledAfterAllListenersUnregister() {
-        CarUserManagerHelper.OnUsersUpdateListener listener1 =
-                Mockito.mock(CarUserManagerHelper.OnUsersUpdateListener.class);
-        CarUserManagerHelper.OnUsersUpdateListener listener2 =
-                Mockito.mock(CarUserManagerHelper.OnUsersUpdateListener.class);
-
-        mCarUserManagerHelper.registerOnUsersUpdateListener(listener1);
-        mCarUserManagerHelper.registerOnUsersUpdateListener(listener2);
-
-        mCarUserManagerHelper.unregisterOnUsersUpdateListener(listener1);
-        verify(mContext, never()).unregisterReceiver(any());
-
-        mCarUserManagerHelper.unregisterOnUsersUpdateListener(listener2);
-        verify(mContext, times(1)).unregisterReceiver(any());
-    }
-
-    @Test
-    public void testRegisteringMultipleListeners() {
-        CarUserManagerHelper.OnUsersUpdateListener listener1 =
-                Mockito.mock(CarUserManagerHelper.OnUsersUpdateListener.class);
-        CarUserManagerHelper.OnUsersUpdateListener listener2 =
-                Mockito.mock(CarUserManagerHelper.OnUsersUpdateListener.class);
-        ArgumentCaptor<BroadcastReceiver> receiverCaptor =
-                ArgumentCaptor.forClass(BroadcastReceiver.class);
-
-        mCarUserManagerHelper.registerOnUsersUpdateListener(listener1);
-        mCarUserManagerHelper.registerOnUsersUpdateListener(listener2);
-        verify(mContext, times(1))
-                .registerReceiverAsUser(receiverCaptor.capture(), any(), any(), any(), any());
-
-        // Verify that calling the receiver calls both listeners.
-        receiverCaptor.getValue().onReceive(mContext, new Intent());
-        verify(listener1).onUsersUpdate();
-        verify(listener2).onUsersUpdate();
-    }
-
-    @Test
-    public void testUnregisteringListenerStopsUpdatesForListener() {
-        CarUserManagerHelper.OnUsersUpdateListener listener1 =
-                Mockito.mock(CarUserManagerHelper.OnUsersUpdateListener.class);
-        CarUserManagerHelper.OnUsersUpdateListener listener2 =
-                Mockito.mock(CarUserManagerHelper.OnUsersUpdateListener.class);
-        ArgumentCaptor<BroadcastReceiver> receiverCaptor =
-                ArgumentCaptor.forClass(BroadcastReceiver.class);
-
-        mCarUserManagerHelper.registerOnUsersUpdateListener(listener1);
-        mCarUserManagerHelper.registerOnUsersUpdateListener(listener2);
-        verify(mContext, times(1))
-                .registerReceiverAsUser(receiverCaptor.capture(), any(), any(), any(), any());
-
-        // Unregister listener2
-        mCarUserManagerHelper.unregisterOnUsersUpdateListener(listener2);
-
-        // Verify that calling the receiver calls only one listener.
-        receiverCaptor.getValue().onReceive(mContext, new Intent());
-        verify(listener1).onUsersUpdate();
-        verify(listener2, never()).onUsersUpdate();
     }
 
     @Test

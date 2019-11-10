@@ -21,10 +21,7 @@ import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
 import android.app.ActivityManager;
-import android.content.BroadcastReceiver;
 import android.content.Context;
-import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.pm.UserInfo;
 import android.graphics.Bitmap;
 import android.os.Bundle;
@@ -37,7 +34,6 @@ import android.text.TextUtils;
 import android.util.Log;
 
 import com.android.internal.annotations.VisibleForTesting;
-import com.android.internal.os.RoSystemProperties;
 import com.android.internal.util.UserIcons;
 
 import com.google.android.collect.Sets;
@@ -100,20 +96,6 @@ public final class CarUserManagerHelper {
     private final TestableFrameworkWrapper mTestableFrameworkWrapper;
     private String mDefaultAdminName;
     private Bitmap mDefaultGuestUserIcon;
-    private ArrayList<OnUsersUpdateListener> mUpdateListeners;
-    private final BroadcastReceiver mUserChangeReceiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            ArrayList<OnUsersUpdateListener> copyOfUpdateListeners;
-            synchronized (mUpdateListeners) {
-                copyOfUpdateListeners = new ArrayList(mUpdateListeners);
-            }
-
-            for (OnUsersUpdateListener listener : copyOfUpdateListeners) {
-                listener.onUsersUpdate();
-            }
-        }
-    };
 
     /**
      * Initializes with a default name for admin users.
@@ -126,52 +108,10 @@ public final class CarUserManagerHelper {
 
     @VisibleForTesting
     CarUserManagerHelper(Context context, TestableFrameworkWrapper testableFrameworkWrapper) {
-        mUpdateListeners = new ArrayList<>();
         mContext = context.getApplicationContext();
         mUserManager = (UserManager) mContext.getSystemService(Context.USER_SERVICE);
         mActivityManager = (ActivityManager) mContext.getSystemService(Context.ACTIVITY_SERVICE);
         mTestableFrameworkWrapper = testableFrameworkWrapper;
-    }
-
-    /**
-     * Registers a listener for updates to all users - removing, adding users or changing user info.
-     *
-     * @param listener Instance of {@link OnUsersUpdateListener}.
-     */
-    public void registerOnUsersUpdateListener(OnUsersUpdateListener listener) {
-        if (listener == null) {
-            return;
-        }
-
-        synchronized (mUpdateListeners) {
-            if (mUpdateListeners.isEmpty()) {
-                // First listener being added, register receiver.
-                registerReceiver();
-            }
-
-            if (!mUpdateListeners.contains(listener)) {
-                mUpdateListeners.add(listener);
-            }
-        }
-    }
-
-    /**
-     * Unregisters on user update listener.
-     * Unregisters {@code BroadcastReceiver} if no listeners remain.
-     *
-     * @param listener Instance of {@link OnUsersUpdateListener} to unregister.
-     */
-    public void unregisterOnUsersUpdateListener(OnUsersUpdateListener listener) {
-        synchronized (mUpdateListeners) {
-            if (mUpdateListeners.contains(listener)) {
-                mUpdateListeners.remove(listener);
-
-                if (mUpdateListeners.isEmpty()) {
-                    // No more listeners, unregister broadcast receiver.
-                    unregisterReceiver();
-                }
-            }
-        }
     }
 
     /**
@@ -221,10 +161,8 @@ public final class CarUserManagerHelper {
         // If an override user is present and a real user, return it
         if (bootUserOverride != BOOT_USER_NOT_FOUND
                 && allUsers.contains(bootUserOverride)) {
-            if (Log.isLoggable(TAG, Log.DEBUG)) {
-                Log.d(TAG, "Boot user id override found for initial user, user id: "
-                        + bootUserOverride);
-            }
+            Log.i(TAG, "Boot user id override found for initial user, user id: "
+                    + bootUserOverride);
             return bootUserOverride;
         }
 
@@ -232,19 +170,15 @@ public final class CarUserManagerHelper {
         int lastActiveUser = getLastActiveUser();
         if (lastActiveUser != UserHandle.USER_SYSTEM
                 && allUsers.contains(lastActiveUser)) {
-            if (Log.isLoggable(TAG, Log.DEBUG)) {
-                Log.d(TAG, "Last active user loaded for initial user, user id: "
-                        + lastActiveUser);
-            }
+            Log.i(TAG, "Last active user loaded for initial user, user id: "
+                    + lastActiveUser);
             return lastActiveUser;
         }
 
         // If all else fails, return the smallest user id
         int returnId = Collections.min(allUsers);
-        if (Log.isLoggable(TAG, Log.DEBUG)) {
-            Log.d(TAG, "Saved ids were invalid. Returning smallest user id, user id: "
-                    + returnId);
-        }
+        Log.i(TAG, "Saved ids were invalid. Returning smallest user id, user id: "
+                + returnId);
         return returnId;
     }
 
@@ -270,15 +204,6 @@ public final class CarUserManagerHelper {
     }
 
     /**
-     * Returns {@code true} if the system is in the headless user 0 model.
-     *
-     * @return {@boolean true} if headless system user.
-     */
-    public boolean isHeadlessSystemUser() {
-        return RoSystemProperties.MULTIUSER_HEADLESS_SYSTEM_USER;
-    }
-
-    /**
      * Gets UserInfo for the current foreground user.
      *
      * Concept of foreground user is relevant for the multi-user deployment. Foreground user
@@ -287,52 +212,7 @@ public final class CarUserManagerHelper {
      * @return {@link UserInfo} for the foreground user.
      */
     public UserInfo getCurrentForegroundUserInfo() {
-        return mUserManager.getUserInfo(getCurrentForegroundUserId());
-    }
-
-    /**
-     * @return Id of the current foreground user.
-     */
-    public int getCurrentForegroundUserId() {
-        return mActivityManager.getCurrentUser();
-    }
-
-    /**
-     * Gets UserInfo for the user running the caller process.
-     *
-     * <p>Differentiation between foreground user and current process user is relevant for
-     * multi-user deployments.
-     *
-     * <p>Some multi-user aware components (like SystemUI) needs to run a singleton component
-     * in system user. Current process user is always the same for that component, even when
-     * the foreground user changes.
-     *
-     * @return {@link UserInfo} for the user running the current process.
-     */
-    public UserInfo getCurrentProcessUserInfo() {
-        return mUserManager.getUserInfo(getCurrentProcessUserId());
-    }
-
-    /**
-     * @return Id for the user running the current process.
-     */
-    public int getCurrentProcessUserId() {
-        return UserHandle.myUserId();
-    }
-
-    /**
-     * Gets all the existing users on the system that are not currently running as
-     * the foreground user.
-     * These are all the users that can be switched to from the foreground user.
-     *
-     * @return List of {@code UserInfo} for each user that is not the foreground user.
-     */
-    public List<UserInfo> getAllSwitchableUsers() {
-        if (isHeadlessSystemUser()) {
-            return getAllUsersExceptSystemUserAndSpecifiedUser(getCurrentForegroundUserId());
-        } else {
-            return getAllUsersExceptSpecifiedUser(getCurrentForegroundUserId());
-        }
+        return mUserManager.getUserInfo(ActivityManager.getCurrentUser());
     }
 
     /**
@@ -340,8 +220,8 @@ public final class CarUserManagerHelper {
      *
      * @return List of {@code UserInfo} for users that associated with a real person.
      */
-    public List<UserInfo> getAllUsers() {
-        if (isHeadlessSystemUser()) {
+    private List<UserInfo> getAllUsers() {
+        if (UserManager.isHeadlessSystemUserMode()) {
             return getAllUsersExceptSystemUserAndSpecifiedUser(UserHandle.USER_SYSTEM);
         } else {
             return mUserManager.getUsers(/* excludeDying= */ true);
@@ -353,7 +233,7 @@ public final class CarUserManagerHelper {
      *
      * @return List of {@code UserInfo} for non-ephemeral users that associated with a real person.
      */
-    public List<UserInfo> getAllPersistentUsers() {
+    private List<UserInfo> getAllPersistentUsers() {
         List<UserInfo> users = getAllUsers();
         for (Iterator<UserInfo> iterator = users.iterator(); iterator.hasNext(); ) {
             UserInfo userInfo = iterator.next();
@@ -370,7 +250,7 @@ public final class CarUserManagerHelper {
      *
      * @return List of {@code UserInfo} for admin users that associated with a real person.
      */
-    public List<UserInfo> getAllAdminUsers() {
+    private List<UserInfo> getAllAdminUsers() {
         List<UserInfo> users = getAllUsers();
 
         for (Iterator<UserInfo> iterator = users.iterator(); iterator.hasNext(); ) {
@@ -388,32 +268,13 @@ public final class CarUserManagerHelper {
      *
      * @return List of {@code UserInfo} for all users who are not guest users.
      */
-    public List<UserInfo> getAllUsersExceptGuests() {
+    private List<UserInfo> getAllUsersExceptGuests() {
         List<UserInfo> users = getAllUsers();
 
         for (Iterator<UserInfo> iterator = users.iterator(); iterator.hasNext(); ) {
             UserInfo userInfo = iterator.next();
             if (userInfo.isGuest()) {
                 // Remove guests.
-                iterator.remove();
-            }
-        }
-        return users;
-    }
-
-    /**
-     * Get all the users except the one with userId passed in.
-     *
-     * @param userId of the user not to be returned.
-     * @return All users other than user with userId.
-     */
-    private List<UserInfo> getAllUsersExceptSpecifiedUser(int userId) {
-        List<UserInfo> users = mUserManager.getUsers(/* excludeDying= */true);
-
-        for (Iterator<UserInfo> iterator = users.iterator(); iterator.hasNext(); ) {
-            UserInfo userInfo = iterator.next();
-            if (userInfo.id == userId) {
-                // Remove user with userId from the list.
                 iterator.remove();
             }
         }
@@ -448,7 +309,7 @@ public final class CarUserManagerHelper {
      * @return Maximum number of users that can be present on the device.
      */
     private int getMaxSupportedUsers() {
-        if (isHeadlessSystemUser()) {
+        if (UserManager.isHeadlessSystemUserMode()) {
             return mTestableFrameworkWrapper.userManagerGetMaxSupportedUsers() - 1;
         }
         return mTestableFrameworkWrapper.userManagerGetMaxSupportedUsers();
@@ -465,21 +326,6 @@ public final class CarUserManagerHelper {
      */
     public int getMaxSupportedRealUsers() {
         return getMaxSupportedUsers() - getManagedProfilesCount();
-    }
-
-    /**
-     * Returns true if the maximum number of users on the device has been reached, false otherwise.
-     */
-    public boolean isUserLimitReached() {
-        int countNonGuestUsers = getAllUsersExceptGuests().size();
-        int maxSupportedUsers = getMaxSupportedUsers();
-
-        if (countNonGuestUsers > maxSupportedUsers) {
-            Log.e(TAG, "There are more users on the device than allowed.");
-            return true;
-        }
-
-        return getAllUsersExceptGuests().size() == maxSupportedUsers;
     }
 
     private int getManagedProfilesCount() {
@@ -503,8 +349,8 @@ public final class CarUserManagerHelper {
      * @param userInfo User to check.
      * @return {@code true} if user running the process, {@code false} otherwise.
      */
-    public boolean isCurrentProcessUser(UserInfo userInfo) {
-        return getCurrentProcessUserId() == userInfo.id;
+    private boolean isCurrentProcessUser(UserInfo userInfo) {
+        return UserHandle.myUserId() == userInfo.id;
     }
 
     // Foreground user information accessors.
@@ -517,14 +363,7 @@ public final class CarUserManagerHelper {
      */
     private boolean foregroundUserHasUserRestriction(String restriction) {
         return mUserManager.hasUserRestriction(
-                restriction, UserHandle.of(getCurrentForegroundUserId()));
-    }
-
-    /**
-     * Checks if the foreground user can add new users.
-     */
-    public boolean canForegroundUserAddUsers() {
-        return !foregroundUserHasUserRestriction(UserManager.DISALLOW_ADD_USER);
+                restriction, UserHandle.of(ActivityManager.getCurrentUser()));
     }
 
     /**
@@ -544,26 +383,6 @@ public final class CarUserManagerHelper {
     // Current process user restriction accessors
 
     /**
-     * Return whether the user running the current process has a restriction.
-     *
-     * @param restriction Restriction to check. Should be a UserManager.* restriction.
-     * @return Whether that restriction exists for the user running the process.
-     */
-    public boolean isCurrentProcessUserHasRestriction(String restriction) {
-        return mUserManager.hasUserRestriction(restriction);
-    }
-
-    /**
-     * Checks if the current process user can modify accounts. Demo and Guest users cannot modify
-     * accounts even if the DISALLOW_MODIFY_ACCOUNTS restriction is not applied.
-     */
-    public boolean canCurrentProcessModifyAccounts() {
-        return !isCurrentProcessUserHasRestriction(UserManager.DISALLOW_MODIFY_ACCOUNTS)
-            && !mUserManager.isDemoUser()
-            && !mUserManager.isGuestUser();
-    }
-
-    /**
      * Returns whether the current process user can switch to other users.
      *
      * <p>For instance switching users is not allowed if the user is in a phone call,
@@ -573,7 +392,7 @@ public final class CarUserManagerHelper {
         boolean inIdleCallState = TelephonyManager.getDefault().getCallState()
                 == TelephonyManager.CALL_STATE_IDLE;
         boolean disallowUserSwitching =
-                isCurrentProcessUserHasRestriction(UserManager.DISALLOW_USER_SWITCH);
+                mUserManager.hasUserRestriction(UserManager.DISALLOW_USER_SWITCH);
         return (inIdleCallState && !disallowUserSwitching);
     }
 
@@ -658,7 +477,7 @@ public final class CarUserManagerHelper {
      * @param userInfo User to set restrictions on.
      * @param enable If true, restriction is ON, If false, restriction is OFF.
      */
-    private void setDefaultNonAdminRestrictions(UserInfo userInfo, boolean enable) {
+    public void setDefaultNonAdminRestrictions(UserInfo userInfo, boolean enable) {
         for (String restriction : DEFAULT_NON_ADMIN_RESTRICTIONS) {
             mUserManager.setUserRestriction(restriction, enable, userInfo.getUserHandle());
         }
@@ -703,7 +522,7 @@ public final class CarUserManagerHelper {
             return false;
         }
 
-        if (userInfo.id == getCurrentForegroundUserId()) {
+        if (userInfo.id == ActivityManager.getCurrentUser()) {
             if (!canCurrentProcessSwitchUsers()) {
                 // If we can't switch to a different user, we can't exit this one and therefore
                 // can't delete it.
@@ -739,14 +558,14 @@ public final class CarUserManagerHelper {
      * @return {@code true} if user switching succeed.
      */
     public boolean switchToUserId(int id) {
-        if (id == UserHandle.USER_SYSTEM && isHeadlessSystemUser()) {
+        if (id == UserHandle.USER_SYSTEM && UserManager.isHeadlessSystemUserMode()) {
             // System User doesn't associate with real person, can not be switched to.
             return false;
         }
         if (!canCurrentProcessSwitchUsers()) {
             return false;
         }
-        if (id == getCurrentForegroundUserId()) {
+        if (id == ActivityManager.getCurrentUser()) {
             return false;
         }
         return mActivityManager.switchUser(id);
@@ -853,27 +672,17 @@ public final class CarUserManagerHelper {
         return picture;
     }
 
-    private void registerReceiver() {
-        IntentFilter filter = new IntentFilter();
-        filter.addAction(Intent.ACTION_USER_REMOVED);
-        filter.addAction(Intent.ACTION_USER_ADDED);
-        filter.addAction(Intent.ACTION_USER_INFO_CHANGED);
-        filter.addAction(Intent.ACTION_USER_SWITCHED);
-        filter.addAction(Intent.ACTION_USER_STOPPED);
-        filter.addAction(Intent.ACTION_USER_UNLOCKED);
-        mContext.registerReceiverAsUser(mUserChangeReceiver, UserHandle.ALL, filter, null, null);
-    }
-
-    // Assigns a default icon to a user according to the user's id.
-    private Bitmap assignDefaultIcon(UserInfo userInfo) {
+    /**
+     * Assigns a default icon to a user according to the user's id.
+     *
+     * @param userInfo User whose avatar is set to default icon.
+     * @return Bitmap of the user icon.
+     */
+    public Bitmap assignDefaultIcon(UserInfo userInfo) {
         Bitmap bitmap = userInfo.isGuest()
                 ? getGuestDefaultIcon() : getUserDefaultIcon(userInfo);
         mUserManager.setUserIcon(userInfo.id, bitmap);
         return bitmap;
-    }
-
-    private void unregisterReceiver() {
-        mContext.unregisterReceiver(mUserChangeReceiver);
     }
 
     private String getDefaultAdminName() {
@@ -886,16 +695,5 @@ public final class CarUserManagerHelper {
     @VisibleForTesting
     void setDefaultAdminName(String defaultAdminName) {
         mDefaultAdminName = defaultAdminName;
-    }
-
-    /**
-     * Interface for listeners that want to register for receiving updates to changes to the users
-     * on the system including removing and adding users, and changing user info.
-     */
-    public interface OnUsersUpdateListener {
-        /**
-         * Method that will get called when users list has been changed.
-         */
-        void onUsersUpdate();
     }
 }
