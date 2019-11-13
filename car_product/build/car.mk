@@ -35,8 +35,7 @@ PRODUCT_PACKAGES += \
     VmsPublisherClientSample \
     VmsSubscriberClientSample \
     android.car.cluster.loggingrenderer \
-    #DirectRenderingClusterSample \
->>>>>>> ef4eabe4a252f47e7c6c60f9dc3f3f5441eb33d1
+    DirectRenderingClusterSample \
 
 PRODUCT_COPY_FILES := \
     frameworks/av/media/libeffects/data/audio_effects.conf:system/etc/audio_effects.conf \
@@ -76,8 +75,21 @@ PRODUCT_PROPERTY_OVERRIDES += \
 # Automotive specific packages
 PRODUCT_PACKAGES += \
     vehicle_monitor_service \
+    CarService \
+    CarTrustAgentService \
+    CarDialerApp \
+    CarRadioApp \
+    OverviewApp \
+    CarLensPickerApp \
     LocalMediaPlayer \
-    libvehiclemonitor-native
+    CarMediaApp \
+    CarMessengerApp \
+    CarHvacApp \
+    CarMapsPlaceholder \
+    CarLatinIME \
+    CarUsbHandler \
+    android.car \
+    libvehiclemonitor-native \
 
 # Boot animation
 PRODUCT_COPY_FILES += \
