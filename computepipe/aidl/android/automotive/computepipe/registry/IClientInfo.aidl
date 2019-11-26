@@ -13,20 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package android.automotive.computepipe.registry;
 
-package com.android.car.trust
-
-/**
- * View model representing a connected device.
- *
- * @param deviceId Id of the connected device.
- * @param deviceName Name of the connected device. [null] if not known.
- * @param belongsToActiveUser User associated with this device is currently in the foreground.
- * @param hasSecureChannel `true` if a secure channel is available for this device.
- */
-data class ConnectedDevice internal constructor(
-    val deviceId: String,
-    val deviceName: String?,
-    val belongsToActiveUser: Boolean,
-    val hasSecureChannel: Boolean
-)
+interface IClientInfo {
+    /**
+     * Retrieve the ID assigned to the client
+     */
+    int getClientId();
+}

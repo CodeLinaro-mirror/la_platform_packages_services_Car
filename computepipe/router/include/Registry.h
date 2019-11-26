@@ -16,8 +16,6 @@
 #ifndef ANDROID_AUTOMOTIVE_COMPUTEPIPE_ROUTER_REGISTRY
 #define ANDROID_AUTOMOTIVE_COMPUTEPIPE_ROUTER_REGISTRY
 
-#include <hidl/Status.h>
-
 #include <list>
 #include <memory>
 #include <mutex>
@@ -47,6 +45,10 @@ enum Error {
     BAD_PERMISSION = -5,
     // Bad args
     BAD_ARGUMENTS = -6,
+    // no memory
+    NOMEM = -7,
+    // Internal error
+    INTERNAL_ERR = -8,
 };
 
 /**
@@ -65,7 +67,7 @@ class PipeRegistry {
      */
     std::unique_ptr<PipeHandle<T>> getClientPipeHandle(const std::string& name,
                                                        std::unique_ptr<ClientHandle> clientHandle) {
-        if (!clientHandle) {
+        if (!clientHandle || !clientHandle->startClientMonitor()) {
             return nullptr;
         }
         return getPipeHandle(name, std::move(clientHandle));
@@ -82,12 +84,18 @@ class PipeRegistry {
     Error RegisterPipe(std::unique_ptr<PipeHandle<T>> h, const std::string& name) {
         std::lock_guard<std::mutex> lock(mPipeDbLock);
         if (mPipeRunnerDb.find(name) == mPipeRunnerDb.end()) {
+            if (!h->startPipeMonitor()) {
+                return RUNNER_DEAD;
+            }
             mPipeRunnerDb.emplace(
                 name, std::unique_ptr<PipeContext<T>>(new PipeContext<T>(std::move(h), name)));
             return OK;
         }
         if (!mPipeRunnerDb[name]->isAlive()) {
             mPipeRunnerDb.erase(name);
+            if (!h->startPipeMonitor()) {
+                return RUNNER_DEAD;
+            }
             mPipeRunnerDb.emplace(
                 name, std::unique_ptr<PipeContext<T>>(new PipeContext<T>(std::move(h), name)));
             return OK;

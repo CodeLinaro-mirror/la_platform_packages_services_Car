@@ -54,7 +54,6 @@ import com.google.android.car.kitchensink.cube.CubesTestFragment;
 import com.google.android.car.kitchensink.diagnostic.DiagnosticTestFragment;
 import com.google.android.car.kitchensink.displayinfo.DisplayInfoFragment;
 import com.google.android.car.kitchensink.hvac.HvacTestFragment;
-import com.google.android.car.kitchensink.input.InputTestFragment;
 import com.google.android.car.kitchensink.notification.NotificationFragment;
 import com.google.android.car.kitchensink.orientation.OrientationTestFragment;
 import com.google.android.car.kitchensink.power.PowerTestFragment;
@@ -65,6 +64,7 @@ import com.google.android.car.kitchensink.storagelifetime.StorageLifetimeFragmen
 import com.google.android.car.kitchensink.storagevolumes.StorageVolumesFragment;
 import com.google.android.car.kitchensink.touch.TouchTestFragment;
 import com.google.android.car.kitchensink.users.UsersFragment;
+import com.google.android.car.kitchensink.vehiclectrl.VehicleCtrlFragment;
 import com.google.android.car.kitchensink.vhal.VehicleHalFragment;
 import com.google.android.car.kitchensink.volume.VolumeTestFragment;
 import com.google.android.car.kitchensink.weblinks.WebLinksTestFragment;
@@ -172,7 +172,8 @@ public class KitchenSinkActivity extends FragmentActivity {
             new FragmentMenuEntry("display info", DisplayInfoFragment.class),
             new FragmentMenuEntry("hvac", HvacTestFragment.class),
             new FragmentMenuEntry("inst cluster", InstrumentClusterFragment.class),
-            new FragmentMenuEntry("input test", InputTestFragment.class),
+            // TODO (b/141774865) Enable after b/141635607 is fixed
+            // new FragmentMenuEntry("input test", InputTestFragment.class),
             new FragmentMenuEntry("notification", NotificationFragment.class),
             new FragmentMenuEntry("orientation test", OrientationTestFragment.class),
             new FragmentMenuEntry("power test", PowerTestFragment.class),
@@ -184,6 +185,7 @@ public class KitchenSinkActivity extends FragmentActivity {
             new FragmentMenuEntry("touch test", TouchTestFragment.class),
             new FragmentMenuEntry("users", UsersFragment.class),
             new FragmentMenuEntry("volume test", VolumeTestFragment.class),
+            new FragmentMenuEntry("vehicle ctrl", VehicleCtrlFragment.class),
             new FragmentMenuEntry("vehicle hal", VehicleHalFragment.class),
             new FragmentMenuEntry("web links", WebLinksTestFragment.class)
     );
