@@ -39,6 +39,7 @@ PRODUCT_PACKAGES += \
     EmbeddedKitchenSinkApp \
     VmsPublisherClientSample \
     VmsSubscriberClientSample \
+    DirectRenderingCluster \
     GarageModeTestApp \
 
 # SEPolicy for test apps / services
