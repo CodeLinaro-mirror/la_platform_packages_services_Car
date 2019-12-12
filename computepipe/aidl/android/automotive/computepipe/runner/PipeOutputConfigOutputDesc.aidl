@@ -20,6 +20,7 @@ import android.automotive.computepipe.runner.PipeOutputConfigPacketType;
 /**
  * Output descriptor
  */
+@VintfStability
 parcelable PipeOutputConfigOutputDesc {
     /**
      * name of the output stream
@@ -30,4 +31,3 @@ parcelable PipeOutputConfigOutputDesc {
      */
     PipeOutputConfigPacketType type;
 }
-

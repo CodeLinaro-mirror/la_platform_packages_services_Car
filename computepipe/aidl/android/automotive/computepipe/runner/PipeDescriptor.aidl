@@ -36,22 +36,23 @@ import android.automotive.computepipe.runner.PipeOutputConfig;
  *
  * This descriptor is returned by the HAL to the client.
  */
+@VintfStability
 parcelable PipeDescriptor {
     /**
-     * input configurations supported by the graph
+     * input configurations supported by the graph.
      */
-    PipeInputConfig inputConfig;
+    PipeInputConfig[] inputConfig;
     /**
-     * Offload options supported by the graph
+     * Offload options supported by the graph.
      */
-    PipeOffloadConfig offloadConfig;
+    PipeOffloadConfig[] offloadConfig;
     /**
-     * Termination options supported by the graph
+     * Termination options supported by the graph.
      */
-    PipeTerminationConfig terminationConfig;
+    PipeTerminationConfig[] terminationConfig;
     /**
-     * Output streams supported by the
+     * Output streams supported by the graph.
      */
-    PipeOutputConfig outputConfig;
+    PipeOutputConfig[] outputConfig;
 }
 

@@ -20,7 +20,17 @@ import android.automotive.computepipe.runner.IPipeStateCallback;
 import android.automotive.computepipe.runner.IPipeStream;
 import android.automotive.computepipe.runner.IPipeDebugger;
 
+@VintfStability
 interface IPipeRunner {
+    /**
+     * Init the runner
+     *
+     * @param statecb state handler to notify client of different state
+     * transitions in the runner. The runner deletes this callback after release
+     * is invoked. This is the first call that should be invoked by the client
+     */
+    void init(in IPipeStateCallback statecb);
+
     /**
      * Returns the descriptor for the associated mediapipe
      *
@@ -60,19 +70,6 @@ interface IPipeRunner {
      * @param out if termination criteria was supported then returns OK.
      */
     void setPipeTermination(in int configId);
-
-    /**
-     * Set the state notification callback.
-     * This callback will be triggered to notify the client about the state
-     * transitions of a graph.
-     * This should be invoked prior to calling startMediaPipe or any other
-     * setPipe*() methods.
-     *
-     * @param: stateHandler that is a callback to notify client about graph
-     * state
-     * @param out OK void if setting state handler was successful
-     */
-    void setPipeStateCallback(in IPipeStateCallback stateCb);
 
     /**
      * Enable a output stream and install call back for packets from that

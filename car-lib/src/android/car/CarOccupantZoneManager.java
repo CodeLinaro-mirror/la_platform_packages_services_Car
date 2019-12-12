@@ -19,6 +19,7 @@ package android.car;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.UserIdInt;
 import android.hardware.display.DisplayManager;
 import android.os.Handler;
 import android.os.IBinder;
@@ -39,7 +40,6 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -277,7 +277,7 @@ public class CarOccupantZoneManager extends CarManagerBase {
     @NonNull
     public List<OccupantZoneInfo> getAllOccupantZones() {
         try {
-            return Arrays.asList(mService.getAllOccupantZones());
+            return mService.getAllOccupantZones();
         } catch (RemoteException e) {
             return handleRemoteExceptionFromCarService(e, Collections.emptyList());
         }
@@ -350,6 +350,7 @@ public class CarOccupantZoneManager extends CarManagerBase {
      * Returns android user id assigned for the given zone. It will return
      * {@link UserHandle#USER_NULL} if user is not assigned or if zone is not available.
      */
+    @UserIdInt
     public int getUserForOccupant(@NonNull OccupantZoneInfo occupantZone) {
         assertNonNullOccupant(occupantZone);
         try {
