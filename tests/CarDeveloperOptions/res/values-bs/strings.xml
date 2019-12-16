@@ -732,7 +732,7 @@
       <item quantity="other"><xliff:g id="COUNT_1">%d</xliff:g> aktivnih aplikacija</item>
     </plurals>
     <string name="manage_trust_agents" msgid="8129970926213142261">"Pouzdani agenti"</string>
-    <string name="disabled_because_no_backup_security" msgid="8127039979909203528">"Da biste koristili, prvo postavite zaključavanje ekrana"</string>
+    <string name="disabled_because_no_backup_security" msgid="8127039979909203528">"Da ovo koristite, prvo postavite zaključavanje ekrana"</string>
     <string name="manage_trust_agents_summary" msgid="2023116850759962248">"Nema"</string>
     <plurals name="manage_trust_agents_summary_on" formatted="false" msgid="5550538038916606097">
       <item quantity="one"><xliff:g id="COUNT">%d</xliff:g> aktivni pouzdani agent</item>
@@ -2057,7 +2057,7 @@
     <string name="audio_and_captions_category_title" msgid="6140472938769619212">"Zvuk i tekst na ekranu"</string>
     <string name="display_category_title" msgid="545168481672250195">"Prikaz"</string>
     <string name="interaction_control_category_title" msgid="8775039211811947683">"Kontrole za interakciju"</string>
-    <string name="user_installed_services_category_title" msgid="4288689493753221319">"Preuzeti servisi"</string>
+    <string name="user_installed_services_category_title" msgid="4288689493753221319">"Preuzete usluge"</string>
     <string name="experimental_category_title" msgid="3797000069740110717">"Eksperimentalno"</string>
     <string name="feature_flags_dashboard_title" msgid="3153034144122754381">"Oznake funkcija"</string>
     <string name="talkback_title" msgid="3717960404234260050">"Talkback"</string>
@@ -2180,7 +2180,7 @@
     <string name="captioning_foreground_opacity" msgid="7635639017810117478">"Prozirnost teksta"</string>
     <string name="captioning_edge_color" msgid="4330622137047993780">"Boja rubova"</string>
     <string name="captioning_edge_type" msgid="4414946407430588162">"Vrsta rubova"</string>
-    <string name="captioning_typeface" msgid="7893208796949341767">"Skup fontova"</string>
+    <string name="captioning_typeface" msgid="7893208796949341767">"Porodica fontova"</string>
     <string name="captioning_preview_text" msgid="4877753964772618049">"Stilovi će izgledati ovako"</string>
     <string name="captioning_preview_characters" msgid="6469599599352973561">"Aa"</string>
     <string name="locale_default" msgid="910074908458214054">"Zadano"</string>
@@ -3763,7 +3763,7 @@
     <string name="high_power_system" msgid="739584574711292753">"Optimizacija baterije je nedostupna"</string>
     <string name="high_power_desc" msgid="333756885680362741">"Ne primjenjuje se optimizacija baterije. Tako se baterija može brže isprazniti."</string>
     <string name="high_power_prompt_title" msgid="2805745781720454052">"Dopustiti aplikaciji da uvijek radi u pozadini?"</string>
-    <string name="high_power_prompt_body" msgid="8067395096053552289">"Ako aplikaciji <xliff:g id="APP_NAME">%1$s</xliff:g> dopustite da uvijek radi u pozadini, može se skratiti vijek trajanja baterije. \n\nTo možete promijeniti kasnije ako odete u Postavke &gt; Aplikacije i obavještenja."</string>
+    <string name="high_power_prompt_body" msgid="8067395096053552289">"Ako aplikaciji <xliff:g id="APP_NAME">%1$s</xliff:g> dozvolite da uvijek radi u pozadini, može se skratiti vijek trajanja baterije. \n\nTo možete promijeniti kasnije ako odete u Postavke &gt; Aplikacije i obavještenja."</string>
     <string name="battery_summary" msgid="4345690800899981339">"<xliff:g id="PERCENTAGE">%1$s</xliff:g> iskorištenosti od posljednje potpune napunjenosti"</string>
     <string name="battery_power_management" msgid="2853925857548647969">"Upravljanje napajanjem"</string>
     <string name="no_battery_summary" msgid="4105932628367471314">"Nema potrošnje baterije od prošlog potpunog punjenja"</string>
