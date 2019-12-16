@@ -90,15 +90,12 @@ PRODUCT_PACKAGES += \
     CarRadioApp \
     OverviewApp \
     CarLauncher \
-    CarLensPickerApp \
     LocalMediaPlayer \
     CarMediaApp \
     CarMessengerApp \
-    CarHvacApp \
     CarMapsPlaceholder \
     CarLatinIME \
     CarSettings \
-    CarUsbHandler \
     android.car \
     car-frameworks-service \
     com.android.car.procfsinspector \

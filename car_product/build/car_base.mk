@@ -23,13 +23,10 @@ PRODUCT_PACKAGES += \
     ContactsProvider \
     DefaultContainerService \
     Home \
-    BasicDreams \
-    CaptivePortalLogin \
     CertInstaller \
     DocumentsUI \
     DownloadProviderUi \
     FusedLocation \
-    InputDevices \
     KeyChain \
     Keyguard \
     LatinIME \
@@ -42,7 +39,6 @@ PRODUCT_PACKAGES += \
     Settings \
     SharedStorageBackup \
     VpnDialogs \
-    MmsService \
     ExternalStorageProvider \
     atrace \
     libandroidfw \
