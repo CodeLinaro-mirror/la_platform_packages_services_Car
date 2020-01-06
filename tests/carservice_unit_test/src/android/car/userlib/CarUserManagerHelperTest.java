@@ -27,18 +27,17 @@ import static org.mockito.Mockito.when;
 import android.app.ActivityManager;
 import android.content.Context;
 import android.content.pm.UserInfo;
-import android.os.Bundle;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.provider.Settings;
 
 import androidx.test.InstrumentationRegistry;
+import androidx.test.filters.FlakyTest;
 import androidx.test.filters.SmallTest;
 
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnitRunner;
 
@@ -164,30 +163,6 @@ public class CarUserManagerHelperTest {
 
         verify(mUserManager).setUserRestriction(
                 UserManager.DISALLOW_FACTORY_RESET, /* enable= */ true, UserHandle.of(userId));
-        verify(mUserManager).setUserRestriction(
-                UserManager.DISALLOW_SMS, /* enable= */ false, UserHandle.of(userId));
-        verify(mUserManager).setUserRestriction(
-                UserManager.DISALLOW_OUTGOING_CALLS, /* enable= */ false, UserHandle.of(userId));
-    }
-
-    @Test
-    public void testDefaultGuestRestrictions() {
-        int guestRestrictionsExpectedCount = 6;
-
-        ArgumentCaptor<Bundle> bundleCaptor = ArgumentCaptor.forClass(Bundle.class);
-        mCarUserManagerHelper.initDefaultGuestRestrictions();
-
-        verify(mUserManager).setDefaultGuestRestrictions(bundleCaptor.capture());
-        Bundle guestRestrictions = bundleCaptor.getValue();
-
-        assertThat(guestRestrictions.keySet()).hasSize(guestRestrictionsExpectedCount);
-        assertThat(guestRestrictions.getBoolean(UserManager.DISALLOW_FACTORY_RESET)).isTrue();
-        assertThat(guestRestrictions.getBoolean(UserManager.DISALLOW_REMOVE_USER)).isTrue();
-        assertThat(guestRestrictions.getBoolean(UserManager.DISALLOW_MODIFY_ACCOUNTS)).isTrue();
-        assertThat(guestRestrictions.getBoolean(UserManager.DISALLOW_INSTALL_APPS)).isTrue();
-        assertThat(guestRestrictions.getBoolean(UserManager.DISALLOW_INSTALL_UNKNOWN_SOURCES))
-                .isTrue();
-        assertThat(guestRestrictions.getBoolean(UserManager.DISALLOW_UNINSTALL_APPS)).isTrue();
     }
 
     @Test
@@ -234,6 +209,7 @@ public class CarUserManagerHelperTest {
     }
 
     @Test
+    @FlakyTest
     public void test_GetInitialUserWithOverrideId_ReturnsOverrideId() {
         int lastActiveUserId = 12;
         int overrideUserId = 11;

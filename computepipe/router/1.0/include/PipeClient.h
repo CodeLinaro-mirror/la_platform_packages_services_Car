@@ -17,12 +17,15 @@
 #ifndef ANDROID_AUTOMOTIVE_COMPUTEPIPE_ROUTER_V1_0_PIPECLIENT
 #define ANDROID_AUTOMOTIVE_COMPUTEPIPE_ROUTER_V1_0_PIPECLIENT
 
-#include <android/automotive/computepipe/registry/IClientInfo.h>
+#include <aidl/android/automotive/computepipe/registry/IClientInfo.h>
+#include <android/binder_auto_utils.h>
 
 #include <functional>
+#include <memory>
 #include <mutex>
 
 #include "ClientHandle.h"
+#include "RemoteState.h"
 
 namespace android {
 namespace automotive {
@@ -32,39 +35,23 @@ namespace V1_0 {
 namespace implementation {
 
 /**
- * Tracks Client Death
- */
-struct ClientMonitor : public IBinder::DeathRecipient {
-  public:
-    /* override method to track client death */
-    virtual void binderDied(const wp<android::IBinder>& base) override;
-    /* query for client death */
-    bool isAlive();
-
-  private:
-    std::function<void()> mHandleCb;
-    bool mAlive = true;
-    std::mutex mStateLock;
-};
-
-/**
  * PipeClient: Encapsulated the IPC interface to the client.
  *
  * Allows for querrying the client state
  */
 class PipeClient : public ClientHandle {
   public:
-    explicit PipeClient(const sp<android::automotive::computepipe::registry::IClientInfo>& info)
-        : mClientInfo(info) {
-    }
+    explicit PipeClient(
+        const std::shared_ptr<aidl::android::automotive::computepipe::registry::IClientInfo>& info);
     bool startClientMonitor() override;
     uint32_t getClientId() override;
     bool isAlive() override;
     ~PipeClient();
 
   private:
-    sp<ClientMonitor> mClientMonitor;
-    sp<android::automotive::computepipe::registry::IClientInfo> mClientInfo;
+    ::ndk::ScopedAIBinder_DeathRecipient mDeathMonitor;
+    std::shared_ptr<RemoteState> mState;
+    const std::shared_ptr<aidl::android::automotive::computepipe::registry::IClientInfo> mClientInfo;
 };
 
 }  // namespace implementation

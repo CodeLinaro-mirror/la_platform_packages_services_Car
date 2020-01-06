@@ -16,13 +16,13 @@
 #define COMPUTEPIPE_RUNNER_UTILS_RUNNERINTERFACECALLBACKS_H_
 
 #include <functional>
+#include <memory>
 #include <string>
 
-#include "RunnerInterface.h"
 #include "ConfigurationCommand.pb.h"
 #include "ControlCommand.pb.h"
+#include "MemHandle.h"
 #include "types/Status.h"
-#include "runner/stream_manager/MemHandle.h"
 
 namespace android {
 namespace automotive {
@@ -32,12 +32,12 @@ namespace runner_utils {
 struct RunnerInterfaceCallbacks {
     explicit RunnerInterfaceCallbacks(
         std::function<Status(const proto::ControlCommand&)> processControlCommand,
-        std::function<Status(const proto::ConfigurationCommand&)>
-            processConfigurationCommand,
-        std::function<Status(const std::shared_ptr<MemHandle>&)> releasePacket) :
-            mProcessControlCommand(processControlCommand),
-            mProcessConfigurationCommand(processConfigurationCommand),
-            mReleasePacket(releasePacket) {}
+        std::function<Status(const proto::ConfigurationCommand&)> processConfigurationCommand,
+        std::function<Status(const std::shared_ptr<MemHandle>&)> releasePacket)
+        : mProcessControlCommand(processControlCommand),
+          mProcessConfigurationCommand(processConfigurationCommand),
+          mReleasePacket(releasePacket) {
+    }
 
     const std::function<Status(const proto::ControlCommand&)> mProcessControlCommand;
     const std::function<Status(const proto::ConfigurationCommand&)>

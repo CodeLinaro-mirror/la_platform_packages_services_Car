@@ -22,6 +22,7 @@ import android.car.hardware.power.ICarPower;
 import android.car.hardware.power.ICarPowerStateListener;
 import android.car.userlib.CarUserManagerHelper;
 import android.content.Context;
+import android.content.res.Resources;
 import android.hardware.automotive.vehicle.V2_0.VehicleApPowerStateReq;
 import android.os.Build;
 import android.os.Handler;
@@ -96,9 +97,12 @@ public class CarPowerManagementService extends ICarPower.Stub implements
     @GuardedBy("mLock")
     private boolean mShutdownOnFinish;
     @GuardedBy("mLock")
+    private boolean mShutdownOnNextSuspend;
+    @GuardedBy("mLock")
     private boolean mIsBooting = true;
     @GuardedBy("mLock")
     private boolean mIsResuming;
+    private final boolean mDisableUserSwitchDuringResume;
 
     private final CarUserManagerHelper mCarUserManagerHelper;
 
@@ -127,14 +131,21 @@ public class CarPowerManagementService extends ICarPower.Stub implements
         }
     }
 
-    public CarPowerManagementService(
-            Context context, PowerHalService powerHal, SystemInterface systemInterface,
-            CarUserManagerHelper carUserManagerHelper) {
+    public CarPowerManagementService(Context context, PowerHalService powerHal,
+            SystemInterface systemInterface, CarUserManagerHelper carUserManagerHelper) {
+        this(context, context.getResources(), powerHal, systemInterface, carUserManagerHelper);
+    }
+
+    @VisibleForTesting
+    CarPowerManagementService(Context context, Resources resources, PowerHalService powerHal,
+            SystemInterface systemInterface, CarUserManagerHelper carUserManagerHelper) {
         mContext = context;
         mHal = powerHal;
         mSystemInterface = systemInterface;
         mCarUserManagerHelper = carUserManagerHelper;
-        sShutdownPrepareTimeMs = mContext.getResources().getInteger(
+        mDisableUserSwitchDuringResume = resources
+                .getBoolean(R.bool.config_disableUserSwitchDuringResume);
+        sShutdownPrepareTimeMs = resources.getInteger(
                 R.integer.maxGarageModeRunningDurationInSecs) * 1000;
         if (sShutdownPrepareTimeMs < MIN_MAX_GARAGE_MODE_DURATION_MS) {
             Log.w(CarLog.TAG_POWER,
@@ -157,6 +168,7 @@ public class CarPowerManagementService extends ICarPower.Stub implements
         mHandlerThread = null;
         mHandler = new PowerHandler(Looper.getMainLooper());
         mCarUserManagerHelper = null;
+        mDisableUserSwitchDuringResume = true;
     }
 
     @VisibleForTesting
@@ -166,6 +178,13 @@ public class CarPowerManagementService extends ICarPower.Stub implements
             sShutdownPrepareTimeMs = SHUTDOWN_EXTEND_MAX_MS;
         } else {
             sShutdownPrepareTimeMs = timeoutMs;
+        }
+    }
+
+    @VisibleForTesting
+    protected HandlerThread getHandlerThread() {
+        synchronized (mLock) {
+            return mHandlerThread;
         }
     }
 
@@ -216,6 +235,7 @@ public class CarPowerManagementService extends ICarPower.Stub implements
         writer.print(",mProcessingStartTime:" + mProcessingStartTime);
         writer.print(",mLastSleepEntryTime:" + mLastSleepEntryTime);
         writer.print(",mNextWakeupSec:" + mNextWakeupSec);
+        writer.print(",mShutdownOnNextSuspend:" + mShutdownOnNextSuspend);
         writer.print(",mShutdownOnFinish:" + mShutdownOnFinish);
         writer.println(",sShutdownPrepareTimeMs:" + sShutdownPrepareTimeMs);
     }
@@ -231,10 +251,13 @@ public class CarPowerManagementService extends ICarPower.Stub implements
     }
 
     @VisibleForTesting
-    protected void clearIsBootingOrResuming() {
+    void setStateForTesting(boolean isBooting, boolean isResuming) {
         synchronized (mLock) {
-            mIsBooting = false;
-            mIsResuming = false;
+            Log.d(CarLog.TAG_POWER, "setStateForTesting():"
+                    + " booting(" + mIsBooting + ">" + isBooting + ")"
+                    + " resuming(" + mIsResuming + ">" + isResuming + ")");
+            mIsBooting = isBooting;
+            mIsResuming = isResuming;
         }
     }
 
@@ -309,6 +332,7 @@ public class CarPowerManagementService extends ICarPower.Stub implements
                 mHal.sendWaitForVhal();
                 break;
             case CarPowerStateListener.SHUTDOWN_CANCELLED:
+                mShutdownOnNextSuspend = false; // This cancels the "NextSuspend"
                 mHal.sendShutdownCancel();
                 break;
             case CarPowerStateListener.SUSPEND_EXIT:
@@ -331,8 +355,7 @@ public class CarPowerManagementService extends ICarPower.Stub implements
                 Log.i(CarLog.TAG_POWER, "User switch disallowed while booting");
             } else if (mIsResuming) {
                 // The system is resuming after a suspension. Optionally disable user switching.
-                allowUserSwitch = !mContext.getResources()
-                        .getBoolean(R.bool.config_disableUserSwitchDuringResume);
+                allowUserSwitch = !mDisableUserSwitchDuringResume;
                 mIsBooting = false;
                 mIsResuming = false;
                 if (!allowUserSwitch) {
@@ -358,7 +381,8 @@ public class CarPowerManagementService extends ICarPower.Stub implements
         mSystemInterface.setDisplayState(false);
         // Shutdown on finish if the system doesn't support deep sleep or doesn't allow it.
         synchronized (mLock) {
-            mShutdownOnFinish |= !mHal.isDeepSleepAllowed()
+            mShutdownOnFinish = mShutdownOnNextSuspend
+                    || !mHal.isDeepSleepAllowed()
                     || !mSystemInterface.isSystemSupportingDeepSleep()
                     || !newState.mCanSleep;
         }
@@ -420,6 +444,7 @@ public class CarPowerManagementService extends ICarPower.Stub implements
         } else {
             doHandleDeepSleep(simulatedMode);
         }
+        mShutdownOnNextSuspend = false;
     }
 
     @GuardedBy("mLock")
@@ -504,7 +529,7 @@ public class CarPowerManagementService extends ICarPower.Stub implements
                 listener.onStateChanged(newState);
             } catch (RemoteException e) {
                 // It's likely the connection snapped. Let binder death handle the situation.
-                Log.e(CarLog.TAG_POWER, "onStateChanged() call failed: " + e, e);
+                Log.e(CarLog.TAG_POWER, "onStateChanged() call failed", e);
             }
         }
         listenerList.finishBroadcast();
@@ -679,7 +704,7 @@ public class CarPowerManagementService extends ICarPower.Stub implements
     public void requestShutdownOnNextSuspend() {
         ICarImpl.assertPermission(mContext, Car.PERMISSION_CAR_POWER);
         synchronized (mLock) {
-            mShutdownOnFinish = true;
+            mShutdownOnNextSuspend = true;
         }
     }
 
