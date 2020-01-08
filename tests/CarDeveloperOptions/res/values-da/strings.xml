@@ -1199,9 +1199,9 @@
     <string name="auto_brightness_description" msgid="8209140379089535411">"Skærmens lysstyrke tilpasses automatisk på baggrund af dine omgivelser og dine aktiviteter. Du kan flytte skyderen manuelt for at hjælpe Automatisk lysstyrke med at lære dine præferencer."</string>
     <string name="display_white_balance_title" msgid="5747260735311935143">"Skærmens hvidbalance"</string>
     <string name="adaptive_sleep_title" msgid="3237620948260957018">"Opmærksom skærm"</string>
-    <string name="adaptive_sleep_summary_on" msgid="6670369739228487082">"Aktiveret/Skærmen slukker ikke, når du kigger på den"</string>
+    <string name="adaptive_sleep_summary_on" msgid="6670369739228487082">"Aktiveret. Skærmen slukker ikke, når du kigger på den"</string>
     <string name="adaptive_sleep_summary_off" msgid="2891586225954973431">"Fra"</string>
-    <string name="adaptive_sleep_description" msgid="812673735459170009">"Forhindrer at din skærm slukker, når du kigger på den."</string>
+    <string name="adaptive_sleep_description" msgid="812673735459170009">"Holder din skærm tændt, så længe du kigger på den."</string>
     <string name="adaptive_sleep_privacy" msgid="5706802215479902623">"Den opmærksomme skærm bruger frontkameraet til at tjekke, om der er nogen, der kigger på skærmen. Funktionen fungerer kun lokalt på enheden, og den gemmer ikke billeder eller sender billeder til Google."</string>
     <string name="night_display_title" msgid="1305002424893349814">"Nattelys"</string>
     <string name="night_display_text" msgid="5330502493684652527">"Nattelys gør farverne på din skærm mere gullige. Det gør din skærm mere behagelig at se på i svag belysning og kan gøre det nemmere at falde i søvn."</string>
@@ -2090,7 +2090,7 @@
     <string name="accessibility_touch_vibration_title" msgid="285890135612038092">"Vibration ved berøring"</string>
     <string name="accessibility_service_master_switch_title" msgid="2734791644475782924">"Brug tjenesten"</string>
     <string name="accessibility_daltonizer_master_switch_title" msgid="4855011639012300777">"Brug farvekorrigering"</string>
-    <string name="accessibility_caption_master_switch_title" msgid="6373335123229234053">"Brug tekster"</string>
+    <string name="accessibility_caption_master_switch_title" msgid="6373335123229234053">"Brug undertekster"</string>
     <string name="accessibility_hearingaid_instruction_continue_button" msgid="4650111296711466691">"Fortsæt"</string>
     <string name="accessibility_hearingaid_title" msgid="3700978781235124891">"Høreapparater"</string>
     <string name="accessibility_hearingaid_not_connected_summary" msgid="634573930469952213">"Der er ikke tilknyttet nogen høreapparater"</string>
@@ -2106,7 +2106,7 @@
     <string name="accessibility_summary_state_disabled" msgid="9197369047683087620">"Fra"</string>
     <string name="accessibility_summary_state_stopped" msgid="3170264683616172746">"Kører ikke. Tryk for at få flere oplysninger."</string>
     <string name="accessibility_description_state_stopped" msgid="7666178628053039493">"Denne tjeneste fungerer ikke korrekt."</string>
-    <string name="enable_quick_setting" msgid="1580451877998661255">"Vis i Hurtige indstillinger"</string>
+    <string name="enable_quick_setting" msgid="1580451877998661255">"Vis i Kvikmenu"</string>
     <string name="daltonizer_type" msgid="6890356081036026791">"Korrektionstilstand"</string>
     <plurals name="accessibilty_autoclick_preference_subtitle_extremely_short_delay" formatted="false" msgid="3810676455925024813">
       <item quantity="one">Ekstremt lille forsinkelse (<xliff:g id="CLICK_DELAY_LABEL_1">%1$d</xliff:g> ms)</item>
@@ -3039,7 +3039,7 @@
     <string name="account_dashboard_title" msgid="4734300939532555885">"Konti"</string>
     <string name="account_dashboard_default_summary" msgid="6822549669771936206">"Ingen konti er tilføjet"</string>
     <string name="app_default_dashboard_title" msgid="6575301028225232193">"Standardapps"</string>
-    <string name="system_dashboard_summary" msgid="6582464466735779394">"Sprog, bevægelser, klokkeslæt, bckup"</string>
+    <string name="system_dashboard_summary" msgid="6582464466735779394">"Sprog, bevægelser, klokkeslæt, backup"</string>
     <string name="search_results_title" msgid="4160717656435503940">"Indstillinger"</string>
     <string name="keywords_wifi" msgid="8477688080895466846">"wifi, wi-fi, netværksforbindelse, internet, trådløs, data, wi fi"</string>
     <string name="keywords_wifi_notify_open_networks" msgid="1031260564121854773">"Wi‑Fi-notifikation, wifi-notifikation"</string>
@@ -4071,7 +4071,7 @@
     <string name="dark_ui_mode_title" msgid="8774932716427742413">"Vælg tema"</string>
     <string name="dark_ui_settings_light_summary" msgid="5219102347744462812">"Denne indstilling gælder også for apps"</string>
     <string name="dark_ui_settings_dark_summary" msgid="7042737828943784289">"Understøttede apps skifter også til mørkt tema"</string>
-    <string name="quick_settings_developer_tiles" msgid="7423485925757678719">"Felter for udviklere til Hurtige indstillinger"</string>
+    <string name="quick_settings_developer_tiles" msgid="7423485925757678719">"Felter for udviklere til Kvikmenu"</string>
     <string name="winscope_trace_quick_settings_title" msgid="940971040388411374">"Sporing af Winscope"</string>
     <string name="sensors_off_quick_settings_title" msgid="3655699045300438902">"Sensorer er slået fra"</string>
     <string name="managed_profile_settings_title" msgid="4340409321523532402">"Indstillinger for arbejdsprofil"</string>
@@ -4117,7 +4117,7 @@
     <string name="ambient_display_title" product="tablet" msgid="1106285490888683613">"Tryk to gange for at tjekke din tablet"</string>
     <string name="ambient_display_title" product="device" msgid="5064644474876041478">"Tryk to gange for at tjekke enheden"</string>
     <string name="ambient_display_summary" msgid="4882910328216411109">"Tryk to gange på skærmen for at se klokkeslæt, notifikationer og andre oplysninger."</string>
-    <string name="ambient_display_pickup_title" product="default" msgid="7141652156907066938">"Løft for at tjekke telefon"</string>
+    <string name="ambient_display_pickup_title" product="default" msgid="7141652156907066938">"Løft for at tjekke telefonen"</string>
     <string name="ambient_display_pickup_title" product="tablet" msgid="1555456400210301959">"Løft for at tjekke din tablet"</string>
     <string name="ambient_display_pickup_title" product="device" msgid="2480126522988135037">"Løft for at tjekke enheden"</string>
     <string name="ambient_display_wake_screen_title" msgid="3376988352851077102">"Aktivering af skærm"</string>
@@ -4436,7 +4436,7 @@
     <string name="mobile_network_mode_error" msgid="6818434186286086554">"Ugyldig netværkstilstand <xliff:g id="NETWORKMODEID">%1$d</xliff:g>. Ignorer."</string>
     <string name="mobile_network_apn_title" msgid="5628635067747404382">"Adgangspunkter"</string>
     <string name="manual_mode_disallowed_summary" msgid="799800630000340665">"Utilgængelig ved forbindelse til <xliff:g id="CARRIER">%1$s</xliff:g>"</string>
-    <string name="emergency_info_contextual_card_summary" msgid="5541444321969803486">"Helbredoplysninger, kontakter til nødsituationer"</string>
+    <string name="emergency_info_contextual_card_summary" msgid="5541444321969803486">"Helbredoplysninger, kontaktpersoner ved nødsituationer"</string>
     <string name="see_more" msgid="7463940160389802632">"Se mere"</string>
     <string name="see_less" msgid="3718892257002813387">"Se mindre"</string>
     <string name="network_connection_request_dialog_title" msgid="3150489262902506588">"Enhed, der skal bruges sammen med <xliff:g id="APPNAME">%1$s</xliff:g>"</string>
