@@ -99,6 +99,7 @@ public class ICarImpl extends ICar.Stub {
     private final VmsSubscriberService mVmsSubscriberService;
     private final VmsPublisherService mVmsPublisherService;
     private final CarBugreportManagerService mCarBugreportManagerService;
+    private final AirplaneModeService mAirplaneModeService;
 
     private final CarServiceBase[] mAllServices;
 
@@ -170,6 +171,7 @@ public class ICarImpl extends ICar.Stub {
         mCarTrustedDeviceService = new CarTrustedDeviceService(serviceContext);
         mCarMediaService = new CarMediaService(serviceContext);
         mCarBugreportManagerService = new CarBugreportManagerService(serviceContext);
+        mAirplaneModeService = new AirplaneModeService(serviceContext);
 
         CarLocalServices.addService(CarPowerManagementService.class, mCarPowerManagementService);
         CarLocalServices.addService(CarUserService.class, mCarUserService);
@@ -208,6 +210,7 @@ public class ICarImpl extends ICar.Stub {
         allServices.add(mCarMediaService);
         allServices.add(mCarLocationService);
         allServices.add(mCarBugreportManagerService);
+        allServices.add(mAirplaneModeService);
         mAllServices = allServices.toArray(new CarServiceBase[allServices.size()]);
     }
 
