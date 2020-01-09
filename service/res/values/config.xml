@@ -360,4 +360,9 @@
 
     <!-- The ComponentName of the media source that will be selected as the default -->
     <string name="config_defaultMediaSource">com.android.bluetooth/com.android.bluetooth.avrcpcontroller.BluetoothMediaBrowserService</string>
+
+    <!--  Configuration to enable usage of AirplaneModeService. If this is set to true,
+          AirplaneMode is turned on when system enters low power mode, so as to turn
+          wireless RF off (e.g. BT, Wifi)  -->
+    <bool name="enableAirplaneModeService">true</bool>
 </resources>
