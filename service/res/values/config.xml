@@ -241,4 +241,9 @@
           AirplaneMode is turned on when system enters low power mode, so as to turn
           wireless RF off (e.g. BT, Wifi)  -->
     <bool name="enableAirplaneModeService">true</bool>
+
+    <!--  Configuration to enable deep sleep retry. If this is set to true,
+          CPMS retry to enter deep sleep if it fails -->
+    <bool name="enableDeepSleepRetry">true</bool>
+
 </resources>

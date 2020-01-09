@@ -178,6 +178,11 @@ public class SystemInterface implements DisplayInterface, IOInterface,
     }
 
     @Override
+    public boolean isInteractive() {
+        return mSystemStateInterface.isInteractive();
+    }
+
+    @Override
     public void refreshDisplayBrightness() {
         mDisplayInterface.refreshDisplayBrightness();
     }
