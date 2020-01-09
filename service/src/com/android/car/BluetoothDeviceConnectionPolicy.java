@@ -46,7 +46,9 @@ public class BluetoothDeviceConnectionPolicy {
     private final BluetoothAdapter mBluetoothAdapter;
     private final CarBluetoothService mCarBluetoothService;
 
+
     private CarPowerManager mCarPowerManager;
+    private boolean mEnableBluetoothPowerManager;
     private final CarPowerStateListenerWithCompletion mCarPowerStateListener =
             new CarPowerStateListenerWithCompletion() {
         @Override
@@ -167,12 +169,16 @@ public class BluetoothDeviceConnectionPolicy {
         profileFilter.addAction(BluetoothAdapter.ACTION_STATE_CHANGED);
         mContext.registerReceiverAsUser(mBluetoothBroadcastReceiver, UserHandle.CURRENT,
                 profileFilter, null, null);
-        mCarPowerManager = CarLocalServices.createCarPowerManager(mContext);
-        // CarLocalServices can fail to return a service.
-        if (mCarPowerManager != null) {
-            mCarPowerManager.setListenerWithCompletion(mCarPowerStateListener);
-        } else {
-            logd("Failed to get car power manager");
+        mEnableBluetoothPowerManager = isBluetoothPowerManagerEnabled(mContext);
+        logd("Enable Bluetooth power manager: " + mEnableBluetoothPowerManager);
+        if (mEnableBluetoothPowerManager) {
+            mCarPowerManager = CarLocalServices.createCarPowerManager(mContext);
+            // CarLocalServices can fail to return a service.
+            if (mCarPowerManager != null) {
+                mCarPowerManager.setListenerWithCompletion(mCarPowerStateListener);
+            } else {
+                logd("Failed to get car power manager");
+            }
         }
 
         // Since we do this only on start up and on user switch, it's safe to kick off a connect on
@@ -244,6 +250,21 @@ public class BluetoothDeviceConnectionPolicy {
             return;
         }
         mBluetoothAdapter.disable(false);
+    }
+
+    /**
+     * Check whether Bluetooth power manager is enabled.
+     *
+     *   true:  enabled,  false: disabled
+     */
+    private boolean isBluetoothPowerManagerEnabled(Context context) {
+        boolean enableAirplaneModeService = false;
+        if (context != null) {
+            enableAirplaneModeService = context.getResources().getBoolean(R.bool.enableAirplaneModeService);
+        }
+        /* Return false if AirplaneModeService is enabled.
+           AirplaneModeService support Bluetooth power management. */
+        return !enableAirplaneModeService;
     }
 
     /**
