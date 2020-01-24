@@ -28,6 +28,9 @@ import android.content.ComponentName;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
+import android.media.AudioAttributes;
+import android.media.AudioFocusRequest;
+import android.media.AudioManager;
 import android.media.MediaRecorder;
 import android.os.AsyncTask;
 import android.os.Bundle;
@@ -87,6 +90,8 @@ public class BugReportActivity extends Activity {
     private MetaBugReport mMetaBugReport;
     private Car mCar;
     private CarDrivingStateManager mDrivingStateManager;
+    private AudioManager mAudioManager;
+    private AudioFocusRequest mLastAudioFocusRequest;
 
     /** Defines callbacks for service binding, passed to bindService() */
     private ServiceConnection mConnection = new ServiceConnection() {
@@ -146,6 +151,7 @@ public class BugReportActivity extends Activity {
 
         mCar = Car.createCar(this, mServiceConnection);
         mCar.connect();
+        mAudioManager = getSystemService(AudioManager.class);
 
         // Bind to BugReportService.
         Intent intent = new Intent(this, BugReportService.class);
@@ -359,10 +365,29 @@ public class BugReportActivity extends Activity {
                 "-message.3gp");
         Log.i(TAG, "Started voice recording, and saving audio to " + recordingFile);
 
+        mLastAudioFocusRequest = new AudioFocusRequest.Builder(
+                        AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE)
+                .setOnAudioFocusChangeListener(focusChange ->
+                        Log.d(TAG, "AudioManager focus change " + focusChange))
+                .setAudioAttributes(new AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                        .build())
+                .setAcceptsDelayedFocusGain(true)
+                .build();
+        int focusGranted = mAudioManager.requestAudioFocus(mLastAudioFocusRequest);
+        // NOTE: We will record even if the audio focus was not granted.
+        Log.d(TAG,
+                "AudioFocus granted " + (focusGranted == AudioManager.AUDIOFOCUS_REQUEST_GRANTED));
+
         mRecorder = new MediaRecorder();
         mRecorder.setAudioSource(MediaRecorder.AudioSource.MIC);
         mRecorder.setOutputFormat(MediaRecorder.OutputFormat.THREE_GPP);
         mRecorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);
+        mRecorder.setOnInfoListener((MediaRecorder recorder, int what, int extra) ->
+                Log.i(TAG, "OnMediaRecorderInfo: what=" + what + ", extra=" + extra));
+        mRecorder.setOnErrorListener((MediaRecorder recorder, int what, int extra) ->
+                Log.i(TAG, "OnMediaRecorderError: what=" + what + ", extra=" + extra));
         mRecorder.setOutputFile(recordingFile);
 
         try {
@@ -386,9 +411,21 @@ public class BugReportActivity extends Activity {
     private void stopAudioRecording() {
         if (mRecorder != null) {
             Log.i(TAG, "Recording ended, stopping the MediaRecorder.");
-            mRecorder.stop();
+            try {
+                mRecorder.stop();
+            } catch (IllegalStateException e) {
+                // Sometimes MediaRecorder doesn't start and stopping it throws an error.
+                // We just log these cases, no need to crash the app.
+                Log.w(TAG, "Couldn't stop media recorder", e);
+            }
             mRecorder.release();
             mRecorder = null;
+        }
+        if (mLastAudioFocusRequest != null) {
+            int focusAbandoned = mAudioManager.abandonAudioFocusRequest(mLastAudioFocusRequest);
+            Log.d(TAG, "Audio focus abandoned "
+                    + (focusAbandoned == AudioManager.AUDIOFOCUS_REQUEST_GRANTED));
+            mLastAudioFocusRequest = null;
         }
         mVoiceRecordingView.setRecorder(null);
     }
