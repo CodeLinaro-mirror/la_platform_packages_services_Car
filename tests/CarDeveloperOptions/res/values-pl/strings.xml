@@ -2069,14 +2069,14 @@
     <string name="usage_time_label" msgid="5615725415876461039">"Czas użycia"</string>
     <string name="accessibility_settings" msgid="9140621093888234485">"Ułatwienia dostępu"</string>
     <string name="accessibility_settings_title" msgid="1687226556576913576">"Ustawienia ułatwień dostępu"</string>
-    <string name="accessibility_settings_summary" msgid="5742379519336396561">"Czytniki, wyświetlacz, sterowanie interakcjami"</string>
+    <string name="accessibility_settings_summary" msgid="5742379519336396561">"Czytniki, wyświetlacz, zarządzanie interakcjami"</string>
     <string name="vision_settings_title" msgid="7315352351051423944">"Dla niedowidzących"</string>
     <string name="vision_settings_description" msgid="3476589459009287332">"Możesz dostosować urządzenie do swoich potrzeb. Ułatwienia dostępu możesz zawsze zmienić w Ustawieniach."</string>
     <string name="vision_settings_suggestion_title" msgid="7268661419110951128">"Zmień rozmiar czcionki"</string>
     <string name="screen_reader_category_title" msgid="6300714148519645544">"Czytniki ekranu"</string>
     <string name="audio_and_captions_category_title" msgid="6140472938769619212">"Dźwięk i tekst na ekranie"</string>
     <string name="display_category_title" msgid="545168481672250195">"Wyświetlacz"</string>
-    <string name="interaction_control_category_title" msgid="8775039211811947683">"Sterowanie interakcjami"</string>
+    <string name="interaction_control_category_title" msgid="8775039211811947683">"Zarządzanie interakcjami"</string>
     <string name="user_installed_services_category_title" msgid="4288689493753221319">"Pobrane usługi"</string>
     <string name="experimental_category_title" msgid="3797000069740110717">"Eksperymentalne"</string>
     <string name="feature_flags_dashboard_title" msgid="3153034144122754381">"Flagi funkcji"</string>
@@ -4239,9 +4239,9 @@
     <string name="deletion_helper_manual_title" msgid="1011785013431162078">"Instrukcja"</string>
     <string name="deletion_helper_preference_title" msgid="797270307034242206">"Zwolnij miejsce teraz"</string>
     <string name="gesture_preference_title" msgid="583646591518373785">"Gesty"</string>
-    <string name="gesture_preference_summary" product="default" msgid="2990736567599191163">"Sterowanie telefonem za pomocą krótkich gestów"</string>
-    <string name="gesture_preference_summary" product="tablet" msgid="8303793594714075580">"Sterowanie tabletem za pomocą krótkich gestów"</string>
-    <string name="gesture_preference_summary" product="device" msgid="7792199669106960922">"Sterowanie urządzeniem za pomocą krótkich gestów"</string>
+    <string name="gesture_preference_summary" product="default" msgid="2990736567599191163">"Sterowanie telefonem za pomocą gestów"</string>
+    <string name="gesture_preference_summary" product="tablet" msgid="8303793594714075580">"Sterowanie tabletem za pomocą gestów"</string>
+    <string name="gesture_preference_summary" product="device" msgid="7792199669106960922">"Sterowanie urządzeniem za pomocą gestów"</string>
     <string name="double_tap_power_for_camera_title" msgid="5480829329052517484">"Uruchamianie aparatu"</string>
     <string name="double_tap_power_for_camera_summary" msgid="6591026425496323965">"Aby szybko uruchomić aparat, naciśnij dwukrotnie przycisk zasilania. Możesz to zrobić na dowolnym ekranie."</string>
     <string name="double_tap_power_for_camera_suggestion_title" msgid="509078029429865036">"Szybkie uruchamianie aparatu"</string>
