@@ -34,9 +34,10 @@ import android.os.RemoteException;
 import android.util.Log;
 
 import com.android.internal.annotations.GuardedBy;
-import com.android.internal.util.Preconditions;
 
 import java.lang.ref.WeakReference;
+import java.util.Collections;
+import java.util.Objects;
 
 /**
  * API implementation of a Vehicle Map Service publisher client.
@@ -58,6 +59,10 @@ import java.lang.ref.WeakReference;
 public abstract class VmsPublisherClientService extends Service {
     private static final boolean DBG = false;
     private static final String TAG = "VmsPublisherClientService";
+
+    private static final VmsSubscriptionState DEFAULT_SUBSCRIPTIONS =
+            new VmsSubscriptionState(0, Collections.emptySet(),
+                    Collections.emptySet());
 
     private final Object mLock = new Object();
 
@@ -109,7 +114,7 @@ public abstract class VmsPublisherClientService extends Service {
      * @throws IllegalStateException if publisher services are not available
      */
     public final void publish(@NonNull VmsLayer layer, int publisherId, byte[] payload) {
-        Preconditions.checkNotNull(layer, "layer cannot be null");
+        Objects.requireNonNull(layer, "layer cannot be null");
         if (DBG) Log.d(TAG, "Publishing for layer : " + layer);
 
         IBinder token = getTokenForPublisherServiceThreadSafe();
@@ -128,7 +133,7 @@ public abstract class VmsPublisherClientService extends Service {
      * @throws IllegalStateException if publisher services are not available
      */
     public final void setLayersOffering(@NonNull VmsLayersOffering offering) {
-        Preconditions.checkNotNull(offering, "offering cannot be null");
+        Objects.requireNonNull(offering, "offering cannot be null");
         if (DBG) Log.d(TAG, "Setting layers offering : " + offering);
 
         IBinder token = getTokenForPublisherServiceThreadSafe();
@@ -195,7 +200,7 @@ public abstract class VmsPublisherClientService extends Service {
         try {
             return mVmsPublisherService.getSubscriptions();
         } catch (RemoteException e) {
-            return Car.handleRemoteExceptionFromCarService(this, e, null);
+            return Car.handleRemoteExceptionFromCarService(this, e, DEFAULT_SUBSCRIPTIONS);
         }
     }
 

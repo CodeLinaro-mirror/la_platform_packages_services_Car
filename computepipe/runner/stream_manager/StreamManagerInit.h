@@ -19,6 +19,7 @@
 #include <memory>
 
 #include "MemHandle.h"
+#include "StreamEngineInterface.h"
 #include "types/Status.h"
 
 namespace android {
@@ -29,8 +30,7 @@ namespace stream_manager {
 
 class StreamManagerInit {
   public:
-    virtual Status setIpcDispatchCallback(
-        std::function<Status(const std::shared_ptr<MemHandle>)>& cb) = 0;
+    virtual void setEngineInterface(std::shared_ptr<StreamEngineInterface> engine) = 0;
     /* Set Max in flight packets based on client specification */
     virtual Status setMaxInFlightPackets(uint32_t maxPackets) = 0;
     virtual ~StreamManagerInit() = default;

@@ -16,6 +16,7 @@
 package android.car.media;
 
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
 import android.annotation.TestApi;
@@ -23,6 +24,8 @@ import android.car.Car;
 import android.car.CarLibLog;
 import android.car.CarManagerBase;
 import android.media.AudioAttributes;
+import android.media.AudioDeviceInfo;
+import android.media.AudioManager;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.os.RemoteException;
@@ -60,6 +63,13 @@ public final class CarAudioManager extends CarManagerBase {
     public static final int PRIMARY_AUDIO_ZONE = 0x0;
 
     /**
+     * Zone id of the invalid audio zone.
+     * @hide
+     */
+    @SystemApi
+    public static final int INVALID_AUDIO_ZONE = 0xffffffff;
+
+    /**
      * Extra for {@link android.media.AudioAttributes.Builder#addBundle(Bundle)}: when used in an
      * {@link android.media.AudioFocusRequest}, the requester should receive all audio focus events,
      * including {@link android.media.AudioManager#AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK}.
@@ -86,6 +96,7 @@ public final class CarAudioManager extends CarManagerBase {
 
     private final ICarAudio mService;
     private final List<CarVolumeCallback> mCarVolumeCallbacks;
+    private final AudioManager mAudioManager;
 
     private final ICarVolumeCallback mCarVolumeCallbackImpl = new ICarVolumeCallback.Stub() {
         @Override
@@ -430,12 +441,18 @@ public final class CarAudioManager extends CarManagerBase {
      * @return audio zone ids
      * @hide
      */
+    @SystemApi
     @RequiresPermission(Car.PERMISSION_CAR_CONTROL_AUDIO_SETTINGS)
-    public @NonNull int[] getAudioZoneIds() {
+    public @NonNull List<Integer> getAudioZoneIds() {
         try {
-            return mService.getAudioZoneIds();
+            int[] zoneIdArray = mService.getAudioZoneIds();
+            List<Integer> zoneIdList = new ArrayList<Integer>(zoneIdArray.length);
+            for (int zoneIdValue : zoneIdArray) {
+                zoneIdList.add(zoneIdValue);
+            }
+            return zoneIdList;
         } catch (RemoteException e) {
-            return handleRemoteExceptionFromCarService(e, new int[0]);
+            return handleRemoteExceptionFromCarService(e, new ArrayList<>());
         }
     }
 
@@ -544,6 +561,45 @@ public final class CarAudioManager extends CarManagerBase {
         }
     }
 
+    /**
+     * Gets the output device for a given {@link AudioAttributes} usage in zoneId.
+     *
+     * <p><b>Note:</b> To be used for routing to a specific device. Most applications should
+     * use the regular routing mechanism, which is to set audio attribute usage to
+     * an audio track.
+     *
+     * @param zoneId zone id to query for device
+     * @param usage usage where audio is routed
+     * @return Audio device info, returns {@code null} if audio device usage fails to map to
+     * an active audio device. This is different from the using an invalid value for
+     * {@link AudioAttributes} usage. In the latter case the query will fail with a
+     * RuntimeException indicating the issue.
+     *
+     * @hide
+     */
+    @SystemApi
+    @Nullable
+    @RequiresPermission(Car.PERMISSION_CAR_CONTROL_AUDIO_SETTINGS)
+    public AudioDeviceInfo getOutputDeviceForUsage(int zoneId,
+            @AudioAttributes.AttributeUsage int usage) {
+        try {
+            String deviceAddress = mService.getOutputDeviceAddressForUsage(zoneId, usage);
+            if (deviceAddress == null) {
+                return null;
+            }
+            AudioDeviceInfo[] outputDevices =
+                    mAudioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS);
+            for (AudioDeviceInfo info : outputDevices) {
+                if (info.getAddress().equals(deviceAddress)) {
+                    return info;
+                }
+            }
+            return null;
+        } catch (RemoteException e) {
+            return handleRemoteExceptionFromCarService(e, null);
+        }
+    }
+
     /** @hide */
     @Override
     public void onCarDisconnected() {
@@ -560,6 +616,7 @@ public final class CarAudioManager extends CarManagerBase {
     public CarAudioManager(Car car, IBinder service) {
         super(car);
         mService = ICarAudio.Stub.asInterface(service);
+        mAudioManager = getContext().getSystemService(AudioManager.class);
         mCarVolumeCallbacks = new ArrayList<>();
         try {
             mService.registerVolumeCallback(mCarVolumeCallbackImpl.asBinder());
