@@ -23,6 +23,8 @@ enum Status {
     SUCCESS = 0,
     INTERNAL_ERROR,
     INVALID_ARGUMENT,
+    ILLEGAL_STATE,
+    NO_MEMORY,
     FATAL_ERROR,
 };
 

@@ -16,7 +16,7 @@
 package android.automotive.computepipe.runner;
 
 import android.automotive.computepipe.runner.PacketDescriptorPacketType;
-import android.automotive.computepipe.NativeHandle;
+import android.hardware.graphics.common.HardwareBuffer;
 
 /**
  * Structure that describes the output packet for a specific outputstream
@@ -25,7 +25,8 @@ import android.automotive.computepipe.NativeHandle;
 @VintfStability
 parcelable PacketDescriptor {
     /**
-     * packet id
+     * packet id, used in case of zero copy data.
+     * Used to notify the runner of consumption.
      */
     int bufId;
     /**
@@ -37,14 +38,18 @@ parcelable PacketDescriptor {
      */
     int size;
     /**
-     * handle to memory region containing zero copy or semantic data
-     *
-     * android.os.NativeHandle memHandle;
+     * handle to memory region containing zero copy data
+     * This handle can be mapped and data retrieved.
+     * In case of Pixel data the description field will contain the
+     * graphics buffer description.
      */
-    NativeHandle handle;
+    HardwareBuffer handle;
     /**
      * Timestamp of event at source. Timestamp value is milliseconds since epoch.
      */
     long sourceTimeStampMillis;
+    /**
+     * semantic data. Requires no doneWithPacket() acknowledgement.
+     */
+    @utf8InCpp String data;
 }
-
