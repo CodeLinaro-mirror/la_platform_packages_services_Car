@@ -139,8 +139,8 @@ public final class DriverDistractionExperimentalFeatureService implements CarSer
     @GuardedBy("mLock")
     private ITimer mExpiredDriverAwarenessTimer;
 
-    private final ITimeSource mTimeSource;
     private final Context mContext;
+    private final ITimeSource mTimeSource;
 
     /**
      * Create an instance of {@link DriverDistractionExperimentalFeatureService}.
@@ -164,15 +164,20 @@ public final class DriverDistractionExperimentalFeatureService implements CarSer
         // constructor, unlike other suppliers
         ComponentName touchComponent = new ComponentName(mContext,
                 TouchDriverAwarenessSupplier.class);
-        TouchDriverAwarenessSupplier touchSupplier = new TouchDriverAwarenessSupplier();
-        addDriverAwarenessSupplier(touchComponent, touchSupplier, 0);
-        touchSupplier.setCallback(new DriverAwarenessSupplierCallback(touchComponent));
+        TouchDriverAwarenessSupplier touchSupplier = new TouchDriverAwarenessSupplier(mContext,
+                new DriverAwarenessSupplierCallback(touchComponent));
+        addDriverAwarenessSupplier(touchComponent, touchSupplier, /* priority= */ 0);
         touchSupplier.onReady();
 
-        // TODO(b/143492728) load preferred suppliers from xml - this is just an example
-        ComponentName externalComponent = new ComponentName(mContext,
-                SampleExternalDriverAwarenessSupplier.class);
-        bindDriverAwarenessSupplierService(externalComponent, /* priority= */ 1);
+        String[] preferredDriverAwarenessSuppliers = mContext.getResources().getStringArray(
+                R.array.preferredDriverAwarenessSuppliers);
+        for (int i = 0; i < preferredDriverAwarenessSuppliers.length; i++) {
+            String supplierStringName = preferredDriverAwarenessSuppliers[i];
+            ComponentName externalComponent = ComponentName.unflattenFromString(supplierStringName);
+            // the touch supplier has priority 0 and preferred suppliers are higher based on order
+            int priority = i + 1;
+            bindDriverAwarenessSupplierService(externalComponent, priority);
+        }
     }
 
     @Override

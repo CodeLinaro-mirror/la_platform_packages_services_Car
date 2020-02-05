@@ -15,8 +15,8 @@
  */
 package android.automotive.computepipe.runner;
 
+import android.automotive.computepipe.runner.PipeTerminationConfigTerminationDesc;
 import android.automotive.computepipe.runner.PipeTerminationConfigTerminationType;
-import android.automotive.computepipe.runner.PipeTerminationConfigTerminationOptions;
 
 /**
  * Termination configs
@@ -33,7 +33,7 @@ parcelable PipeTerminationConfig {
     /**
      * termination option supported by graph.
      */
-    PipeTerminationConfigTerminationOptions options;
+    PipeTerminationConfigTerminationDesc desc;
     /**
      * identifiers for the option.
      */

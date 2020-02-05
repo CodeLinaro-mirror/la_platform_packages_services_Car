@@ -15,6 +15,11 @@
  */
 package com.android.car.audio;
 
+import static android.media.AudioAttributes.USAGE_ANNOUNCEMENT;
+import static android.media.AudioAttributes.USAGE_EMERGENCY;
+import static android.media.AudioAttributes.USAGE_SAFETY;
+import static android.media.AudioAttributes.USAGE_VEHICLE_STATUS;
+
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.car.Car;
@@ -27,8 +32,10 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
+import android.hardware.automotive.audiocontrol.V1_0.ContextNumber;
 import android.hardware.automotive.audiocontrol.V1_0.IAudioControl;
 import android.media.AudioAttributes;
+import android.media.AudioAttributes.AttributeSystemUsage;
 import android.media.AudioDeviceInfo;
 import android.media.AudioDevicePort;
 import android.media.AudioFocusInfo;
@@ -70,6 +77,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -94,6 +102,13 @@ public class CarAudioService extends ICarAudio.Stub implements CarServiceBase {
     private static final String[] AUDIO_CONFIGURATION_PATHS = new String[] {
             "/vendor/etc/car_audio_configuration.xml",
             "/system/etc/car_audio_configuration.xml"
+    };
+
+    private static final @AttributeSystemUsage int[] SYSTEM_USAGES = new int[] {
+            USAGE_EMERGENCY,
+            USAGE_SAFETY,
+            USAGE_VEHICLE_STATUS,
+            USAGE_ANNOUNCEMENT
     };
 
     private final Object mImplLock = new Object();
@@ -215,6 +230,8 @@ public class CarAudioService extends ICarAudio.Stub implements CarServiceBase {
                 boolean storedMasterMute = mCarVolumeSettings.getMasterMute();
                 setMasterMute(storedMasterMute, 0);
             }
+
+            mAudioManager.setSupportedSystemUsages(SYSTEM_USAGES);
         }
     }
 
@@ -372,7 +389,7 @@ public class CarAudioService extends ICarAudio.Stub implements CarServiceBase {
     }
 
     private CarVolumeGroup getCarVolumeGroup(int zoneId, int groupId) {
-        Preconditions.checkNotNull(mCarAudioZones);
+        Objects.requireNonNull(mCarAudioZones);
         Preconditions.checkArgumentInRange(zoneId, 0, mCarAudioZones.length - 1,
                 "zoneId out of range: " + zoneId);
         return mCarAudioZones[zoneId].getVolumeGroup(groupId);
@@ -598,11 +615,11 @@ public class CarAudioService extends ICarAudio.Stub implements CarServiceBase {
                 break;
             }
         }
-        Preconditions.checkNotNull(sourcePortInfo,
+        Objects.requireNonNull(sourcePortInfo,
                 "Specified source is not available: " + sourceAddress);
 
         // Find the output port associated with the given carUsage
-        AudioDevicePort sinkPort = Preconditions.checkNotNull(getAudioPort(usage),
+        AudioDevicePort sinkPort = Objects.requireNonNull(getAudioPort(usage),
                 "Sink not available for usage: " + AudioAttributes.usageToString(usage));
 
         // {@link android.media.AudioPort#activeConfig()} is valid for mixer port only,
@@ -615,7 +632,7 @@ public class CarAudioService extends ICarAudio.Stub implements CarServiceBase {
 
         // Configure the source port to match the output port except for a gain adjustment
         final CarAudioDeviceInfo helper = new CarAudioDeviceInfo(sourcePortInfo);
-        AudioGain audioGain = Preconditions.checkNotNull(helper.getAudioGain(),
+        AudioGain audioGain = Objects.requireNonNull(helper.getAudioGain(),
                 "Gain controller not available for source port");
 
         // size of gain values is 1 in MODE_JOINT
@@ -636,7 +653,7 @@ public class CarAudioService extends ICarAudio.Stub implements CarServiceBase {
             throw new RuntimeException("createAudioPatch failed with code " + result);
         }
 
-        Preconditions.checkNotNull(patch[0],
+        Objects.requireNonNull(patch[0],
                 "createAudioPatch didn't provide expected single handle");
         Log.d(CarLog.TAG_AUDIO, "Audio patch created: " + patch[0]);
 
@@ -831,6 +848,18 @@ public class CarAudioService extends ICarAudio.Stub implements CarServiceBase {
         }
     }
 
+    @Override
+    public String getOutputDeviceAddressForUsage(int zoneId,
+            @AudioAttributes.AttributeUsage int usage) {
+        enforcePermission(Car.PERMISSION_CAR_CONTROL_AUDIO_SETTINGS);
+        Preconditions.checkArgumentInRange(zoneId, 0, mCarAudioZones.length - 1,
+                "zoneId (" + zoneId + ")");
+        int contextForUsage = getContextForUsage(usage);
+        Preconditions.checkArgument(contextForUsage != ContextNumber.INVALID,
+                "Invalid audio attribute usage %d", usage);
+        return mCarAudioZones[zoneId].getAddressForContext(contextForUsage);
+    }
+
     /**
      * Regain focus for the focus list passed in
      * @param afiList focus info list to regain
@@ -962,7 +991,7 @@ public class CarAudioService extends ICarAudio.Stub implements CarServiceBase {
     private @Nullable AudioDevicePort getAudioPort(@AudioAttributes.AttributeUsage int usage) {
         int zoneId = CarAudioManager.PRIMARY_AUDIO_ZONE;
         final int groupId = getVolumeGroupIdForUsage(zoneId, usage);
-        final CarVolumeGroup group = Preconditions.checkNotNull(
+        final CarVolumeGroup group = Objects.requireNonNull(
                 mCarAudioZones[zoneId].getVolumeGroup(groupId),
                 "Can not find CarVolumeGroup by usage: "
                         + AudioAttributes.usageToString(usage));

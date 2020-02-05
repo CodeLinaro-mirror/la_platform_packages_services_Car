@@ -31,17 +31,17 @@ namespace stream_manager {
 class SemanticHandle : public MemHandle {
   public:
     static constexpr uint32_t kMaxSemanticDataSize = 1024;
-    proto::PacketType getType() override;
-    /* Retrieve packet time stamp */
-    uint64_t getTimeStamp() override;
-    /* Get size */
-    uint32_t getSize() override;
-    /* Get data, raw pointer. Only implemented for copy semantics */
-    const char* getData() override;
-    /* Get native handle. data with zero copy semantics */
-    native_handle_t getNativeHandle() override;
+    /**
+     * Override mem handle methods
+     */
+    int getStreamId() const override;
+    proto::PacketType getType() const override;
+    uint64_t getTimeStamp() const override;
+    uint32_t getSize() const override;
+    const char* getData() const override;
+    native_handle_t getNativeHandle() const override;
     /* set info for the memory. Make a copy */
-    Status setMemInfo(const char* data, uint32_t size, uint64_t timestamp,
+    Status setMemInfo(int streamId, const char* data, uint32_t size, uint64_t timestamp,
                       const proto::PacketType& type);
     /* Destroy local copy */
     ~SemanticHandle();
@@ -51,12 +51,12 @@ class SemanticHandle : public MemHandle {
     uint32_t mSize;
     uint64_t mTimestamp;
     proto::PacketType mType;
+    int mStreamId;
 };
 
 class SemanticManager : public StreamManager, StreamManagerInit {
   public:
-    Status setIpcDispatchCallback(
-        std::function<Status(const std::shared_ptr<MemHandle>)>& cb) override;
+    void setEngineInterface(std::shared_ptr<StreamEngineInterface> engine) override;
     /* Set Max in flight packets based on client specification */
     Status setMaxInFlightPackets(uint32_t maxPackets) override;
     /* Free previously dispatched packet. Once client has confirmed usage */
@@ -64,17 +64,19 @@ class SemanticManager : public StreamManager, StreamManagerInit {
     /* Queue packet produced by graph stream */
     Status queuePacket(const char* data, const uint32_t size, uint64_t timestamp) override;
     /* Override handling of Runner Engine Events */
+    void notifyEndOfStream();
 
     Status handleExecutionPhase(const RunnerEvent& e) override;
     Status handleStopWithFlushPhase(const RunnerEvent& e) override;
     Status handleStopImmediatePhase(const RunnerEvent& e) override;
 
-    explicit SemanticManager(std::string name, const proto::PacketType& type);
+    explicit SemanticManager(std::string name, int streamId, const proto::PacketType& type);
     ~SemanticManager() = default;
 
   private:
     std::mutex mStateLock;
-    std::function<Status(const std::shared_ptr<MemHandle>&)> mDispatchCallback = nullptr;
+    int mStreamId;
+    std::shared_ptr<StreamEngineInterface> mEngine;
 };
 }  // namespace stream_manager
 }  // namespace runner

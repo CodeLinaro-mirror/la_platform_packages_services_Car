@@ -16,7 +16,7 @@
 package android.automotive.computepipe.runner;
 
 import android.automotive.computepipe.runner.PipeOffloadConfigOffloadType;
-import android.automotive.computepipe.runner.PipeOffloadConfigOffloadOptions;
+import android.automotive.computepipe.runner.PipeOffloadConfigOffloadDesc;
 
 /**
  * Offload configs
@@ -32,9 +32,9 @@ import android.automotive.computepipe.runner.PipeOffloadConfigOffloadOptions;
 @VintfStability
 parcelable PipeOffloadConfig {
     /**
-     * Offload option that the graph can support.
+     * Offload descriptor that the graph can support.
      */
-    PipeOffloadConfigOffloadOptions options;
+    PipeOffloadConfigOffloadDesc desc;
     /**
      * identifier for the option.
      */

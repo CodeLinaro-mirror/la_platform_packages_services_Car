@@ -1,6 +1,7 @@
 #include "SemanticManager.h"
 
 #include <cstdlib>
+#include <thread>
 
 #include "types/Status.h"
 
@@ -10,34 +11,39 @@ namespace computepipe {
 namespace runner {
 namespace stream_manager {
 
-proto::PacketType SemanticHandle::getType() {
+proto::PacketType SemanticHandle::getType() const {
     return mType;
 }
 
-uint64_t SemanticHandle::getTimeStamp() {
+uint64_t SemanticHandle::getTimeStamp() const {
     return mTimestamp;
 }
 
-uint32_t SemanticHandle::getSize() {
+uint32_t SemanticHandle::getSize() const {
     return mSize;
 }
 
-const char* SemanticHandle::getData() {
+const char* SemanticHandle::getData() const {
     return mData;
 }
 
-native_handle_t SemanticHandle::getNativeHandle() {
+native_handle_t SemanticHandle::getNativeHandle() const {
     native_handle_t temp;
     temp.numFds = 0;
     temp.numInts = 0;
     return temp;
 }
 
-Status SemanticHandle::setMemInfo(const char* data, uint32_t size, uint64_t timestamp,
+int SemanticHandle::getStreamId() const {
+    return mStreamId;
+}
+
+Status SemanticHandle::setMemInfo(int streamId, const char* data, uint32_t size, uint64_t timestamp,
                                   const proto::PacketType& type) {
     if (data == nullptr || size == 0 || size > kMaxSemanticDataSize) {
         return INVALID_ARGUMENT;
     }
+    mStreamId = streamId;
     mData = (char*)malloc(size);
     if (!mData) {
         return NO_MEMORY;
@@ -54,17 +60,19 @@ SemanticHandle::~SemanticHandle() {
     free(mData);
 }
 
-Status SemanticManager::setIpcDispatchCallback(
-    std::function<Status(const std::shared_ptr<MemHandle>)>& cb) {
-    mDispatchCallback = cb;
+void SemanticManager::setEngineInterface(std::shared_ptr<StreamEngineInterface> engine) {
+    mEngine = engine;
     std::lock_guard<std::mutex> lock(mStateLock);
     mState = RESET;
-    return SUCCESS;
+}
+
+void SemanticManager::notifyEndOfStream() {
+    mEngine->notifyEndOfStream();
 }
 
 // TODO: b/146495240 Add support for batching
 Status SemanticManager::setMaxInFlightPackets(uint32_t /* maxPackets */) {
-    if (!mDispatchCallback) {
+    if (!mEngine) {
         return ILLEGAL_STATE;
     }
     mState = CONFIG_DONE;
@@ -75,7 +83,7 @@ Status SemanticManager::handleExecutionPhase(const RunnerEvent& e) {
     std::lock_guard<std::mutex> lock(mStateLock);
     if (mState == CONFIG_DONE && e.isPhaseEntry()) {
         mState = RUNNING;
-        return ILLEGAL_STATE;
+        return SUCCESS;
     }
     if (mState == RESET) {
         /* Cannot get to running phase from reset state without config phase*/
@@ -104,6 +112,8 @@ Status SemanticManager::handleStopWithFlushPhase(const RunnerEvent& e) {
     /* We are being asked to stop */
     if (mState == RUNNING && e.isPhaseEntry()) {
         mState = STOPPED;
+        std::thread t(&SemanticManager::notifyEndOfStream, this);
+        t.detach();
         return SUCCESS;
     }
     /* Other Components have stopped, we can transition back to CONFIG_DONE */
@@ -134,20 +144,20 @@ Status SemanticManager::queuePacket(const char* data, const uint32_t size, uint6
         return SUCCESS;
     }
     // Invalid state.
-    if (mDispatchCallback == nullptr) {
+    if (mEngine == nullptr) {
         return INTERNAL_ERROR;
     }
     auto memHandle = std::make_shared<SemanticHandle>();
-    auto status = memHandle->setMemInfo(data, size, timestamp, mType);
+    auto status = memHandle->setMemInfo(mStreamId, data, size, timestamp, mType);
     if (status != SUCCESS) {
         return status;
     }
-    mDispatchCallback(memHandle);
+    mEngine->dispatchPacket(memHandle);
     return SUCCESS;
 }
 
-SemanticManager::SemanticManager(std::string name, const proto::PacketType& type)
-    : StreamManager(name, type) {
+SemanticManager::SemanticManager(std::string name, int streamId, const proto::PacketType& type)
+    : StreamManager(name, type), mStreamId(streamId) {
 }
 }  // namespace stream_manager
 }  // namespace runner

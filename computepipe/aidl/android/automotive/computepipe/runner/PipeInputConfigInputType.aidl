@@ -22,24 +22,15 @@ package android.automotive.computepipe.runner;
 @Backing(type="int")
 enum PipeInputConfigInputType {
     /**
-     * Driver focused Camera stream
+     * Camera type is used
      */
-    DRIVER_VIEW_CAMERA = 0,
-    /**
-     * Camera with wider field of view that can capture
-     * occupants in the car.
-     */
-    OCCUPANT_VIEW_CAMERA,
-    /**
-     * External Camera
-     */
-    EXTERNAL_CAMERA,
-    /**
-     * Surround view
-     */
-    SURROUND_VIEW_CAMERA,
+    CAMERA = 0,
     /**
      * Video file
      */
     VIDEO_FILE,
+    /**
+     * Image files
+     */
+    IMAGE_FILES,
 }
