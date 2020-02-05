@@ -94,6 +94,7 @@ public class ICarImpl extends ICar.Stub {
     private final CarInputService mCarInputService;
     private final CarDrivingStateService mCarDrivingStateService;
     private final CarUxRestrictionsManagerService mCarUXRestrictionsService;
+    private final OccupantAwarenessService mOccupantAwarenessService;
     private final CarAudioService mCarAudioService;
     private final CarProjectionService mCarProjectionService;
     private final CarPropertyService mCarPropertyService;
@@ -186,10 +187,16 @@ public class ICarImpl extends ICar.Stub {
         mCarDrivingStateService = new CarDrivingStateService(serviceContext, mCarPropertyService);
         mCarUXRestrictionsService = new CarUxRestrictionsManagerService(serviceContext,
                 mCarDrivingStateService, mCarPropertyService);
+        if (mFeatureController.isFeatureEnabled(Car.OCCUPANT_AWARENESS_SERVICE)) {
+            mOccupantAwarenessService = new OccupantAwarenessService(serviceContext);
+        } else {
+            mOccupantAwarenessService = null;
+        }
         mCarPackageManagerService = new CarPackageManagerService(serviceContext,
                 mCarUXRestrictionsService,
-                mSystemActivityMonitoringService);
-        mPerUserCarServiceHelper = new PerUserCarServiceHelper(serviceContext);
+                mSystemActivityMonitoringService,
+                mCarUserService);
+        mPerUserCarServiceHelper = new PerUserCarServiceHelper(serviceContext, mCarUserService);
         mCarBluetoothService = new CarBluetoothService(serviceContext, mPerUserCarServiceHelper);
         mCarInputService = new CarInputService(serviceContext, mHal.getInputHal());
         mCarProjectionService = new CarProjectionService(
@@ -204,16 +211,29 @@ public class ICarImpl extends ICar.Stub {
         mSystemStateControllerService = new SystemStateControllerService(
                 serviceContext, mCarAudioService, this);
         mCarStatsService = new CarStatsService(serviceContext);
-        mVmsBrokerService = new VmsBrokerService();
-        mVmsClientManager = new VmsClientManager(
-                // CarStatsService needs to be passed to the constructor due to HAL init order
-                serviceContext, mCarStatsService, mCarUserService, mVmsBrokerService,
-                mHal.getVmsHal());
-        mVmsSubscriberService = new VmsSubscriberService(
-                serviceContext, mVmsBrokerService, mVmsClientManager, mHal.getVmsHal());
-        mVmsPublisherService = new VmsPublisherService(
-                serviceContext, mCarStatsService, mVmsBrokerService, mVmsClientManager);
-        mCarDiagnosticService = new CarDiagnosticService(serviceContext, mHal.getDiagnosticHal());
+        mCarStatsService.init();
+        if (mFeatureController.isFeatureEnabled(Car.VMS_SUBSCRIBER_SERVICE)) {
+            mVmsBrokerService = new VmsBrokerService();
+            mVmsClientManager = new VmsClientManager(
+                    // CarStatsService needs to be passed to the constructor due to HAL init order
+                    serviceContext, mCarStatsService, mCarUserService, mVmsBrokerService,
+                    mHal.getVmsHal());
+            mVmsSubscriberService = new VmsSubscriberService(
+                    serviceContext, mVmsBrokerService, mVmsClientManager, mHal.getVmsHal());
+            mVmsPublisherService = new VmsPublisherService(
+                    serviceContext, mCarStatsService, mVmsBrokerService, mVmsClientManager);
+        } else {
+            mVmsBrokerService = null;
+            mVmsClientManager = null;
+            mVmsSubscriberService = null;
+            mVmsPublisherService = null;
+        }
+        if (mFeatureController.isFeatureEnabled(Car.DIAGNOSTIC_SERVICE)) {
+            mCarDiagnosticService = new CarDiagnosticService(serviceContext,
+                    mHal.getDiagnosticHal());
+        } else {
+            mCarDiagnosticService = null;
+        }
         if (mFeatureController.isFeatureEnabled(Car.STORAGE_MONITORING_SERVICE)) {
             mCarStorageMonitoringService = new CarStorageMonitoringService(serviceContext,
                     systemInterface);
@@ -224,7 +244,7 @@ public class ICarImpl extends ICar.Stub {
                 new CarConfigurationService(serviceContext, new JsonReaderImpl());
         mCarLocationService = new CarLocationService(serviceContext);
         mCarTrustedDeviceService = new CarTrustedDeviceService(serviceContext);
-        mCarMediaService = new CarMediaService(serviceContext);
+        mCarMediaService = new CarMediaService(serviceContext, mCarUserService);
         mCarBugreportManagerService = new CarBugreportManagerService(serviceContext);
         if (!Build.IS_USER) {
             mCarExperimentalFeatureServiceController = new CarExperimentalFeatureServiceController(
@@ -252,6 +272,7 @@ public class ICarImpl extends ICar.Stub {
         allServices.add(mCarDrivingStateService);
         allServices.add(mCarOccupantZoneService);
         allServices.add(mCarUXRestrictionsService);
+        addServiceIfNonNull(allServices, mOccupantAwarenessService);
         allServices.add(mCarPackageManagerService);
         allServices.add(mCarInputService);
         allServices.add(mGarageModeService);
@@ -265,12 +286,12 @@ public class ICarImpl extends ICar.Stub {
         allServices.add(mPerUserCarServiceHelper);
         allServices.add(mCarBluetoothService);
         allServices.add(mCarProjectionService);
-        allServices.add(mCarDiagnosticService);
+        addServiceIfNonNull(allServices, mCarDiagnosticService);
         addServiceIfNonNull(allServices, mCarStorageMonitoringService);
         allServices.add(mCarConfigurationService);
-        allServices.add(mVmsClientManager);
-        allServices.add(mVmsSubscriberService);
-        allServices.add(mVmsPublisherService);
+        addServiceIfNonNull(allServices, mVmsClientManager);
+        addServiceIfNonNull(allServices, mVmsSubscriberService);
+        addServiceIfNonNull(allServices, mVmsPublisherService);
         allServices.add(mCarTrustedDeviceService);
         allServices.add(mCarMediaService);
         allServices.add(mCarLocationService);
@@ -459,6 +480,8 @@ public class ICarImpl extends ICar.Stub {
                 return mCarDrivingStateService;
             case Car.CAR_UX_RESTRICTION_SERVICE:
                 return mCarUXRestrictionsService;
+            case Car.OCCUPANT_AWARENESS_SERVICE:
+                return mOccupantAwarenessService;
             case Car.CAR_CONFIGURATION_SERVICE:
                 return mCarConfigurationService;
             case Car.CAR_TRUST_AGENT_ENROLLMENT_SERVICE:
@@ -504,10 +527,6 @@ public class ICarImpl extends ICar.Stub {
                         serviceName);
                 return null;
         }
-    }
-
-    CarStatsService getStatsService() {
-        return mCarStatsService;
     }
 
     public static void assertVehicleHalMockPermission(Context context) {

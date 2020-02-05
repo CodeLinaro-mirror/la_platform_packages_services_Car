@@ -66,7 +66,7 @@ class AidlClientImpl : public aidl::android::automotive::computepipe::runner::Bn
     ndk::ScopedAStatus resetPipeConfigs() override;
     ndk::ScopedAStatus startPipe() override;
     ndk::ScopedAStatus stopPipe() override;
-    ndk::ScopedAStatus doneWithPacket(int32_t id) override;
+    ndk::ScopedAStatus doneWithPacket(int32_t bufferId, int32_t streamId) override;
 
     ndk::ScopedAStatus getPipeDebugger(
         std::shared_ptr<aidl::android::automotive::computepipe::runner::IPipeDebugger>* _aidl_return)
@@ -80,6 +80,10 @@ class AidlClientImpl : public aidl::android::automotive::computepipe::runner::Bn
     // Dispatch semantic data to client. Has copy semantics and does not expect
     // client to invoke doneWithPacket.
     Status DispatchSemanticData(int32_t streamId, const std::shared_ptr<MemHandle>& packetHandle);
+
+    // Dispatch pixel data to client. Expects the client to invoke done with
+    // packet.
+    Status DispatchPixelData(int32_t streamId, const std::shared_ptr<MemHandle>& packetHandle);
 
     bool isClientInitDone();
 

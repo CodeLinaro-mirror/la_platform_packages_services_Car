@@ -17,6 +17,7 @@
 
 #include <mutex>
 
+#include "InputFrame.h"
 #include "OutputConfig.pb.h"
 #include "RunnerComponent.h"
 #include "StreamManager.h"
@@ -35,11 +36,12 @@ class SemanticHandle : public MemHandle {
      * Override mem handle methods
      */
     int getStreamId() const override;
+    int getBufferId() const override;
     proto::PacketType getType() const override;
     uint64_t getTimeStamp() const override;
     uint32_t getSize() const override;
     const char* getData() const override;
-    native_handle_t getNativeHandle() const override;
+    AHardwareBuffer* getHardwareBuffer() const override;
     /* set info for the memory. Make a copy */
     Status setMemInfo(int streamId, const char* data, uint32_t size, uint64_t timestamp,
                       const proto::PacketType& type);
@@ -60,9 +62,11 @@ class SemanticManager : public StreamManager, StreamManagerInit {
     /* Set Max in flight packets based on client specification */
     Status setMaxInFlightPackets(uint32_t maxPackets) override;
     /* Free previously dispatched packet. Once client has confirmed usage */
-    Status freePacket(const std::shared_ptr<MemHandle>& memhandle) override;
+    Status freePacket(int bufferId) override;
     /* Queue packet produced by graph stream */
     Status queuePacket(const char* data, const uint32_t size, uint64_t timestamp) override;
+    /* Queues an image packet produced by graph stream */
+    Status queuePacket(const InputFrame& inputData, uint64_t timestamp) override;
     /* Override handling of Runner Engine Events */
     void notifyEndOfStream();
 

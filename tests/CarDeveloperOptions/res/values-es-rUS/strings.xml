@@ -1612,10 +1612,10 @@
     <string name="tether_settings_title_wifi" msgid="2060965130234484613">"Hotspot portátil"</string>
     <string name="tether_settings_title_bluetooth" msgid="1999590158102569959">"Conexión Bluetooth"</string>
     <string name="tether_settings_title_usb_bluetooth" msgid="1159128764162788159">"Compartir conexión"</string>
-    <string name="tether_settings_title_all" msgid="6935843543433954181">"Hotspots y dispositivos portátiles"</string>
-    <string name="tether_settings_summary_hotspot_on_tether_on" msgid="1289593649526514499">"Hotspot activado, conexión mediante dispositivo portátil"</string>
+    <string name="tether_settings_title_all" msgid="6935843543433954181">"Hotspot y conexión mediante dispositivos móviles"</string>
+    <string name="tether_settings_summary_hotspot_on_tether_on" msgid="1289593649526514499">"Hotspot activado, conexión mediante dispositivo móvil"</string>
     <string name="tether_settings_summary_hotspot_on_tether_off" msgid="8010689354668285422">"Hotspot activado"</string>
-    <string name="tether_settings_summary_hotspot_off_tether_on" msgid="1349909238672649877">"Conexión mediante dispositivo portátil"</string>
+    <string name="tether_settings_summary_hotspot_off_tether_on" msgid="1349909238672649877">"Conexión mediante dispositivo móvil"</string>
     <string name="tether_settings_disabled_on_data_saver" msgid="3682544845899910726">"No podrán establecerse conexiones a través del dispositivo portátil ni hotspots portátiles cuando se active el modo Ahorro de datos."</string>
     <string name="usb_title" msgid="7480927657535578688">"USB"</string>
     <string name="usb_tethering_button_text" msgid="6242228383142012332">"Conexión USB"</string>
@@ -1627,7 +1627,7 @@
     <string name="bluetooth_tethering_off_subtext_config" msgid="3981528184780083266">"Compartiendo la conexión a Internet de <xliff:g id="DEVICE_NAME">%1$d</xliff:g> mediante Bluetooth"</string>
     <string name="bluetooth_tethering_overflow_error" msgid="6946561351369376943">"No se puede anclar a red a más de <xliff:g id="MAXCONNECTION">%1$d</xliff:g> dispositivos."</string>
     <string name="bluetooth_untether_blank" msgid="5428300773782256084">"<xliff:g id="DEVICE_NAME">%1$s</xliff:g> ya no se anclará a red."</string>
-    <string name="tethering_footer_info" msgid="8019555174339154124">"Usa la función de hotspot y conexión mediante dispositivo portátil para brindar acceso a Internet a otros dispositivos mediante tu conexión de datos móviles. Las apps también pueden crear un hotspot para compartir contenido con dispositivos cercanos."</string>
+    <string name="tethering_footer_info" msgid="8019555174339154124">"Usa la función de hotspot y conexión mediante dispositivo móvil para brindar acceso a Internet a otros dispositivos mediante tu conexión de datos móviles. Las apps también pueden crear un hotspot para compartir contenido con dispositivos cercanos."</string>
     <string name="tethering_help_button_text" msgid="7653022000284543996">"Ayuda"</string>
     <string name="network_settings_title" msgid="8516526011407061679">"Red móvil"</string>
     <string name="manage_mobile_plan_title" msgid="3312016665522553062">"Plan móvil"</string>
@@ -4139,7 +4139,7 @@
     <string name="fingerprint_swipe_for_notifications_suggestion_title" msgid="948946491233738823">"Consulta tus notificaciones rápidamente"</string>
     <string name="gesture_setting_on" msgid="7573680730101327866">"Activado"</string>
     <string name="gesture_setting_off" msgid="2540159841716890511">"Desactivado"</string>
-    <string name="oem_unlock_enable_disabled_summary_bootloader_unlocked" msgid="7233244080078311793">"El cargador de inicio está desbloqueado"</string>
+    <string name="oem_unlock_enable_disabled_summary_bootloader_unlocked" msgid="7233244080078311793">"El bootloader está desbloqueado"</string>
     <string name="oem_unlock_enable_disabled_summary_connectivity" msgid="262986780389836168">"Primero debes conectarte a Internet"</string>
     <string name="oem_unlock_enable_disabled_summary_connectivity_or_locked" msgid="3331374502670483142">"Conéctate a Internet o comunícate con tu proveedor"</string>
     <string name="oem_unlock_enable_disabled_summary_sim_locked_device" msgid="5223278198179877704">"No disponible en dispositivos bloqueados por el proveedor"</string>
@@ -4275,6 +4275,10 @@
     <string name="disabled_feature_reason_slow_down_phone" msgid="1819157849156814583">"Esta función ralentizará el teléfono"</string>
     <string name="enable_gnss_raw_meas_full_tracking" msgid="3397182995626655581">"Forzar dimensiones GNSS completas"</string>
     <string name="enable_gnss_raw_meas_full_tracking_summary" msgid="2469305990718976105">"Seguir todas las frecuencias y constelaciones de GNSS sin ciclo de funciones"</string>
+    <!-- no translation found for enable_user_switch_message (8613014373053051092) -->
+    <skip />
+    <!-- no translation found for enable_user_switch_message_summary (3354160264601132060) -->
+    <skip />
     <string name="allow_background_activity_starts" msgid="6754016668813082728">"Permitir inicio de actividades en segundo plano"</string>
     <string name="allow_background_activity_starts_summary" msgid="8170749270869606692">"Permite que se inicien todas las actividades en segundo plano"</string>
     <string name="show_first_crash_dialog" msgid="3682063068903692710">"Mostrar siempre el cuadro de diálogo de bloqueos"</string>
