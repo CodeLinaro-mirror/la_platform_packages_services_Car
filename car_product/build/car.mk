@@ -39,6 +39,7 @@ PRODUCT_PACKAGES += \
     EmbeddedKitchenSinkApp \
     VmsPublisherClientSample \
     VmsSubscriberClientSample \
+    DirectRenderingCluster \
     GarageModeTestApp \
 
 # SEPolicy for test apps / services
@@ -52,9 +53,9 @@ PRODUCT_PROPERTY_OVERRIDES += \
     persist.vendor.bluetooth.enablenewavrcp=false \
     ro.carrier=unknown
 
-# Enable headless user 0
 PRODUCT_SYSTEM_DEFAULT_PROPERTIES += \
     ro.fw.mu.headless_system_user=true \
+    config.disable_systemtextclassifier=true
 
 # Overlay for Google network and fused location providers
 $(call inherit-product, device/sample/products/location_overlay.mk)
