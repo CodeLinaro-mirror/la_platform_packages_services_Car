@@ -41,8 +41,11 @@ void AnalyzeCallback::analyze(const ::android::automotive::evs::support::Frame& 
         int64_t timestamp = std::chrono::time_point_cast<std::chrono::microseconds>(time_point)
                                 .time_since_epoch()
                                 .count();
-        InputFrame inputFrame(frame.height, frame.width, PixelFormat::RGBA, frame.stride,
-                              frame.data, mFrameDeleter);
+        // Stride for hardware buffers is specified in pixels whereas for
+        // InputFrame, it is specified in bytes. We therefore need to multiply
+        // the stride by 4 for an RGBA frame.
+        InputFrame inputFrame(frame.height, frame.width, PixelFormat::RGBA, frame.stride * 4,
+                              frame.data);
         mInputEngineInterface->dispatchInputFrame(mInputStreamId, timestamp, inputFrame);
     }
 }
