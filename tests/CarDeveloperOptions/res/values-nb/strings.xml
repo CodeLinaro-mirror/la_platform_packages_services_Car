@@ -794,7 +794,7 @@
     <string name="bluetooth_pan_nap_profile_summary_connected" msgid="3103296701913705646">"Deler lokal internettilkobling med enhet"</string>
     <string name="bluetooth_dock_settings" msgid="3193180757893817101">"Innstillinger for forankringsstasjon"</string>
     <string name="bluetooth_dock_settings_title" msgid="4444650787249778130">"Bruk forankring til lyd"</string>
-    <string name="bluetooth_dock_settings_headset" msgid="6043070852100434218">"Som høyttalertelefon"</string>
+    <string name="bluetooth_dock_settings_headset" msgid="6043070852100434218">"Som høyttaler"</string>
     <string name="bluetooth_dock_settings_a2dp" msgid="6618893632901282661">"For musikk og medier"</string>
     <string name="bluetooth_dock_settings_remember" msgid="5512957564380371067">"Husk innstillinger"</string>
     <string name="bluetooth_max_connected_audio_devices_string" msgid="6799012540303500020">"Maksimalt antall Bluetooth-lydenheter"</string>
@@ -4277,6 +4277,10 @@
     <string name="disabled_feature_reason_slow_down_phone" msgid="1819157849156814583">"Den senker hastigheten til telefonen"</string>
     <string name="enable_gnss_raw_meas_full_tracking" msgid="3397182995626655581">"Tving fullstendige GNSS-målinger"</string>
     <string name="enable_gnss_raw_meas_full_tracking_summary" msgid="2469305990718976105">"Spor alle GNSS-konstellasjoner og -frekvenser uten syklus for oppgaver"</string>
+    <!-- no translation found for enable_user_switch_message (8613014373053051092) -->
+    <skip />
+    <!-- no translation found for enable_user_switch_message_summary (3354160264601132060) -->
+    <skip />
     <string name="allow_background_activity_starts" msgid="6754016668813082728">"Tillat start av bakgrunnsaktivitet"</string>
     <string name="allow_background_activity_starts_summary" msgid="8170749270869606692">"Tillater all start av bakgrunnsaktivitet"</string>
     <string name="show_first_crash_dialog" msgid="3682063068903692710">"Vis alltid krasjdialogboksen"</string>

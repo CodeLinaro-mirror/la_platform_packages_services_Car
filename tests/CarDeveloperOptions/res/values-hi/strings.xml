@@ -4150,7 +4150,7 @@
     <string name="web_action_enable_title" msgid="4462106633708675959">"झटपट ऐप्लिकेशन"</string>
     <string name="web_action_enable_summary" msgid="1729016644691793085">"सभी लिंक ऐप्लिकेशन में खोलें, भले ही वे इंस्टॉल न हों"</string>
     <string name="web_action_section_title" msgid="5563229447734734662">"झटपट ऐप्लिकेशन"</string>
-    <string name="instant_apps_settings" msgid="879003203555847537">"इंस्टेंट ऐप से जुड़ी पसंद की सेटिंग"</string>
+    <string name="instant_apps_settings" msgid="879003203555847537">"झटपट ऐप्लिकेशन से जुड़ी पसंद की सेटिंग"</string>
     <string name="domain_url_section_title" msgid="206403507921518321">"इंस्‍टॉल किए गए ऐप्‍लिकेशन"</string>
     <string name="automatic_storage_manager_activation_warning" msgid="2630083316417707308">"आपकी जगह का प्रबंधन अब जगह प्रबंधक द्वारा किया जा रहा है"</string>
     <string name="account_for_section_header" msgid="5975241715840642563">"<xliff:g id="USER_NAME">%1$s</xliff:g> के खाते"</string>
@@ -4277,6 +4277,10 @@
     <string name="disabled_feature_reason_slow_down_phone" msgid="1819157849156814583">"इस सुविधा का इस्तेमाल करने पर आपका फ़ोन धीरे काम करेगा"</string>
     <string name="enable_gnss_raw_meas_full_tracking" msgid="3397182995626655581">"जीएनएसएस माप को हर हाल में लागू करें"</string>
     <string name="enable_gnss_raw_meas_full_tracking_summary" msgid="2469305990718976105">"बिना ड्यूटी-साइक्लिंग के जीएनएसएस के सभी तारामंडल (कॉन्स्टलेशन) और फ़्रीक्वेंसी ट्रैक करें"</string>
+    <!-- no translation found for enable_user_switch_message (8613014373053051092) -->
+    <skip />
+    <!-- no translation found for enable_user_switch_message_summary (3354160264601132060) -->
+    <skip />
     <string name="allow_background_activity_starts" msgid="6754016668813082728">"बैकग्राउंड में गतिविधि शुरू होने की मंज़ूरी दें"</string>
     <string name="allow_background_activity_starts_summary" msgid="8170749270869606692">"इससे बैकग्राउंड में शुरू होने वाली सभी गतिविधि को मंज़ूरी मिल जाती है"</string>
     <string name="show_first_crash_dialog" msgid="3682063068903692710">"क्रैश होने की सूचना हर बार दिखाएं"</string>

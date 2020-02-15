@@ -4159,7 +4159,7 @@
     <string name="auto_sync_personal_account_title" msgid="6844465157916100655">"Synchroniser automatiquement les données personnelles"</string>
     <string name="auto_sync_work_account_title" msgid="2403222633447522376">"Synchroniser automatiquement les données professionnelles"</string>
     <string name="auto_sync_account_summary" msgid="6316230976974033772">"Autoriser les applications à actualiser les données automatiquement"</string>
-    <string name="account_sync_title" msgid="1570164819114297154">"Synchro. du compte"</string>
+    <string name="account_sync_title" msgid="1570164819114297154">"Synchro du compte"</string>
     <string name="account_sync_summary_some_on" msgid="1934556869158274053">"La synchronisation est activée pour <xliff:g id="ID_1">%1$d</xliff:g> élément(s) sur <xliff:g id="ID_2">%2$d</xliff:g>"</string>
     <string name="account_sync_summary_all_on" msgid="3634161204232431700">"La synchronisation est activée pour tous les éléments"</string>
     <string name="account_sync_summary_all_off" msgid="1971584632343645602">"La synchronisation est désactivée pour tous les éléments"</string>
@@ -4277,6 +4277,10 @@
     <string name="disabled_feature_reason_slow_down_phone" msgid="1819157849156814583">"Elle ralentirait ce téléphone"</string>
     <string name="enable_gnss_raw_meas_full_tracking" msgid="3397182995626655581">"Forcer les mesures GNSS complètes"</string>
     <string name="enable_gnss_raw_meas_full_tracking_summary" msgid="2469305990718976105">"Faire le suivi de toutes les constellations et les fréquences GNSS sans cycle de tâches"</string>
+    <!-- no translation found for enable_user_switch_message (8613014373053051092) -->
+    <skip />
+    <!-- no translation found for enable_user_switch_message_summary (3354160264601132060) -->
+    <skip />
     <string name="allow_background_activity_starts" msgid="6754016668813082728">"Autoriser le démarrage d\'activité en arrière-plan"</string>
     <string name="allow_background_activity_starts_summary" msgid="8170749270869606692">"Autoriser tous les démarrages d\'activité en arrière-plan"</string>
     <string name="show_first_crash_dialog" msgid="3682063068903692710">"Toujours afficher la fenêtre de plantage"</string>
