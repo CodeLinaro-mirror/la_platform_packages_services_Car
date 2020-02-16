@@ -49,6 +49,7 @@ import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Looper;
 import android.os.UserHandle;
+import android.os.SystemProperties;
 
 import java.io.PrintWriter;
 import java.util.ArrayList;
@@ -197,10 +198,17 @@ public class AirplaneModeService implements CarServiceBase,
         private static final int MSG_POWER_EVENT_PROCESSING_COMPLETE = 202;
         private static final int MSG_TIMEOUT = 203;
 
-        private static final int MAX_SHUTDOWN_TIME = 10000; // 10s
+        // in ms
+        private static final String PROP_AIRPLANE_MODE_DURATION =
+                "android.car.airplane_mode_duration";
 
-        private static final int MAX_NOTIFY_DELAY = 8000;  // ms
-        private static final int DEFAULT_NOTIFY_DELAY = 5000;  // ms
+        private static final int MAX_NOTIFY_DELAY = 10_000; // 10 seconds
+
+        private static final int MIN_NOTIFY_DELAY = 500;  // ms
+
+        private static final int MIN_BLUETOOTH_OFF_TIMEOUT = 400;  // ms
+
+        private static final int MIN_WIFI_OFF_TIMEOUT = 1_200;  // 1.2 second
 
         // Airplane mode
         private static final int AIRPLANE_MODE_OFF = 0;
@@ -231,6 +239,9 @@ public class AirplaneModeService implements CarServiceBase,
             }
 
             public void init() {
+            }
+
+            public void close() {
             }
 
             public Context getContext() {
@@ -287,6 +298,14 @@ public class AirplaneModeService implements CarServiceBase,
                 setRfState(curRfState);
             }
 
+            @Override
+            public void close() {
+                if (mBluetoothAdapter != null) {
+                    logd("disable Bluetooth");
+                    mBluetoothAdapter.disable();
+                }
+            }
+
             public int mapBluetoothState2RfState(int state) {
                 int curRfState = 0;
 
@@ -332,6 +351,14 @@ public class AirplaneModeService implements CarServiceBase,
                 setRfState(curRfState);
             }
 
+            @Override
+            public void close() {
+                if (mWifiManager != null) {
+                    logd("disable Wifi");
+                    mWifiManager.setWifiEnabled(false);
+                }
+            }
+
             public int mapWifiState2RfState(int state) {
                 int curRfState = 0;
 
@@ -368,6 +395,7 @@ public class AirplaneModeService implements CarServiceBase,
 
         private boolean mPowerOn = true;
         private int mAirplaneMode = AIRPLANE_MODE_OFF;
+        private int mDuration = MIN_NOTIFY_DELAY; // airplane mode duration in ms
 
         private ContentObserver mAirplaneModeObserver = new ContentObserver(new Handler()) {
             @Override
@@ -507,29 +535,37 @@ public class AirplaneModeService implements CarServiceBase,
             logd("handlePowerOff airplane mode: " + mAirplaneMode +
                     " (" + mapAirplaneMode2String(mAirplaneMode) + ")");
 
+            mDuration = calculateDuration();
+
             if (!mPowerOn) {
                 logw("handlePowerOff already power off");
-                postponePowerEventProcessingCompletion(DEFAULT_NOTIFY_DELAY);
+                postponePowerEventProcessingCompletion(mDuration);
                 return;
             }
 
             mPowerOn = false;
 
             if (mAirplaneMode != AIRPLANE_MODE_OFF) {
-                loge("handlePowerOff ignore due to invalid airplane mode");
-                postponePowerEventProcessingCompletion(DEFAULT_NOTIFY_DELAY);
+                if (isRfOff()) {
+                    logw("handlePowerOff ignore since airplane is on and RF is off");
+                    postponePowerEventProcessingCompletion(mDuration);
+                } else {
+                    loge("handlePowerOff invalid airplane on and RF on");
+                    sendEmptyMessageDelayed(MSG_TIMEOUT, MAX_NOTIFY_DELAY);
+                    closeRf();
+                }
                 return;
             }
 
             if (isRfOff()) {
-                postponePowerEventProcessingCompletion(DEFAULT_NOTIFY_DELAY);
+                postponePowerEventProcessingCompletion(mDuration);
                 return;
             }
 
             setAirplaneModeOn(true);
             mAirplaneMode = AIRPLANE_MODE_TURNING_ON;
 
-            sendEmptyMessageDelayed(MSG_TIMEOUT, MAX_SHUTDOWN_TIME);
+            sendEmptyMessageDelayed(MSG_TIMEOUT, MAX_NOTIFY_DELAY);
         }
 
         private void handlePowerOn() {
@@ -556,8 +592,6 @@ public class AirplaneModeService implements CarServiceBase,
             int newMode = getAirplaneMode();
             logd("handleAirplaneModeChanged " + mapAirplaneMode2String(newMode));
 
-            removeMessages(MSG_TIMEOUT);
-
             // Postpone to notify power event completion. The reason is that if
             // airplane mode is changed to on, it only means RF (e.g. Bluetooth)
             // begins to turn off. So it's necessary to wait until RF has been
@@ -570,7 +604,9 @@ public class AirplaneModeService implements CarServiceBase,
             updateRfState(id, state);
 
             if (!mPowerOn && isRfOff()) {
-                postponePowerEventProcessingCompletion(MAX_NOTIFY_DELAY);
+                removeMessages(MSG_TIMEOUT);
+                logd("postpone notifying completion, duration: " + mDuration + " ms");
+                postponePowerEventProcessingCompletion(mDuration);
             }
         }
 
@@ -584,6 +620,27 @@ public class AirplaneModeService implements CarServiceBase,
         private void handleTimeout() {
             loge("handleTimeout ");
             notifyPowerEventProcessingCompletion();
+        }
+
+        private int calculateDuration() {
+            int maxDuration = MAX_NOTIFY_DELAY - MIN_NOTIFY_DELAY;
+            int duration = SystemProperties.getInt(PROP_AIRPLANE_MODE_DURATION,
+                    MIN_NOTIFY_DELAY);
+
+            if (duration > maxDuration) {
+                duration = maxDuration;
+            }
+
+            if (mBluetoothState.isOn()) {
+                duration = Math.max(duration, MIN_BLUETOOTH_OFF_TIMEOUT);
+            }
+
+            if (mWifiState.isOn()) {
+                duration = Math.max(duration, MIN_WIFI_OFF_TIMEOUT);
+            }
+
+            logd("calculateDuration: " + duration + " ms");
+            return duration;
         }
 
         private void updateRfState(int id, int state) {
@@ -609,6 +666,13 @@ public class AirplaneModeService implements CarServiceBase,
             }
 
             return allRfOff;
+        }
+
+        private void closeRf() {
+            logd("close RF");
+            for (RfState state : mRfStates) {
+                state.close();
+            }
         }
 
         private void setAirplaneModeOn(boolean enable) {
