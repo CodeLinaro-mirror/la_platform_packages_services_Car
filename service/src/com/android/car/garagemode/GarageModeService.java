@@ -95,6 +95,8 @@ public class GarageModeService implements CarServiceBase {
      * Forces GarageMode to start. Used by {@link com.android.car.ICarImpl}.
      */
     public void forceStartGarageMode() {
+        // Start listening Car power state
+        mController.init();
         mController.initiateGarageMode(null);
     }
 
@@ -103,5 +105,7 @@ public class GarageModeService implements CarServiceBase {
      */
     public void stopAndResetGarageMode() {
         mController.resetGarageMode();
+        // Stop listening Car power state
+        mController.release();
     }
 }

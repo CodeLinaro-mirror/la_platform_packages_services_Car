@@ -68,7 +68,9 @@ public class Controller implements CarPowerStateListenerWithCompletion {
 
     /** release */
     public void release() {
-        mCarPowerManager.clearListener();
+        if (mCarPowerManager != null) {
+            mCarPowerManager.clearListener();
+        }
     }
 
     @Override
