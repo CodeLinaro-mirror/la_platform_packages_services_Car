@@ -38,6 +38,7 @@ import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.database.ContentObserver;
 import android.net.wifi.WifiManager;
+import android.net.wifi.p2p.WifiP2pManager;
 import android.provider.Settings;
 import android.util.Log;
 
@@ -46,6 +47,7 @@ import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Looper;
 import android.os.UserHandle;
+import android.os.SystemProperties;
 
 import java.io.PrintWriter;
 import java.util.ArrayList;
@@ -175,11 +177,20 @@ public class AirplaneModeService implements CarServiceBase,
         private static final int MSG_POWER_EVENT_PROCESSING_COMPLETE = 202;
         private static final int MSG_TIMEOUT = 203;
 
-        private static final int MAX_ENABLE_TIME = 9000;    // 9s
-        private static final int MAX_SHUTDOWN_TIME = 10000; // 10s
 
-        private static final int NORMAL_NOTIFY_DELAY = 2500;  // ms
-        private static final int NOTIFY_DELAY = 5000;  // ms
+        // in ms
+        private static final String PROP_AIRPLANE_MODE_DURATION =
+                "android.car.airplane_mode_duration";
+
+        private static final int MAX_NOTIFY_DELAY = 10_000; // 10 seconds
+
+        private static final int MIN_NOTIFY_DELAY = 500;  // ms
+
+        private static final int MIN_BLUETOOTH_OFF_TIMEOUT = 400;  // ms
+
+        private static final int MIN_WIFI_OFF_TIMEOUT = 1_500;  // 1.5 second
+
+        private static final int NORMAL_NOTIFY_DELAY = 2_500;  // 2.5 second
 
         // Airplane mode
         private static final int AIRPLANE_MODE_OFF = 0;
@@ -195,7 +206,9 @@ public class AirplaneModeService implements CarServiceBase,
 
             // RF ID
             public static final int RF_ID_BLUETOOTH = 1;
-            public static final int RF_ID_WIFI = 2;
+            public static final int RF_ID_WIFI = 2;  // Wifi station
+            public static final int RF_ID_WIFI_AP = 3;  // Wifi AP
+            public static final int RF_ID_WIFI_P2P = 4;  // Wifi P2P
 
             private String name;
             private int id;
@@ -210,6 +223,9 @@ public class AirplaneModeService implements CarServiceBase,
             }
 
             public void init() {
+            }
+
+            public void close() {
             }
 
             public Context getContext() {
@@ -266,6 +282,14 @@ public class AirplaneModeService implements CarServiceBase,
                 setRfState(curRfState);
             }
 
+            @Override
+            public void close() {
+                if (mBluetoothAdapter != null) {
+                    logd("disable Bluetooth");
+                    mBluetoothAdapter.disable();
+                }
+            }
+
             public int mapBluetoothState2RfState(int state) {
                 int curRfState = 0;
 
@@ -311,6 +335,14 @@ public class AirplaneModeService implements CarServiceBase,
                 setRfState(curRfState);
             }
 
+            @Override
+            public void close() {
+                if (mWifiManager != null) {
+                    logd("disable Wifi");
+                    mWifiManager.setWifiEnabled(false);
+                }
+            }
+
             public int mapWifiState2RfState(int state) {
                 int curRfState = 0;
 
@@ -338,15 +370,129 @@ public class AirplaneModeService implements CarServiceBase,
             }
         }
 
+        private class WifiApState extends RfState {
+            private final WifiManager mWifiManager;
+
+            public WifiApState(Context context) {
+                super(RfState.RF_ID_WIFI_AP, RfState.RF_STATE_OFF,
+                        "WifiAp", context);
+
+                mWifiManager = (WifiManager) context.getSystemService(Context.WIFI_SERVICE);
+            }
+
+            @Override
+            public void init() {
+                int state = getWifiApState();
+                int curRfState = mapWifiApState2RfState(state);
+
+                setRfState(curRfState);
+            }
+
+            @Override
+            public void close() {
+                if (mWifiManager != null) {
+                    logd("disable WifiAp");
+                    mWifiManager.stopSoftAp();
+                }
+            }
+
+            public int mapWifiApState2RfState(int state) {
+                int curRfState = 0;
+
+                switch (state) {
+                    case WifiManager.WIFI_AP_STATE_DISABLED:
+                        curRfState = RfState.RF_STATE_OFF;
+                        break;
+                    case WifiManager.WIFI_AP_STATE_ENABLED:
+                        curRfState = RfState.RF_STATE_ON;
+                        break;
+                    default:
+                        curRfState = RfState.RF_STATE_UNKNOWN;
+                        break;
+                }
+
+                return curRfState;
+            }
+
+            public int getWifiApState() {
+                if (mWifiManager != null) {
+                    return mWifiManager.getWifiApState();
+                } else {
+                    return WifiManager.WIFI_AP_STATE_DISABLED;
+                }
+            }
+        }
+
+        private class WifiP2pState extends RfState {
+            private final WifiP2pManager mWifiP2pManager;
+
+            public WifiP2pState(Context context) {
+                super(RfState.RF_ID_WIFI_P2P, RfState.RF_STATE_OFF,
+                        "WifiP2p", context);
+
+                mWifiP2pManager = (WifiP2pManager)
+                        context.getSystemService(Context.WIFI_P2P_SERVICE);
+            }
+
+            @Override
+            public void init() {
+                int state = WifiP2pManager.WIFI_P2P_STATE_DISABLED;
+                int curRfState = mapWifiP2pState2RfState(state);
+
+                setRfState(curRfState);
+            }
+
+            @Override
+            public void close() {
+                // TODO
+            }
+
+            public int mapWifiP2pState2RfState(int state) {
+                int curRfState = 0;
+
+                switch (state) {
+                    case WifiP2pManager.WIFI_P2P_STATE_DISABLED:
+                        curRfState = RfState.RF_STATE_OFF;
+                        break;
+                    case WifiP2pManager.WIFI_P2P_STATE_ENABLED:
+                        curRfState = RfState.RF_STATE_ON;
+                        break;
+                    default:
+                        curRfState = RfState.RF_STATE_UNKNOWN;
+                        break;
+                }
+
+                return curRfState;
+            }
+        }
+
         private IntentFilter mBluetoothIntentFilter;
         private IntentFilter mWifiIntentFilter;
+        private IntentFilter mWifiApIntentFilter;
+        private IntentFilter mWifiP2pIntentFilter;
 
         private BluetoothState mBluetoothState;
         private WifiState mWifiState;
+        private WifiApState mWifiApState;
+        private WifiP2pState mWifiP2pState;
         private RfState[] mRfStates;
 
         private boolean mPowerOn = true;
         private int mAirplaneMode = AIRPLANE_MODE_OFF;
+        // Define airplane mode duration in ms.
+        // AirplaneModeService is used to turn on AirplaneMode when CPMS notifies
+        // to sleep, and turn off AirplaneMode when CPMS notifies to wakeup.
+        // (1) If AirplaneMode is on, RF (e.g. BT, Wifi) is turned off.
+        // (2) However AirplaneMode on doesn't mean BT/Wifi is turned off at once.
+        //     This is asynchronous operation.If AirplaneModeService notifies the
+        //     completion early before BT/Wifi is fully turned off when to sleep,
+        //     this may result into kernel suspend error.
+        // (3) Normally, it takes about 0.5 second to turn BT off fully,
+        //     while about 1.5 sec to turn Wifi off fully.
+        // (4) If other CPMS client (e.g. GarageModeService) is disabled, this
+        //     service still needs to wait some time for display off, before CPMS
+        //     forces suspend.
+        private int mDuration = MIN_NOTIFY_DELAY;
 
         private ContentObserver mAirplaneModeObserver = new ContentObserver(new Handler()) {
             @Override
@@ -383,6 +529,33 @@ public class AirplaneModeService implements CarServiceBase,
             }
         };
 
+        private BroadcastReceiver mWifiApReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                final int state = intent.getIntExtra(WifiManager.EXTRA_WIFI_AP_STATE,
+                        WifiManager.WIFI_AP_STATE_DISABLED);
+
+                if (state == WifiManager.WIFI_AP_STATE_ENABLED) {
+                    notifyWifiApStateChanged(true);
+                } else if (state == WifiManager.WIFI_AP_STATE_DISABLED) {
+                    notifyWifiApStateChanged(false);
+                }
+            }
+        };
+
+        private BroadcastReceiver mWifiP2pReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                final int state = intent.getIntExtra(WifiP2pManager.EXTRA_WIFI_STATE, -1);
+
+                if (state == WifiP2pManager.WIFI_P2P_STATE_ENABLED) {
+                    notifyWifiP2pStateChanged(true);
+                } else if (state == WifiP2pManager.WIFI_P2P_STATE_DISABLED) {
+                    notifyWifiP2pStateChanged(false);
+                }
+            }
+        };
+
         public AirplaneModeHandler(Looper looper) {
             super(looper);
 
@@ -407,15 +580,27 @@ public class AirplaneModeService implements CarServiceBase,
             mWifiIntentFilter = new IntentFilter();
             mWifiIntentFilter.addAction(WifiManager.WIFI_STATE_CHANGED_ACTION);
             mContext.registerReceiver(mWifiReceiver, mWifiIntentFilter);
+
+            mWifiApIntentFilter = new IntentFilter();
+            mWifiApIntentFilter.addAction(WifiManager.WIFI_AP_STATE_CHANGED_ACTION);
+            mContext.registerReceiver(mWifiApReceiver, mWifiApIntentFilter);
+
+            mWifiP2pIntentFilter = new IntentFilter();
+            mWifiP2pIntentFilter.addAction(WifiP2pManager.WIFI_P2P_STATE_CHANGED_ACTION);
+            mContext.registerReceiver(mWifiP2pReceiver, mWifiP2pIntentFilter);
         }
 
         private void initRfStates() {
             mBluetoothState = new BluetoothState(mContext);
             mWifiState = new WifiState(mContext);
+            mWifiApState = new WifiApState(mContext);
+            mWifiP2pState = new WifiP2pState(mContext);
 
             List<RfState> allStates = new ArrayList<>(Arrays.asList(
                     mBluetoothState,
-                    mWifiState
+                    mWifiState,
+                    mWifiApState,
+                    mWifiP2pState
             ));
             mRfStates = allStates.toArray(new RfState[0]);
 
@@ -425,7 +610,7 @@ public class AirplaneModeService implements CarServiceBase,
         }
 
         public long getShutdownTime() {
-            return MAX_SHUTDOWN_TIME;
+            return MAX_NOTIFY_DELAY;
         }
 
         public void notifyPowerOff(boolean shuttingDown) {
@@ -465,6 +650,16 @@ public class AirplaneModeService implements CarServiceBase,
                     on ? RfState.RF_STATE_ON : RfState.RF_STATE_OFF);
         }
 
+        public void notifyWifiApStateChanged(boolean on) {
+            notifyRfStateChanged(RfState.RF_ID_WIFI_AP,
+                    on ? RfState.RF_STATE_ON : RfState.RF_STATE_OFF);
+        }
+
+        public void notifyWifiP2pStateChanged(boolean on) {
+            notifyRfStateChanged(RfState.RF_ID_WIFI_P2P,
+                    on ? RfState.RF_STATE_ON : RfState.RF_STATE_OFF);
+        }
+
         @Override
         public void handleMessage(Message msg) {
             switch (msg.what) {
@@ -495,29 +690,37 @@ public class AirplaneModeService implements CarServiceBase,
             logd("handlePowerOff airplane mode: " + mAirplaneMode +
                     " (" + mapAirplaneMode2String(mAirplaneMode) + ")");
 
+            mDuration = calculateDuration();
+
             if (!mPowerOn) {
                 logw("handlePowerOff already power off");
-                postponePowerEventProcessingCompletion(NOTIFY_DELAY);
+                postponePowerEventProcessingCompletion(mDuration);
+
                 return;
             }
 
             mPowerOn = false;
 
             if (mAirplaneMode != AIRPLANE_MODE_OFF) {
-                loge("handlePowerOff ignore due to invalid airplane mode");
-                postponePowerEventProcessingCompletion(NOTIFY_DELAY);
+                if (isRfOff()) {
+                    logw("handlePowerOff ignore since airplane is on and RF is off");
+                    postponePowerEventProcessingCompletion(mDuration);
+                } else {
+                    loge("handlePowerOff invalid airplane on and RF on");
+                    sendEmptyMessageDelayed(MSG_TIMEOUT, MAX_NOTIFY_DELAY);
+                    closeRf();
+                }
                 return;
             }
 
             if (isRfOff()) {
-                postponePowerEventProcessingCompletion();
+                postponePowerEventProcessingCompletion(mDuration);
                 return;
             }
 
             setAirplaneModeOn(true);
             mAirplaneMode = AIRPLANE_MODE_TURNING_ON;
-
-            sendEmptyMessageDelayed(MSG_TIMEOUT, MAX_ENABLE_TIME);
+            sendEmptyMessageDelayed(MSG_TIMEOUT, MAX_NOTIFY_DELAY);
         }
 
         private void handlePowerOn() {
@@ -544,8 +747,6 @@ public class AirplaneModeService implements CarServiceBase,
             int newMode = getAirplaneMode();
             logd("handleAirplaneModeChanged " + mapAirplaneMode2String(newMode));
 
-            removeMessages(MSG_TIMEOUT);
-
             // Postpone to notify power event completion. The reason is that if
             // airplane mode is changed to on, it only means RF (e.g. Bluetooth)
             // begins to turn off. So it's necessary to wait until RF has been
@@ -558,7 +759,9 @@ public class AirplaneModeService implements CarServiceBase,
             updateRfState(id, state);
 
             if (!mPowerOn && isRfOff()) {
-                postponePowerEventProcessingCompletion();
+                removeMessages(MSG_TIMEOUT);
+                logd("postpone notifying completion, duration: " + mDuration + " ms");
+                postponePowerEventProcessingCompletion(mDuration);
             }
         }
 
@@ -574,15 +777,60 @@ public class AirplaneModeService implements CarServiceBase,
             // TODO
         }
 
+        private int calculateDuration() {
+            int maxDuration = MAX_NOTIFY_DELAY - MIN_NOTIFY_DELAY;
+            int duration = SystemProperties.getInt(PROP_AIRPLANE_MODE_DURATION,
+                    MIN_NOTIFY_DELAY);
+
+            if (duration > maxDuration) {
+                duration = maxDuration;
+            }
+
+            if (mBluetoothState.isOn()) {
+                duration = Math.max(duration, MIN_BLUETOOTH_OFF_TIMEOUT);
+            }
+
+            if (mWifiState.isOn()) {
+                duration = Math.max(duration, MIN_WIFI_OFF_TIMEOUT);
+            }
+
+            if (mWifiApState.isOn()) {
+                duration = Math.max(duration, MIN_WIFI_OFF_TIMEOUT);
+            }
+
+            if (mWifiP2pState.isOn()) {
+                duration = Math.max(duration, MIN_WIFI_OFF_TIMEOUT);
+            }
+
+            logd("calculateDuration: " + duration + " ms");
+            return duration;
+        }
+
         private void updateRfState(int id, int state) {
-            if (id == RfState.RF_ID_BLUETOOTH) {
-                logd("Bluetooth " + mBluetoothState.getRfStateString(state));
-                mBluetoothState.setRfState(state);
-            } else if (id == RfState.RF_ID_WIFI) {
-                logd("Wifi " + mWifiState.getRfStateString(state));
-                mWifiState.setRfState(state);
-            } else {
-                loge("updateRfState unknown id: " + id + ", state: " + state);
+            switch (id) {
+                case RfState.RF_ID_BLUETOOTH:
+                    logd("Bluetooth " + mBluetoothState.getRfStateString(state));
+                    mBluetoothState.setRfState(state);
+                    break;
+
+                case RfState.RF_ID_WIFI:
+                    logd("Wifi " + mWifiState.getRfStateString(state));
+                    mWifiState.setRfState(state);
+                    break;
+
+                case RfState.RF_ID_WIFI_AP:
+                    logd("WifiAp " + mWifiApState.getRfStateString(state));
+                    mWifiApState.setRfState(state);
+                    break;
+
+                case RfState.RF_ID_WIFI_P2P:
+                    logd("WifiP2p " + mWifiP2pState.getRfStateString(state));
+                    mWifiP2pState.setRfState(state);
+                    break;
+
+                default:
+                    loge("updateRfState unknown id: " + id + ", state: " + state);
+                    break;
             }
         }
 
@@ -597,6 +845,13 @@ public class AirplaneModeService implements CarServiceBase,
             }
 
             return allRfOff;
+        }
+
+        private void closeRf() {
+            logd("close RF");
+            for (RfState state : mRfStates) {
+                state.close();
+            }
         }
 
         private void setAirplaneModeOn(boolean enable) {
