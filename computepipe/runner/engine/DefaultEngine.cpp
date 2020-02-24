@@ -306,6 +306,7 @@ void DefaultEngine::broadcastAbortRun(const std::vector<int>& streamIds,
             (void)mGraph->handleExecutionPhase(runEvent);
         }
     }
+    (void)mClient->handleExecutionPhase(runEvent);
 }
 
 Status DefaultEngine::broadcastStopWithFlush() {
@@ -463,6 +464,8 @@ Status DefaultEngine::forwardOutputDataToClient(int streamId,
         // TODO: dispatch to display
         if (mConfigBuilder.clientConfigEnablesDisplayStream()) {
             return mClient->dispatchPacketToClient(streamId, dataHandle);
+        } else {
+            return Status::SUCCESS;
         }
     }
     return mClient->dispatchPacketToClient(streamId, dataHandle);
