@@ -47,6 +47,7 @@ public interface SystemStateInterface {
      */
     boolean enterDeepSleep();
     void scheduleActionForBootCompleted(Runnable action, Duration delay);
+    boolean isInteractive();
 
     default boolean isWakeupCausedByTimer() {
         //TODO bug: 32061842, check wake up reason and do necessary operation information should
@@ -129,6 +130,11 @@ public interface SystemStateInterface {
                 mContext.registerReceiver(mBroadcastReceiver, intentFilter);
             }
             mActionsList.add(Pair.create(action, delay));
+        }
+
+        @Override
+        public boolean isInteractive() {
+            return mPowerManager.isInteractive();
         }
 
         @Override

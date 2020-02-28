@@ -88,12 +88,20 @@ public class CarPowerManagementService extends ICarPower.Stub implements
     private int mNextWakeupSec = 0;
     private boolean mShutdownOnFinish = false;
     private boolean mIsBooting = true;
+    private boolean mEnableDeepSleepRetry = false;
+    @GuardedBy("this")
+    private Timer mDeepSleepTimer;
+    @GuardedBy("this")
+    private boolean mDeepSleepTimerActive;
 
     private final CarUserManagerHelper mCarUserManagerHelper;
 
     // TODO:  Make this OEM configurable.
     private static final int SHUTDOWN_POLLING_INTERVAL_MS = 2000;
     private static final int SHUTDOWN_EXTEND_MAX_MS = 5000;
+
+    private static final int DEEP_SLEEP_RETRY_INTERVAL_MS = 3000;
+    private static final int DEEP_SLEEP_RETRY_MAX_MS = 60000;
 
     // maxGarageModeRunningDurationInSecs should be equal or greater than this. 15 min for now.
     private static final int MIN_MAX_GARAGE_MODE_DURATION_MS = 15 * 60 * 1000;
@@ -132,6 +140,8 @@ public class CarPowerManagementService extends ICarPower.Stub implements
                     +  MIN_MAX_GARAGE_MODE_DURATION_MS + "(ms), Ignore resource.");
             sShutdownPrepareTimeMs = MIN_MAX_GARAGE_MODE_DURATION_MS;
         }
+        mEnableDeepSleepRetry = mContext.getResources().getBoolean(
+                R.bool.enableDeepSleepRetry);
     }
 
     /**
@@ -304,6 +314,7 @@ public class CarPowerManagementService extends ICarPower.Stub implements
     }
 
     private void handleOn() {
+        releaseDeepSleepTimerLocked();
         // Do not switch user if it is booting as there can be a race with CarServiceHelperService
         if (mIsBooting) {
             mIsBooting = false;
@@ -488,6 +499,12 @@ public class CarPowerManagementService extends ICarPower.Stub implements
             nextListenerState = CarPowerStateListener.SHUTDOWN_CANCELLED;
         } else {
             boolean sleepSucceeded = mSystemInterface.enterDeepSleep();
+            if (mEnableDeepSleepRetry) {
+                // Retry to deep sleep if it fails to sleep or system is waken up by alarm timer
+                Log.i(CarLog.TAG_POWER, "create deep sleep timer, sleepSucceeded: " + sleepSucceeded);
+                createDeepSleepTimer(sleepSucceeded);
+                return;
+            }
             if (!sleepSucceeded) {
                 // VHAL should transition CPMS to shutdown.
                 Log.e(CarLog.TAG_POWER, "Sleep did not succeed. Now attempting to shut down.");
@@ -970,5 +987,84 @@ public class CarPowerManagementService extends ICarPower.Stub implements
             mInSimulatedDeepSleepMode = false;
         }
         Log.i(CarLog.TAG_POWER, "Exit Deep Sleep simulation loop");
+    }
+
+    private class DeepSleepTimerTask extends TimerTask {
+        private final boolean mSleepSucceed;
+        private final int mExpirationCount;
+        private int mCurrentCount;
+
+        private DeepSleepTimerTask(boolean sleepSucceed, int expirationCount) {
+            mSleepSucceed = sleepSucceed;
+            mExpirationCount = expirationCount;
+            mCurrentCount = 0;
+        }
+
+        @Override
+        public void run() {
+            synchronized (CarPowerManagementService.this) {
+                if (!mDeepSleepTimerActive) {
+                    // Ignore timer expiration since we got cancelled
+                    return;
+                }
+                if (mSystemInterface.isInteractive()) {
+                    Log.i(CarLog.TAG_POWER, "system is interactive");
+                    releaseDeepSleepTimerLocked();
+                    exitSuspend();
+                    return;
+                }
+                mCurrentCount++;
+                if (!mSleepSucceed &&
+                    (mCurrentCount > mExpirationCount)) {
+                    releaseDeepSleepTimerLocked();
+                    if (mSleepSucceed) {
+                        exitSuspend();
+                    } else {
+                        Log.e(CarLog.TAG_POWER, "Shut down system after deep sleep exceed max retry count");
+                        mSystemInterface.shutdown();
+                    }
+                } else {
+                    // retry to enter deep sleep
+                    boolean sleepSucceed = mSystemInterface.enterDeepSleep();
+                    Log.i(CarLog.TAG_POWER, "DeepSleepTimerTask sleepSucceed: " + sleepSucceed);
+                }
+            }
+        }
+    }
+
+    @GuardedBy("this")
+    private void createDeepSleepTimer(boolean sleepSucceed) {
+        synchronized (CarPowerManagementService.this) {
+            int pollingCount = DEEP_SLEEP_RETRY_MAX_MS / DEEP_SLEEP_RETRY_INTERVAL_MS;
+            Log.i(CarLog.TAG_POWER, "createDeepSleepTimer sleepSucceed: " + sleepSucceed +
+                    ", pollingCount: " + pollingCount);
+            releaseDeepSleepTimerLocked();
+            mDeepSleepTimer = new Timer();
+            mDeepSleepTimerActive = true;
+            mDeepSleepTimer.scheduleAtFixedRate(
+                new DeepSleepTimerTask(sleepSucceed, pollingCount),
+                DEEP_SLEEP_RETRY_INTERVAL_MS /* delay */,
+                DEEP_SLEEP_RETRY_INTERVAL_MS);
+        }
+    }
+
+    @GuardedBy("this")
+    private void releaseDeepSleepTimerLocked() {
+        synchronized (CarPowerManagementService.this) {
+            if (mDeepSleepTimer != null) {
+                Log.i(CarLog.TAG_POWER, "cancel deep sleep timer");
+                mDeepSleepTimer.cancel();
+            }
+            mDeepSleepTimer = null;
+            mDeepSleepTimerActive = false;
+        }
+    }
+
+    private void exitSuspend() {
+        Log.i(CarLog.TAG_POWER, "exit suspend");
+        // On wake, reset nextWakeup time. If not set again, system will suspend/shutdown forever.
+        mNextWakeupSec = 0;
+        mSystemInterface.refreshDisplayBrightness();
+        onApPowerStateChange(CpmsState.WAIT_FOR_VHAL, CarPowerStateListener.SUSPEND_EXIT);
     }
 }
