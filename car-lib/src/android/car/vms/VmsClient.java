@@ -19,6 +19,7 @@ package android.car.vms;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
+import android.annotation.SystemApi;
 import android.car.Car;
 import android.car.vms.VmsClientManager.VmsClientCallback;
 import android.os.Binder;
@@ -44,6 +45,7 @@ import java.util.function.Consumer;
  *
  * @hide
  */
+@SystemApi
 public final class VmsClient {
     private static final boolean DBG = false;
     private static final String TAG = VmsClient.class.getSimpleName();
@@ -56,6 +58,7 @@ public final class VmsClient {
     private final IVmsBrokerService mService;
     private final Executor mExecutor;
     private final VmsClientCallback mCallback;
+    private final boolean mLegacyClient;
     private final Consumer<RemoteException> mExceptionHandler;
     private final IBinder mClientToken;
 
@@ -67,11 +70,15 @@ public final class VmsClient {
     @GuardedBy("mLock")
     private boolean mMonitoringEnabled;
 
-    VmsClient(IVmsBrokerService service, Executor executor, VmsClientCallback callback,
-            Consumer<RemoteException> exceptionHandler) {
+    /**
+     * @hide
+     */
+    public VmsClient(IVmsBrokerService service, Executor executor, VmsClientCallback callback,
+            boolean legacyClient, Consumer<RemoteException> exceptionHandler) {
         mService = service;
         mExecutor = executor;
         mCallback = callback;
+        mLegacyClient = legacyClient;
         mExceptionHandler = exceptionHandler;
         mClientToken = new Binder();
     }
@@ -118,9 +125,9 @@ public final class VmsClient {
     }
 
     /**
-     * Enables the monitoring of Vehicle Map Service messages by this client.
+     * Enables the monitoring of Vehicle Map Service packets by this client.
      *
-     * <p>If monitoring is enabled, the client will receive all messages, regardless of any
+     * <p>If monitoring is enabled, the client will receive all packets, regardless of any
      * subscriptions. Enabling monitoring does not affect the client's existing subscriptions.
      */
     @RequiresPermission(Car.PERMISSION_VMS_SUBSCRIBER)
@@ -138,9 +145,9 @@ public final class VmsClient {
     }
 
     /**
-     * Disables the monitoring of Vehicle Map Service messages by this client.
+     * Disables the monitoring of Vehicle Map Service packets by this client.
      *
-     * <p>If monitoring is disabled, this client will receive only messages for its subscriptions.
+     * <p>If monitoring is disabled, this client will receive only packets for its subscriptions.
      * Disabling monitoring does not affect the client's existing subscriptions.
      */
     @RequiresPermission(Car.PERMISSION_VMS_SUBSCRIBER)
@@ -165,7 +172,7 @@ public final class VmsClient {
      * Registers a data provider with the Vehicle Map Service.
      *
      * @param providerDescription Identifying information about the data provider
-     * @return Provider ID to use for setting offerings and publishing messages, or -1 on
+     * @return Provider ID to use for setting offerings and publishing packets, or -1 on
      * connection error
      */
     @RequiresPermission(Car.PERMISSION_VMS_PUBLISHER)
@@ -179,6 +186,21 @@ public final class VmsClient {
             Log.e(TAG, "While registering provider", e);
             mExceptionHandler.accept(e);
             return -1;
+        }
+    }
+
+    /**
+     * Unregisters a data provider with the Vehicle Map Service.
+     *
+     * @param providerId Provider ID
+     */
+    @RequiresPermission(Car.PERMISSION_VMS_PUBLISHER)
+    public void unregisterProvider(int providerId) {
+        if (DBG) Log.d(TAG, "Unregistering provider");
+        try {
+            setProviderOfferings(providerId, Collections.emptySet());
+        } catch (IllegalArgumentException e) {
+            Log.e(TAG, "While unregistering provider " + providerId, e);
         }
     }
 
@@ -205,20 +227,20 @@ public final class VmsClient {
     }
 
     /**
-     * Publishes a data message.
+     * Publishes a Vehicle Maps Service packet.
      *
-     * @param providerId Message provider
-     * @param layer      Message layer
-     * @param message    Message payload
+     * @param providerId Packet provider
+     * @param layer      Packet layer
+     * @param packet     Packet data
      * @throws IllegalArgumentException if the client does not offer the layer as the provider
      */
     @RequiresPermission(Car.PERMISSION_VMS_PUBLISHER)
-    public void publish(int providerId, @NonNull VmsLayer layer, @NonNull byte[] message) {
+    public void publishPacket(int providerId, @NonNull VmsLayer layer, @NonNull byte[] packet) {
         if (DBG) Log.d(TAG, "Publishing packet as " + providerId);
         Objects.requireNonNull(layer, "layer cannot be null");
-        Objects.requireNonNull(message, "message cannot be null");
+        Objects.requireNonNull(packet, "packet cannot be null");
         try {
-            mService.publish(mClientToken, providerId, layer, message);
+            mService.publishPacket(mClientToken, providerId, layer, packet);
         } catch (RemoteException e) {
             Log.e(TAG, "While publishing packet as " + providerId);
             mExceptionHandler.accept(e);
@@ -238,10 +260,12 @@ public final class VmsClient {
 
     /**
      * Registers this client with the Vehicle Map Service.
+     *
+     * @hide
      */
-    void register() throws RemoteException {
+    public void register() throws RemoteException {
         VmsRegistrationInfo registrationInfo = mService.registerClient(mClientToken,
-                new IVmsClientCallbackImpl(this));
+                new IVmsClientCallbackImpl(this), mLegacyClient);
         synchronized (mLock) {
             mAvailableLayers = registrationInfo.getAvailableLayers();
             mSubscriptionState = registrationInfo.getSubscriptionState();
@@ -250,8 +274,10 @@ public final class VmsClient {
 
     /**
      * Unregisters this client from the Vehicle Map Service.
+     *
+     * @hide
      */
-    void unregister() throws RemoteException {
+    public void unregister() throws RemoteException {
         mService.unregisterClient(mClientToken);
     }
 
@@ -285,10 +311,10 @@ public final class VmsClient {
         }
 
         @Override
-        public void onMessageReceived(int providerId, VmsLayer layer, byte[] message) {
-            if (DBG) Log.d(TAG, "Received message from " + providerId + " for: " + layer);
+        public void onPacketReceived(int providerId, VmsLayer layer, byte[] packet) {
+            if (DBG) Log.d(TAG, "Received packet from " + providerId + " for: " + layer);
             executeCallback((client, callback) ->
-                    callback.onMessageReceived(providerId, layer, message));
+                    callback.onPacketReceived(providerId, layer, packet));
         }
 
         private void executeCallback(BiConsumer<VmsClient, VmsClientCallback> callbackOperation) {

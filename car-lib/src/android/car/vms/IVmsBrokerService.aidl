@@ -33,7 +33,10 @@ interface IVmsBrokerService {
     // Restricted to callers with android.car.permission.VMS_SUBSCRIBER
     // or android.car.permission.VMS_PUBLISHER
 
-    VmsRegistrationInfo registerClient(in IBinder token, in IVmsClientCallback callback) = 0;
+    VmsRegistrationInfo registerClient(
+    in IBinder token,
+    in IVmsClientCallback callback,
+    boolean legacyClient) = 0;
 
     void unregisterClient(in IBinder token) = 1;
 
@@ -60,9 +63,9 @@ interface IVmsBrokerService {
         int providerId,
         in List<VmsLayerDependency> offerings) = 6;
 
-    void publish(
+    void publishPacket(
         in IBinder token,
         int providerId,
         in VmsLayer layer,
-        in byte[] message) = 7;
+        in byte[] packet) = 7;
 }

@@ -24,6 +24,7 @@ import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.SdkConstant;
 import android.annotation.SdkConstant.SdkConstantType;
+import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
 import android.annotation.TestApi;
 import android.app.Activity;
@@ -63,6 +64,7 @@ import android.content.pm.PackageManager;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.os.Process;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.TransactionTooLargeException;
@@ -95,6 +97,41 @@ public final class Car {
      * @hide
      */
     public static final String CAR_SERVICE_BINDER_SERVICE_NAME = "car_service";
+
+    /**
+     * This represents AndroidManifest meta-data to tell that {@code Activity} is optimized for
+     * driving distraction.
+     *
+     * <p>Activities without this meta-data can be blocked while car is in moving / driving state.
+     *
+     * <p>Note that having this flag does not guarantee that the {@code Activity} will be always
+     * allowed for all driving states.
+     *
+     * <p>For this meta-data, android:value can be {@code true} (=optimized) or {@code false}.
+     *
+     * <p>Example usage:
+     * <xml><meta-data android:name="distractionOptimized" android:value="true"/></xml>
+     */
+    @SuppressLint("IntentName")
+    public static final String META_DATA_DISTRACTION_OPTIMIZED = "distractionOptimized";
+
+    /**
+     * This represents AndroidManifest meta-data to tell that {@code Application} requires specific
+     * car features to work.
+     *
+     * <p>Apps like launcher or installer app can use this information to filter out apps
+     * not usable in a specific car. This meta-data is not necessary for mandatory features.
+     *
+     * <p>For this meta-data, android:value should contain the feature name string defined by
+     * (@link android.car.annotation.OptionalFeature} or
+     * {@link android.car.annotation.ExperimentalFeature} annotations.
+     *
+     * <p>Example usage:
+     * <xml><meta-data android:name="requires-car-feature" android:value="diagnostic"/></xml>
+     */
+    @SuppressLint("IntentName")
+    public static final String META_DATA_REQUIRES_CAR_FEATURE = "requires-car-feature";
+
     /**
      * Service name for {@link CarSensorManager}, to be used in {@link #getCarManager(String)}.
      *
@@ -215,14 +252,22 @@ public final class Car {
     public static final String BLUETOOTH_SERVICE = "car_bluetooth";
 
     /**
-     * @hide
-     */
-    public static final String VEHICLE_MAP_SERVICE = "vehicle_map_service";
-
-    /**
+     * Service name for {@link VmsClientManager}
+     *
      * @hide
      */
     @OptionalFeature
+    @SystemApi
+    public static final String VEHICLE_MAP_SERVICE = "vehicle_map_service";
+
+    /**
+     * Service name for {@link VmsSubscriberManager}
+     *
+     * @deprecated {@link VmsSubscriberManager} is deprecated. Use {@link VmsClientManager} instead.
+     * @hide
+     */
+    @OptionalFeature
+    @Deprecated
     @SystemApi
     public static final String VMS_SUBSCRIBER_SERVICE = "vehicle_map_subscriber_service";
 
@@ -1538,12 +1583,19 @@ public final class Car {
             return;
         } else if (mContext instanceof Service) {
             Service service = (Service) mContext;
-            throw new IllegalStateException("Car service has crashed, client not handle it:"
-                    + service.getPackageName() + "," + service.getClass().getSimpleName(),
-                    mConstructionStack);
+            killClient(service.getPackageName() + "," + service.getClass().getSimpleName());
+        } else {
+            killClient(/* clientInfo= */ null);
         }
-        throw new IllegalStateException("Car service crashed, client not handling it.",
+    }
+
+    private void killClient(@Nullable String clientInfo) {
+        Log.w(TAG_CAR, "**Car service has crashed. Client(" + clientInfo + ") is not handling it."
+                        + " Client should use Car.createCar(..., CarServiceLifecycleListener, .."
+                        + ".) to handle it properly. Check pritned callstack to check where other "
+                        + "version of Car.createCar() was called. Killing the client process**",
                 mConstructionStack);
+        Process.killProcess(Process.myPid());
     }
 
     /** @hide */
@@ -1627,7 +1679,8 @@ public final class Car {
                 manager = new VmsClientManager(this, binder);
                 break;
             case VMS_SUBSCRIBER_SERVICE:
-                manager = new VmsSubscriberManager(this, binder);
+                manager = VmsSubscriberManager.wrap(this,
+                        (VmsClientManager) getCarManager(VEHICLE_MAP_SERVICE));
                 break;
             case BLUETOOTH_SERVICE:
                 manager = new CarBluetoothManager(this, binder);

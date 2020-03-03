@@ -334,7 +334,7 @@ Return<EvsResult> EvsV4lCamera::setMaster() {
 }
 
 
-Return<EvsResult> EvsV4lCamera::forceMaster(const sp<IEvsDisplay>&) {
+Return<EvsResult> EvsV4lCamera::forceMaster(const sp<IEvsDisplay_1_0>&) {
     /* Because EVS HW module reference implementation expects a single client at
      * a time, this returns a success code always.
      */
@@ -421,6 +421,29 @@ Return<void> EvsV4lCamera::getIntParameter(CameraParam id,
         _hidl_cb(result, values);
     }
 
+    return Void();
+}
+
+
+Return<EvsResult> EvsV4lCamera::setExtendedInfo_1_1(uint32_t opaqueIdentifier,
+                                                    const hidl_vec<uint8_t>& opaqueValue) {
+    mExtInfo.insert_or_assign(opaqueIdentifier, opaqueValue);
+    return EvsResult::OK;
+}
+
+
+Return<void> EvsV4lCamera::getExtendedInfo_1_1(uint32_t opaqueIdentifier,
+                                               getExtendedInfo_1_1_cb _hidl_cb) {
+    const auto it = mExtInfo.find(opaqueIdentifier);
+    hidl_vec<uint8_t> value;
+    auto status = EvsResult::OK;
+    if (it == mExtInfo.end()) {
+        status = EvsResult::INVALID_ARG;
+    } else {
+        value = mExtInfo[opaqueIdentifier];
+    }
+
+    _hidl_cb(status, value);
     return Void();
 }
 
