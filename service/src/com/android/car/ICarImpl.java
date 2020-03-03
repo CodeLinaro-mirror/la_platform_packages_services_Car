@@ -69,10 +69,10 @@ import com.android.car.user.CarUserNoticeService;
 import com.android.car.user.CarUserService;
 import com.android.car.user.UserMetrics;
 import com.android.car.vms.VmsNewBrokerService;
-import com.android.car.watchdog.CarWatchdogService;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.car.ICarServiceHelper;
+import com.android.internal.os.IResultReceiver;
 import com.android.internal.util.ArrayUtils;
 
 import java.io.FileDescriptor;
@@ -128,7 +128,6 @@ public class ICarImpl extends ICar.Stub {
     private final CarBugreportManagerService mCarBugreportManagerService;
     private final CarStatsService mCarStatsService;
     private final CarExperimentalFeatureServiceController mCarExperimentalFeatureServiceController;
-    private final CarWatchdogService mCarWatchdogService;
 
     private final CarServiceBase[] mAllServices;
 
@@ -250,17 +249,18 @@ public class ICarImpl extends ICar.Stub {
         } else {
             mCarExperimentalFeatureServiceController = null;
         }
-        mCarWatchdogService = new CarWatchdogService(serviceContext);
 
         CarLocalServices.addService(CarPowerManagementService.class, mCarPowerManagementService);
         CarLocalServices.addService(CarPropertyService.class, mCarPropertyService);
         CarLocalServices.addService(CarUserService.class, mCarUserService);
         CarLocalServices.addService(CarTrustedDeviceService.class, mCarTrustedDeviceService);
+        CarLocalServices.addService(CarUserNoticeService.class, mCarUserNoticeService);
         CarLocalServices.addService(SystemInterface.class, mSystemInterface);
         CarLocalServices.addService(CarDrivingStateService.class, mCarDrivingStateService);
         CarLocalServices.addService(PerUserCarServiceHelper.class, mPerUserCarServiceHelper);
         CarLocalServices.addService(FixedActivityService.class, mFixedActivityService);
         CarLocalServices.addService(VmsNewBrokerService.class, mVmsBrokerService);
+        CarLocalServices.addService(CarOccupantZoneService.class, mCarOccupantZoneService);
 
         // Be careful with order. Service depending on other service should be inited later.
         List<CarServiceBase> allServices = new ArrayList<>();
@@ -294,7 +294,6 @@ public class ICarImpl extends ICar.Stub {
         allServices.add(mCarMediaService);
         allServices.add(mCarLocationService);
         allServices.add(mCarBugreportManagerService);
-        allServices.add(mCarWatchdogService);
         // Always put mCarExperimentalFeatureServiceController in last.
         addServiceIfNonNull(allServices, mCarExperimentalFeatureServiceController);
         mAllServices = allServices.toArray(new CarServiceBase[allServices.size()]);
@@ -365,8 +364,19 @@ public class ICarImpl extends ICar.Stub {
             int toUserId) {
         assertCallingFromSystemProcess();
         Log.i(TAG, "onUserLifecycleEvent(" + CarUserManager.lifecycleEventTypeToString(eventType)
-                + ", " + toUserId);
+                + ", " + toUserId + ")");
         mUserMetrics.onEvent(eventType, timestampMs, fromUserId, toUserId);
+    }
+
+    @Override
+    public void onFirstUserUnlocked(int userId, long timestampMs, long duration) {
+        mUserMetrics.logFirstUnlockedUser(userId, timestampMs, duration);
+    }
+
+    @Override
+    public void getInitialUserInfo(int requestType, int timeoutMs, IBinder binder) {
+        IResultReceiver receiver = IResultReceiver.Stub.asInterface(binder);
+        mCarUserService.getInitialUserInfo(requestType, timeoutMs, receiver);
     }
 
     @Override
@@ -674,6 +684,8 @@ public class ICarImpl extends ICar.Stub {
             return;
         } else if ("--user-metrics".equals(args[0])) {
             mUserMetrics.dump(writer);
+        } else if ("--first-user-metrics".equals(args[0])) {
+            mUserMetrics.dumpFirstUserUnlockDuration(writer);
         } else if ("--help".equals(args[0])) {
             showDumpHelp(writer);
         } else if (Build.IS_USERDEBUG || Build.IS_ENG) {
@@ -715,6 +727,9 @@ public class ICarImpl extends ICar.Stub {
         writer.println("\t  where HAL is just the class name (like UserHalService)");
         writer.println("--user-metrics");
         writer.println("\t  dumps user switching and stopping metrics ");
+        writer.println("--first-user-metrics");
+        writer.println("\t  dumps how long it took to unlock first user since Android started\n");
+        writer.println("\t  (or -1 if not unlocked)");
         writer.println("-h");
         writer.println("\t  shows commands usage (NOTE: commands are not available on USER builds");
         writer.println("[ANYTHING ELSE]");
