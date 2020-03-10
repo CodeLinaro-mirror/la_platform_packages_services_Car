@@ -59,6 +59,20 @@ public final class CarWatchdogService extends ICarWatchdogService.Stub implement
     @GuardedBy("mLock")
     private @Nullable ICarWatchdog mCarWatchdogDaemon;
 
+    private final DeathRecipient mDeathRecipient = new DeathRecipient() {
+        @Override
+        public void binderDied() {
+            Log.w(TAG_WATCHDOG, "Car watchdog daemon died: reconnecting");
+            unlinkToDeath();
+            synchronized (mLock) {
+                mCarWatchdogDaemon = null;
+            }
+            mMainHandler.postDelayed(() -> {
+                connectToDaemon(CAR_WATCHDOG_DAEMON_BIND_MAX_RETRY);
+            }, CAR_WATCHDOG_DAEMON_BIND_RETRY_INTERVAL_MS);
+        }
+    };
+
     public CarWatchdogService(Context context) {
         // Car watchdog daemon is found at init().
         this(context, /* daemon= */ null);
@@ -80,18 +94,22 @@ public final class CarWatchdogService extends ICarWatchdogService.Stub implement
         }
         if (daemon == null) {
             connectToDaemon(CAR_WATCHDOG_DAEMON_BIND_MAX_RETRY);
+        } else {
+            linkToDeath();
+            registerToDaemon(daemon);
         }
     }
 
     @Override
     public void release() {
+        unlinkToDeath();
         ICarWatchdog daemon;
         synchronized (mLock) {
             daemon = mCarWatchdogDaemon;
             mCarWatchdogDaemon = null;
         }
         try {
-            daemon.unregisterClient(mWatchdogClient);
+            daemon.unregisterMediator(mWatchdogClient);
         } catch (RemoteException e) {
             Log.w(TAG_WATCHDOG, "Cannot unregister from car watchdog daemon: " + e);
         }
@@ -147,23 +165,6 @@ public final class CarWatchdogService extends ICarWatchdogService.Stub implement
             Log.wtf(TAG_WATCHDOG,
                     "Finding car watchdog daemon took too long(" + elapsedTimeMs + "ms)");
         }
-        try {
-            binder.linkToDeath(new DeathRecipient() {
-                @Override
-                public void binderDied() {
-                    Log.w(TAG_WATCHDOG, "Car watchdog daemon died: reconnecting");
-                    synchronized (mLock) {
-                        mCarWatchdogDaemon = null;
-                    }
-                    mMainHandler.postDelayed(() -> {
-                        connectToDaemon(CAR_WATCHDOG_DAEMON_BIND_MAX_RETRY);
-                    }, CAR_WATCHDOG_DAEMON_BIND_RETRY_INTERVAL_MS);
-                }
-            }, 0);
-        } catch (RemoteException e) {
-            Log.w(TAG_WATCHDOG, "Linking to binder death recipient failed: " + e);
-            return false;
-        }
 
         ICarWatchdog daemon = ICarWatchdog.Stub.asInterface(binder);
         if (daemon == null) {
@@ -173,6 +174,12 @@ public final class CarWatchdogService extends ICarWatchdogService.Stub implement
         synchronized (mLock) {
             mCarWatchdogDaemon = daemon;
         }
+        linkToDeath();
+        registerToDaemon(daemon);
+        return true;
+    }
+
+    private void registerToDaemon(ICarWatchdog daemon) {
         try {
             daemon.registerMediator(mWatchdogClient);
         } catch (RemoteException e) {
@@ -182,7 +189,6 @@ public final class CarWatchdogService extends ICarWatchdogService.Stub implement
             // Do nothing.
             Log.w(TAG_WATCHDOG, "Already registered as mediator: " + e);
         }
-        return true;
     }
 
     private void doHealthCheck(int sessionId) {
@@ -203,6 +209,40 @@ public final class CarWatchdogService extends ICarWatchdogService.Stub implement
                         + sessionId + "): " + e);
             }
         });
+    }
+
+    private void linkToDeath() {
+        IBinder binder;
+        synchronized (mLock) {
+            if (mCarWatchdogDaemon == null) {
+                return;
+            }
+            binder = mCarWatchdogDaemon.asBinder();
+        }
+        if (binder == null) {
+            Log.w(TAG_WATCHDOG, "Linking to binder death recipient skipped");
+            return;
+        }
+        try {
+            binder.linkToDeath(mDeathRecipient, 0);
+        } catch (RemoteException e) {
+            Log.w(TAG_WATCHDOG, "Linking to binder death recipient failed: " + e);
+        }
+    }
+
+    private void unlinkToDeath() {
+        IBinder binder;
+        synchronized (mLock) {
+            if (mCarWatchdogDaemon == null) {
+                return;
+            }
+            binder = mCarWatchdogDaemon.asBinder();
+        }
+        if (binder == null) {
+            Log.w(TAG_WATCHDOG, "Unlinking from binder death recipient skipped");
+            return;
+        }
+        binder.unlinkToDeath(mDeathRecipient, 0);
     }
 
     private static final class ICarWatchdogClientImpl extends ICarWatchdogClient.Stub {

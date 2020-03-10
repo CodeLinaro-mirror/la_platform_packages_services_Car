@@ -18,11 +18,16 @@ package com.android.car.watchdog;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.verify;
+
 import android.automotive.watchdog.ICarWatchdog;
 import android.automotive.watchdog.ICarWatchdogClient;
 import android.automotive.watchdog.TimeoutLength;
 import android.content.Context;
 import android.os.Handler;
+import android.os.IBinder;
 import android.os.Looper;
 import android.os.RemoteException;
 import android.util.Log;
@@ -47,6 +52,7 @@ public class CarWatchdogServiceTest {
     private static final String TAG = CarWatchdogServiceTest.class.getSimpleName();
 
     @Mock private Context mMockContext;
+    @Mock private IBinder mBinder;
 
     private CarWatchdogService mCarWatchdogService;
     private FakeCarWatchdog mFakeCarWatchdog;
@@ -71,11 +77,23 @@ public class CarWatchdogServiceTest {
         assertThat(mFakeCarWatchdog.gotResponse()).isTrue();
     }
 
+    @Test
+    public void testLinkUnlinkDeathRecipient() {
+        mCarWatchdogService.init();
+        try {
+            verify(mBinder).linkToDeath(any(), anyInt());
+        } catch (RemoteException e) {
+            // Do nothing
+        }
+        mCarWatchdogService.release();
+        verify(mBinder).unlinkToDeath(any(), anyInt());
+    }
+
     // FakeCarWatchdog mimics ICarWatchdog daemon in local process.
     final class FakeCarWatchdog extends ICarWatchdog.Default {
 
         private static final int TEST_SESSION_ID = 11223344;
-        private static final int TEN_MILLISECONDS = 10000;
+        private static final int TEN_SECONDS_IN_MS = 10000;
 
         private final Handler mMainHandler = new Handler(Looper.getMainLooper());
         private final List<ICarWatchdogClient> mClients = new ArrayList<>();
@@ -92,9 +110,14 @@ public class CarWatchdogServiceTest {
         }
 
         void waitForMediatorResponse() throws InterruptedException {
-            if (!mClientResponse.await(TEN_MILLISECONDS, TimeUnit.MILLISECONDS)) {
-                Log.w(TAG, "Mediator doesn't respoind within timeout(" + TEN_MILLISECONDS + "ms)");
+            if (!mClientResponse.await(TEN_SECONDS_IN_MS, TimeUnit.MILLISECONDS)) {
+                Log.w(TAG, "Mediator doesn't respond within timeout(" + TEN_SECONDS_IN_MS + "ms)");
             }
+        }
+
+        @Override
+        public IBinder asBinder() {
+            return mBinder;
         }
 
         @Override
@@ -120,7 +143,7 @@ public class CarWatchdogServiceTest {
                 int sessionId) throws RemoteException {
             long currentTimeMs = System.currentTimeMillis();
             if (sessionId == TEST_SESSION_ID && mClients.contains(mediator)
-                    && currentTimeMs < mLastPingTimeMs + TEN_MILLISECONDS) {
+                    && currentTimeMs < mLastPingTimeMs + TEN_SECONDS_IN_MS) {
                 mGotResponse = true;
             }
             mClientResponse.countDown();

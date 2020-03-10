@@ -23,6 +23,7 @@
 #include <inttypes.h>
 #include <stdint.h>
 #include <utils/Mutex.h>
+#include <utils/RefBase.h>
 
 #include <string>
 #include <unordered_map>
@@ -60,7 +61,7 @@ struct ProcessStats {
 
 // Collector/parser for `/proc/[pid]/stat`, `/proc/[pid]/task/[tid]/stat` and /proc/[pid]/status`
 // files.
-class ProcPidStat {
+class ProcPidStat : public RefBase {
 public:
     explicit ProcPidStat(const std::string& path = kProcDirPath) :
           mLastProcessStats({}), mPath(path) {
@@ -73,11 +74,15 @@ public:
                 !access(pidStatusPath.c_str(), R_OK);
     }
 
+    virtual ~ProcPidStat() {}
+
     // Collects pid info delta since the last collection.
-    android::base::Result<std::vector<ProcessStats>> collect();
+    virtual android::base::Result<std::vector<ProcessStats>> collect();
 
     // Called by IoPerfCollection and tests.
-    bool enabled() { return mEnabled; }
+    virtual bool enabled() { return mEnabled; }
+
+    virtual std::string dirPath() { return mPath; }
 
 private:
     // Reads the contents of the below files:
@@ -106,6 +111,7 @@ private:
     // Updated by tests to point to a different location when needed.
     std::string mPath;
 
+    FRIEND_TEST(IoPerfCollectionTest, TestValidProcPidContents);
     FRIEND_TEST(ProcPidStatTest, TestValidStatFiles);
     FRIEND_TEST(ProcPidStatTest, TestHandlesProcessTerminationBetweenScanningAndParsing);
     FRIEND_TEST(ProcPidStatTest, TestHandlesPidTidReuse);
