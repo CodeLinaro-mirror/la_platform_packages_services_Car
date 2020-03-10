@@ -18,8 +18,6 @@ package com.android.car.watchdog;
 
 import static com.google.common.truth.Truth.assertThat;
 
-import static org.junit.Assert.assertTrue;
-
 import android.automotive.watchdog.ICarWatchdog;
 import android.automotive.watchdog.ICarWatchdogClient;
 import android.automotive.watchdog.TimeoutLength;
@@ -27,6 +25,7 @@ import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.RemoteException;
+import android.util.Log;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -41,14 +40,11 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * <p>This class contains unit tests for the {@link CarWatchdogService}.
- *
- * <p>The following mocks are used:
- * <ol>
- * <li> {@link Context} provides system services and resources.
- * </ol>
  */
 @RunWith(MockitoJUnitRunner.class)
 public class CarWatchdogServiceTest {
+
+    private static final String TAG = CarWatchdogServiceTest.class.getSimpleName();
 
     @Mock private Context mMockContext;
 
@@ -72,7 +68,7 @@ public class CarWatchdogServiceTest {
         mCarWatchdogService.init();
         mFakeCarWatchdog.waitForMediatorResponse();
         assertThat(mFakeCarWatchdog.getClientCount()).isEqualTo(1);
-        assertTrue(mFakeCarWatchdog.gotResponse());
+        assertThat(mFakeCarWatchdog.gotResponse()).isTrue();
     }
 
     // FakeCarWatchdog mimics ICarWatchdog daemon in local process.
@@ -96,7 +92,9 @@ public class CarWatchdogServiceTest {
         }
 
         void waitForMediatorResponse() throws InterruptedException {
-            mClientResponse.await(TEN_MILLISECONDS, TimeUnit.MILLISECONDS);
+            if (!mClientResponse.await(TEN_MILLISECONDS, TimeUnit.MILLISECONDS)) {
+                Log.w(TAG, "Mediator doesn't respoind within timeout(" + TEN_MILLISECONDS + "ms)");
+            }
         }
 
         @Override

@@ -16,7 +16,10 @@
 package com.android.car.hal;
 
 import android.annotation.NonNull;
+import android.content.pm.UserInfo;
 import android.hardware.automotive.vehicle.V2_0.InitialUserInfoRequestType;
+import android.hardware.automotive.vehicle.V2_0.UserFlags;
+import android.os.UserHandle;
 
 import com.android.car.hal.UserHalService.HalCallback;
 import com.android.car.hal.UserHalService.HalCallback.HalCallbackStatus;
@@ -34,11 +37,13 @@ public final class UserHalHelper {
             case HalCallback.STATUS_OK:
                 return "OK";
             case HalCallback.STATUS_HAL_SET_TIMEOUT:
-                return "STATUS_HAL_SET_TIMEOUT";
+                return "HAL_SET_TIMEOUT";
             case HalCallback.STATUS_HAL_RESPONSE_TIMEOUT:
-                return "STATUS_HAL_RESPONSE_TIMEOUT";
+                return "HAL_RESPONSE_TIMEOUT";
             case HalCallback.STATUS_WRONG_HAL_RESPONSE:
-                return "STATUS_WRONG_HAL_RESPONSE";
+                return "WRONG_HAL_RESPONSE";
+            case HalCallback.STATUS_CONCURRENT_OPERATION:
+                return "CONCURRENT_OPERATION";
             default:
                 return "UNKNOWN-" + status;
         }
@@ -52,7 +57,7 @@ public final class UserHalHelper {
      * @throws IllegalArgumentException if type is not valid neither a number
      */
     public static int parseInitialUserInfoRequestType(@NonNull String type) {
-        // TODO(b/146207078): add unit test
+        // TODO(b/150419600): add unit test
         switch(type) {
             case "FIRST_BOOT":
                 return InitialUserInfoRequestType.FIRST_BOOT;
@@ -69,6 +74,28 @@ public final class UserHalHelper {
                     throw new IllegalArgumentException("invalid type: " + type);
                 }
         }
+    }
+
+    /**
+     * Converts Android user flags to HALs.
+     */
+    public static int convertFlags(@NonNull UserInfo user) {
+        // TODO(b/150419600): add unit test
+        int flags = UserFlags.NONE;
+        if (user.id == UserHandle.USER_SYSTEM) {
+            flags |= UserFlags.SYSTEM;
+        }
+        if (user.isAdmin()) {
+            flags |= UserFlags.ADMIN;
+        }
+        if (user.isGuest()) {
+            flags |= UserFlags.GUEST;
+        }
+        if (user.isEphemeral()) {
+            flags |= UserFlags.EPHEMERAL;
+        }
+
+        return flags;
     }
 
     private UserHalHelper() {

@@ -24,8 +24,8 @@ import android.automotive.watchdog.ICarWatchdogClient;
 import android.car.watchdog.ICarWatchdogService;
 import android.content.Context;
 import android.os.Handler;
+import android.os.IBinder;
 import android.os.Looper;
-import android.os.Process;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.util.Log;
@@ -46,6 +46,9 @@ import java.lang.ref.WeakReference;
  */
 public final class CarWatchdogService extends ICarWatchdogService.Stub implements CarServiceBase {
 
+    private static final long CAR_WATCHDOG_DAEMON_BIND_RETRY_INTERVAL_MS = 500;
+    private static final long CAR_WATCHDOG_DAEMON_FIND_MARGINAL_TIME_MS = 300;
+    private static final int CAR_WATCHDOG_DAEMON_BIND_MAX_RETRY = 3;
     private static final String CAR_WATCHDOG_DAEMON_INTERFACE =
             "android.automotive.watchdog.ICarWatchdog/default";
 
@@ -58,11 +61,11 @@ public final class CarWatchdogService extends ICarWatchdogService.Stub implement
 
     public CarWatchdogService(Context context) {
         // Car watchdog daemon is found at init().
-        this(context, null);
+        this(context, /* daemon= */ null);
     }
 
     @VisibleForTesting
-    CarWatchdogService(Context context, ICarWatchdog daemon) {
+    public CarWatchdogService(Context context, @Nullable ICarWatchdog daemon) {
         mContext = context;
         // For testing, we use the given car watchdog daemon.
         mCarWatchdogDaemon = daemon;
@@ -76,24 +79,7 @@ public final class CarWatchdogService extends ICarWatchdogService.Stub implement
             daemon = mCarWatchdogDaemon;
         }
         if (daemon == null) {
-            daemon = ICarWatchdog.Stub.asInterface(
-                    ServiceManager.getService(CAR_WATCHDOG_DAEMON_INTERFACE));
-            if (daemon == null) {
-                Log.wtf(TAG_WATCHDOG, "Cannot initialize because no watchdog daemon is found");
-                Process.killProcess(Process.myPid());
-            }
-        }
-        try {
-            daemon.registerMediator(mWatchdogClient);
-        } catch (RemoteException e) {
-            daemon = null;
-            Log.w(TAG_WATCHDOG, "Cannot register to car watchdog daemon: " + e);
-        } catch (IllegalArgumentException e) {
-            // Do nothing.
-            Log.w(TAG_WATCHDOG, "Already registered as mediator: " + e);
-        }
-        synchronized (mLock) {
-            mCarWatchdogDaemon = daemon;
+            connectToDaemon(CAR_WATCHDOG_DAEMON_BIND_MAX_RETRY);
         }
     }
 
@@ -104,12 +90,10 @@ public final class CarWatchdogService extends ICarWatchdogService.Stub implement
             daemon = mCarWatchdogDaemon;
             mCarWatchdogDaemon = null;
         }
-        if (daemon != null) {
-            try {
-                daemon.unregisterClient(mWatchdogClient);
-            } catch (RemoteException e) {
-                Log.w(TAG_WATCHDOG, "Cannot unregister from car watchdog daemon: " + e);
-            }
+        try {
+            daemon.unregisterClient(mWatchdogClient);
+        } catch (RemoteException e) {
+            Log.w(TAG_WATCHDOG, "Cannot unregister from car watchdog daemon: " + e);
         }
     }
 
@@ -134,6 +118,71 @@ public final class CarWatchdogService extends ICarWatchdogService.Stub implement
     @Override
     public void tellClientAlive(ICarWatchdogClient client, int sessionId) {
         // TODO(b/145556670): implement body.
+    }
+
+    private void connectToDaemon(int retryCount) {
+        if (retryCount <= 0) {
+            Log.e(TAG_WATCHDOG, "Cannot reconnect to car watchdog daemon after retrying "
+                    + CAR_WATCHDOG_DAEMON_BIND_MAX_RETRY + " times");
+            return;
+        }
+        if (makeBinderConnection()) {
+            Log.i(TAG_WATCHDOG, "Connected to car watchdog daemon");
+            return;
+        }
+        mMainHandler.postDelayed(() -> {
+            connectToDaemon(retryCount - 1);
+        }, CAR_WATCHDOG_DAEMON_BIND_RETRY_INTERVAL_MS);
+    }
+
+    private boolean makeBinderConnection() {
+        long currentTimeMs = System.currentTimeMillis();
+        IBinder binder = ServiceManager.getService(CAR_WATCHDOG_DAEMON_INTERFACE);
+        if (binder == null) {
+            Log.w(TAG_WATCHDOG, "Getting car watchdog daemon binder failed");
+            return false;
+        }
+        long elapsedTimeMs = System.currentTimeMillis() - currentTimeMs;
+        if (elapsedTimeMs > CAR_WATCHDOG_DAEMON_FIND_MARGINAL_TIME_MS) {
+            Log.wtf(TAG_WATCHDOG,
+                    "Finding car watchdog daemon took too long(" + elapsedTimeMs + "ms)");
+        }
+        try {
+            binder.linkToDeath(new DeathRecipient() {
+                @Override
+                public void binderDied() {
+                    Log.w(TAG_WATCHDOG, "Car watchdog daemon died: reconnecting");
+                    synchronized (mLock) {
+                        mCarWatchdogDaemon = null;
+                    }
+                    mMainHandler.postDelayed(() -> {
+                        connectToDaemon(CAR_WATCHDOG_DAEMON_BIND_MAX_RETRY);
+                    }, CAR_WATCHDOG_DAEMON_BIND_RETRY_INTERVAL_MS);
+                }
+            }, 0);
+        } catch (RemoteException e) {
+            Log.w(TAG_WATCHDOG, "Linking to binder death recipient failed: " + e);
+            return false;
+        }
+
+        ICarWatchdog daemon = ICarWatchdog.Stub.asInterface(binder);
+        if (daemon == null) {
+            Log.w(TAG_WATCHDOG, "Getting car watchdog daemon interface failed");
+            return false;
+        }
+        synchronized (mLock) {
+            mCarWatchdogDaemon = daemon;
+        }
+        try {
+            daemon.registerMediator(mWatchdogClient);
+        } catch (RemoteException e) {
+            // Nothing that we can do further.
+            Log.w(TAG_WATCHDOG, "Cannot register to car watchdog daemon: " + e);
+        } catch (IllegalArgumentException e) {
+            // Do nothing.
+            Log.w(TAG_WATCHDOG, "Already registered as mediator: " + e);
+        }
+        return true;
     }
 
     private void doHealthCheck(int sessionId) {

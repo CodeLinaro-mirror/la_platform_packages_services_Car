@@ -42,10 +42,15 @@ bool Enumerator::init(const char* hardwareServiceName) {
 
 bool Enumerator::checkPermission() {
     hardware::IPCThreadState *ipc = hardware::IPCThreadState::self();
-    if (AID_AUTOMOTIVE_EVS != ipc->getCallingUid() &&
-        AID_ROOT != ipc->getCallingUid()) {
-
-        ALOGE("EVS access denied?: pid = %d, uid = %d", ipc->getCallingPid(), ipc->getCallingUid());
+    const auto userId = ipc->getCallingUid() / AID_USER_OFFSET;
+    const auto appId = ipc->getCallingUid() % AID_USER_OFFSET;
+#ifdef EVS_ALLOW_AID_ROOT
+    if (AID_AUTOMOTIVE_EVS != appId && AID_ROOT != appId && AID_SYSTEM != appId) {
+#else
+    if (AID_AUTOMOTIVE_EVS != appId && AID_SYSTEM != appId) {
+#endif
+        ALOGE("EVS access denied?: pid = %d, userId = %d, appId = %d",
+              ipc->getCallingPid(), userId, appId);
         return false;
     }
 
@@ -439,6 +444,30 @@ Return<void> Enumerator::getDisplayIdList(getDisplayIdList_cb _list_cb)  {
     return mHwEnumerator->getDisplayIdList(_list_cb);
 }
 
+
+// TODO(b/149874793): Add implementation for EVS Manager and Sample driver
+Return<void> Enumerator::getUltrasonicsArrayList(getUltrasonicsArrayList_cb _hidl_cb) {
+    hardware::hidl_vec<UltrasonicsArrayDesc> ultrasonicsArrayDesc;
+    _hidl_cb(ultrasonicsArrayDesc);
+    return Void();
+}
+
+
+// TODO(b/149874793): Add implementation for EVS Manager and Sample driver
+Return<sp<IEvsUltrasonicsArray>> Enumerator::openUltrasonicsArray(
+        const hidl_string& ultrasonicsArrayId) {
+    (void)ultrasonicsArrayId;
+    sp<IEvsUltrasonicsArray> pEvsUltrasonicsArray;
+    return pEvsUltrasonicsArray;
+}
+
+
+// TODO(b/149874793): Add implementation for EVS Manager and Sample driver
+Return<void> Enumerator::closeUltrasonicsArray(
+        const ::android::sp<IEvsUltrasonicsArray>& evsUltrasonicsArray)  {
+    (void)evsUltrasonicsArray;
+    return Void();
+}
 
 } // namespace implementation
 } // namespace V1_1
