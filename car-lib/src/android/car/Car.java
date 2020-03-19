@@ -44,6 +44,7 @@ import android.car.hardware.hvac.CarHvacManager;
 import android.car.hardware.power.CarPowerManager;
 import android.car.hardware.property.CarPropertyManager;
 import android.car.hardware.property.ICarProperty;
+import android.car.input.CarInputManager;
 import android.car.media.CarAudioManager;
 import android.car.media.CarMediaManager;
 import android.car.navigation.CarNavigationStatusManager;
@@ -300,6 +301,7 @@ public final class Car {
      * @hide
      */
     @MandatoryFeature
+    @SystemApi
     public static final String CAR_MEDIA_SERVICE = "car_media";
 
     /**
@@ -331,6 +333,11 @@ public final class Car {
     @MandatoryFeature
     @SystemApi
     public static final String CAR_WATCHDOG_SERVICE = "car_watchdog";
+
+    /**
+     * @hide
+     */
+    public static final String CAR_INPUT_SERVICE = "android.car.input";
 
     /**
      * Service for testing. This is system app only feature.
@@ -1723,6 +1730,9 @@ public final class Car {
                 break;
             case CAR_WATCHDOG_SERVICE:
                 manager = new CarWatchdogManager(this, binder);
+                break;
+            case CAR_INPUT_SERVICE:
+                manager = new CarInputManager(this, binder);
                 break;
             default:
                 // Experimental or non-existing

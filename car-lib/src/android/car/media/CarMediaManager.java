@@ -19,6 +19,7 @@ import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
+import android.annotation.TestApi;
 import android.car.Car;
 import android.car.CarManagerBase;
 import android.content.ComponentName;
@@ -80,16 +81,6 @@ public final class CarMediaManager extends CarManagerBase {
     }
 
     /**
-     * Gets the currently active media source, or null if none exists
-     * Requires android.Manifest.permission.MEDIA_CONTENT_CONTROL permission
-     * @hide
-     */
-    @RequiresPermission(value = android.Manifest.permission.MEDIA_CONTENT_CONTROL)
-    public ComponentName getMediaSource() {
-        return getMediaSource(MEDIA_SOURCE_MODE_PLAYBACK);
-    }
-
-    /**
      * Gets the currently active media source for the provided mode
      *
      * @param mode the mode (playback or browse) for which the media source is active in.
@@ -105,16 +96,6 @@ public final class CarMediaManager extends CarManagerBase {
     }
 
     /**
-     * Sets the currently active media source
-     * Requires android.Manifest.permission.MEDIA_CONTENT_CONTROL permission
-     * @hide
-     */
-    @RequiresPermission(value = android.Manifest.permission.MEDIA_CONTENT_CONTROL)
-    public void setMediaSource(ComponentName componentName) {
-        setMediaSource(componentName, MEDIA_SOURCE_MODE_PLAYBACK);
-    }
-
-    /**
      * Sets the currently active media source for the provided mode
      *
      * @param mode the mode (playback or browse) for which the media source is active in.
@@ -126,16 +107,6 @@ public final class CarMediaManager extends CarManagerBase {
         } catch (RemoteException e) {
             handleRemoteExceptionFromCarService(e);
         }
-    }
-
-    /**
-     * Register a callback that receives updates to the active media source.
-     * Requires android.Manifest.permission.MEDIA_CONTENT_CONTROL permission
-     * @hide
-     */
-    @RequiresPermission(value = android.Manifest.permission.MEDIA_CONTENT_CONTROL)
-    public void registerMediaSourceListener(MediaSourceChangedListener callback) {
-        addMediaSourceListener(callback, MEDIA_SOURCE_MODE_PLAYBACK);
     }
 
     /**
@@ -161,16 +132,6 @@ public final class CarMediaManager extends CarManagerBase {
         } catch (RemoteException e) {
             handleRemoteExceptionFromCarService(e);
         }
-    }
-
-    /**
-     * Unregister a callback that receives updates to the active media source.
-     * Requires android.Manifest.permission.MEDIA_CONTENT_CONTROL permission
-     * @hide
-     */
-    @RequiresPermission(value = android.Manifest.permission.MEDIA_CONTENT_CONTROL)
-    public void unregisterMediaSourceListener(MediaSourceChangedListener callback) {
-        removeMediaSourceListener(callback, MEDIA_SOURCE_MODE_PLAYBACK);
     }
 
     /**
@@ -212,6 +173,37 @@ public final class CarMediaManager extends CarManagerBase {
     public void onCarDisconnected() {
         synchronized (mLock) {
             mCallbackMap.clear();
+        }
+    }
+
+    /**
+     * Returns whether the browse and playback sources can be changed independently.
+     * @return true if the browse and playback sources can be changed independently, false if it
+     * isn't or if the value could not be determined.
+     * @hide
+     */
+    @TestApi
+    @RequiresPermission(value = android.Manifest.permission.MEDIA_CONTENT_CONTROL)
+    public boolean isIndependentPlaybackConfig() {
+        try {
+            return mService.isIndependentPlaybackConfig();
+        } catch (RemoteException e) {
+            return handleRemoteExceptionFromCarService(e, null);
+        }
+    }
+
+    /**
+     * Sets whether the browse and playback sources can be changed independently.
+     * @param independent whether the browse and playback sources can be changed independently.
+     * @hide
+     */
+    @TestApi
+    @RequiresPermission(value = android.Manifest.permission.MEDIA_CONTENT_CONTROL)
+    public void setIndependentPlaybackConfig(boolean independent) {
+        try {
+            mService.setIndependentPlaybackConfig(independent);
+        } catch (RemoteException e) {
+            handleRemoteExceptionFromCarService(e);
         }
     }
 }
