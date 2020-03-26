@@ -37,4 +37,9 @@ enum PowerCycle {
    * The system resumes working.
    */
   POWER_CYCLE_RESUME,
+
+  /**
+   * Number of available power cycles.
+   */
+  NUM_POWER_CYLES,
 }
