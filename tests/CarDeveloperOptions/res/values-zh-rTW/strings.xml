@@ -481,8 +481,7 @@
     <string name="face_lock_screen_setup_skip_dialog_text" product="tablet" msgid="2998863111689476550">"建議你設定螢幕鎖定選項保護你的平板電腦。這樣一來，即使平板電腦遺失或遭竊，其他人也無法使用。此外，你也必須設定螢幕鎖定選項，才能設定臉孔驗證。請輕觸 [取消]，然後設定 PIN 碼或選擇其他螢幕鎖定選項。"</string>
     <string name="face_lock_screen_setup_skip_dialog_text" product="device" msgid="6780557259734235952">"建議你設定螢幕鎖定選項保護你的裝置。這樣一來，即使裝置遺失或遭竊，其他人也無法使用。此外，你也必須設定螢幕鎖定選項，才能設定臉孔驗證。請輕觸 [取消]，然後設定 PIN 碼或選擇其他螢幕鎖定選項。"</string>
     <string name="face_lock_screen_setup_skip_dialog_text" product="default" msgid="8541640018478926775">"建議你設定螢幕鎖定選項保護你的手機。這樣一來，即使手機遺失或遭竊，其他人也無法使用。此外，你也必須設定螢幕鎖定選項，才能設定臉孔驗證。請輕觸 [取消]，然後設定 PIN 碼或選擇其他螢幕鎖定選項。"</string>
-    <!-- no translation found for lock_screen_pin_skip_title (8217519439213393785) -->
-    <skip />
+    <string name="lock_screen_pin_skip_title" msgid="8217519439213393785">"要略過 PIN 碼設定程序嗎？"</string>
     <string name="lock_screen_password_skip_title" msgid="3725788215672959827">"要略過密碼設定程序嗎？"</string>
     <string name="lock_screen_pattern_skip_title" msgid="4237030500353932005">"要略過解鎖圖案設定程序嗎？"</string>
     <string name="security_settings_fingerprint_enroll_setup_screen_lock" msgid="9036983528330627756">"設定螢幕鎖定"</string>
@@ -1092,8 +1091,11 @@
     <item msgid="2552412793005571845">"@*android:string/wfc_mode_cellular_preferred_summary"</item>
     <item msgid="742811521969300868">"@*android:string/wfc_mode_wifi_only_summary"</item>
   </string-array>
-    <!-- no translation found for wifi_calling_mode_choices_v2:0 (9149346657812979257) -->
-    <!-- no translation found for wifi_calling_mode_choices_v2:2 (6007360612667098926) -->
+  <string-array name="wifi_calling_mode_choices_v2">
+    <item msgid="9149346657812979257">"Wi-Fi"</item>
+    <item msgid="4421333712484542489">"行動網路"</item>
+    <item msgid="6007360612667098926">"僅限 Wi-Fi"</item>
+  </string-array>
   <string-array name="wifi_calling_mode_choices_without_wifi_only">
     <item msgid="3658897985297386665">"@*android:string/wfc_mode_wifi_preferred_summary"</item>
     <item msgid="4191802193352447215">"@*android:string/wfc_mode_cellular_preferred_summary"</item>
@@ -1223,8 +1225,8 @@
     <string name="night_display_summary_on_auto_mode_twilight" msgid="8386769601369289561">"將於日出時自動關閉"</string>
     <string name="night_display_activation_on_manual" msgid="8379477527072027346">"立即開啟"</string>
     <string name="night_display_activation_off_manual" msgid="7776082151269794201">"立即關閉"</string>
-    <string name="night_display_activation_on_twilight" msgid="5610294051700287249">"保持開啟狀態，直到日出"</string>
-    <string name="night_display_activation_off_twilight" msgid="6846727701281556110">"保持關閉狀態，直到日落"</string>
+    <string name="night_display_activation_on_twilight" msgid="5610294051700287249">"開啟，直到日出"</string>
+    <string name="night_display_activation_off_twilight" msgid="6846727701281556110">"關閉，直到日落"</string>
     <string name="night_display_activation_on_custom" msgid="4761140206778957611">"保持開啟狀態，直到<xliff:g id="ID_1">%1$s</xliff:g>"</string>
     <string name="night_display_activation_off_custom" msgid="4207238846687792731">"保持關閉狀態，直到<xliff:g id="ID_1">%1$s</xliff:g>"</string>
     <string name="night_display_not_currently_on" msgid="1436588493764429281">"夜燈模式目前已關閉"</string>
@@ -2075,7 +2077,7 @@
     <string name="accessibility_timeout_1min" msgid="5019003178551730551">"1 分鐘"</string>
     <string name="accessibility_timeout_2mins" msgid="4124259290444829477">"2 分鐘"</string>
     <string name="accessibility_content_timeout_preference_title" msgid="5160746882250939464">"可閱讀的時間"</string>
-    <string name="accessibility_control_timeout_preference_title" msgid="2771808346038759474">"可進行操作的時間"</string>
+    <string name="accessibility_control_timeout_preference_title" msgid="2771808346038759474">"操作等待時間"</string>
     <string name="accessibility_content_timeout_preference_summary" msgid="853829064617918179">"選擇你需要閱讀的訊息會暫時顯示多久。\n\n只有部分應用程式支援這項設定。"</string>
     <string name="accessibility_control_timeout_preference_summary" msgid="8582212299606932160">"選擇提示你進行操作的訊息會暫時顯示多久。\n\n只有部分應用程式支援這項設定。"</string>
     <string name="accessibility_long_press_timeout_preference_title" msgid="5029685114164868477">"輕觸並按住的延遲時間"</string>
