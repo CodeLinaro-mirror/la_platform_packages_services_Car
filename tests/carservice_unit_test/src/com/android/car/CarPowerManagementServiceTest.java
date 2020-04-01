@@ -17,10 +17,12 @@
 package com.android.car;
 
 import static android.content.pm.UserInfo.FLAG_EPHEMERAL;
+import static android.os.UserHandle.USER_NULL;
 import static android.os.UserHandle.USER_SYSTEM;
 import static android.os.UserManager.USER_TYPE_FULL_GUEST;
 
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doAnswer;
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.doReturn;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.mockitoSession;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.verify;
 
@@ -54,6 +56,7 @@ import android.hardware.automotive.vehicle.V2_0.VehicleApPowerStateReq;
 import android.hardware.automotive.vehicle.V2_0.VehicleApPowerStateShutdownParam;
 import android.os.RemoteException;
 import android.os.UserManager;
+import android.sysprop.CarProperties;
 import android.test.suitebuilder.annotation.SmallTest;
 import android.util.Log;
 
@@ -77,11 +80,9 @@ import org.junit.Test;
 import org.junit.rules.TestRule;
 import org.junit.rules.TestWatcher;
 import org.junit.runner.Description;
-import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.MockitoSession;
 import org.mockito.invocation.InvocationOnMock;
-import org.mockito.junit.MockitoJUnitRunner;
 import org.mockito.quality.Strictness;
 
 import java.io.File;
@@ -92,12 +93,12 @@ import java.lang.reflect.Method;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
 @SmallTest
-@RunWith(MockitoJUnitRunner.class)
 public class CarPowerManagementServiceTest {
     private static final String TAG = CarPowerManagementServiceTest.class.getSimpleName();
     private static final long WAIT_TIMEOUT_MS = 2000;
@@ -160,7 +161,9 @@ public class CarPowerManagementServiceTest {
         mSession = mockitoSession()
                 .strictness(Strictness.LENIENT)
                 .spyStatic(ActivityManager.class)
+                .spyStatic(CarProperties.class)
                 .spyStatic(Log.class)
+                .initMocks(this)
                 .startMocking();
         mPowerHal = new MockedPowerHalService(true /*isPowerStateSupported*/,
                 true /*isDeepSleepAllowed*/, true /*isTimedWakeupAllowed*/);
@@ -419,6 +422,8 @@ public class CarPowerManagementServiceTest {
     @Test
     public void testSleepEntryAndWakeUpForProcessing() throws Exception {
         initTest();
+        // Speed up the polling for power state transitions
+        mService.setShutdownTimersForTest(10, 40);
         setUserInfo(10, NO_USER_INFO_FLAGS);
         setUserInfo(11, NO_USER_INFO_FLAGS);
         setCurrentUser(10);
@@ -554,6 +559,18 @@ public class CarPowerManagementServiceTest {
     public void testUserSwitchingOnResume_systemUser() throws Exception {
         initTest();
         setInitialUser(USER_SYSTEM);
+        setCurrentUser(10);
+
+        suspendAndResumeForUserSwitchingTests();
+
+        verifyUserNotSwitched();
+        // expects WTF
+    }
+
+    @Test
+    public void testUserSwitchingOnResume_noInitialInfo() throws Exception {
+        initTest();
+        setInitialUser(USER_NULL);
         setCurrentUser(10);
 
         suspendAndResumeForUserSwitchingTests();
@@ -815,6 +832,9 @@ public class CarPowerManagementServiceTest {
 
         verifyUserSwitched(11);
         verifyWtfNeverLogged();
+
+        // Make sure HAL was called, otherwise test could pass when the property was not set
+        verify(mUserService).getInitialUserInfo(eq(InitialUserInfoRequestType.RESUME), notNull());
     }
 
     private void setGetUserInfoResponse(Visitor<HalCallback<InitialUserInfoResponse>> visitor) {
@@ -826,6 +846,7 @@ public class CarPowerManagementServiceTest {
     }
 
     private void enableUserHal() {
+        doReturn(Optional.of(true)).when(() -> CarProperties.user_hal_enabled());
         when(mUserService.isUserHalSupported()).thenReturn(true);
     }
 
@@ -945,7 +966,7 @@ public class CarPowerManagementServiceTest {
     }
 
     private void setCurrentUser(int userId) {
-        when(ActivityManager.getCurrentUser()).thenReturn(userId);
+        doReturn(userId).when(() -> ActivityManager.getCurrentUser());
     }
 
     private void setUserInfo(int userId, int flags) {
@@ -966,11 +987,11 @@ public class CarPowerManagementServiceTest {
     }
 
     private void verifyUserNotSwitched() {
-        verify(mCarUserManagerHelper, never()).switchToUserId(anyInt());
+        verify(mCarUserManagerHelper, never()).startForegroundUser(anyInt());
     }
 
     private void verifyUserSwitched(int userId) {
-        verify(mCarUserManagerHelper, times(1)).switchToUserId(userId);
+        verify(mCarUserManagerHelper, times(1)).startForegroundUser(userId);
     }
 
     private void verifyNoGuestCreated() {
