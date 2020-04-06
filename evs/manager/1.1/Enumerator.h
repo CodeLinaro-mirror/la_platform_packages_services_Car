@@ -65,6 +65,11 @@ public:
     Return<bool>                isHardware() override { return false; }
     Return<void>                getDisplayIdList(getDisplayIdList_cb _list_cb) override;
     Return<sp<IEvsDisplay_1_1>> openDisplay_1_1(uint8_t id) override;
+    Return<void> getUltrasonicsArrayList(getUltrasonicsArrayList_cb _hidl_cb) override;
+    Return<sp<IEvsUltrasonicsArray>> openUltrasonicsArray(
+            const hidl_string& ultrasonicsArrayId) override;
+    Return<void> closeUltrasonicsArray(
+            const ::android::sp<IEvsUltrasonicsArray>& evsUltrasonicsArray) override;
 
     // Implementation details
     bool init(const char* hardwareServiceName);
@@ -84,6 +89,9 @@ private:
     // List of camera descriptors of enumerated hw cameras
     std::unordered_map<std::string,
                        CameraDesc>    mCameraDevices;
+
+    // Display port the internal display is connected to.
+    uint8_t                           mInternalDisplayPort;
 };
 
 } // namespace implementation

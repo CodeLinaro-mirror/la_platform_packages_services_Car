@@ -22,7 +22,6 @@
 #include <android/hardware/camera/device/3.2/ICameraDevice.h>
 #include <android/frameworks/automotive/display/1.0/IAutomotiveDisplayProxyService.h>
 
-
 #include <unordered_map>
 #include <thread>
 #include <atomic>
@@ -65,6 +64,11 @@ public:
     Return<bool>                isHardware() override { return true; }
     Return<void>                getDisplayIdList(getDisplayIdList_cb _list_cb) override;
     Return<sp<IEvsDisplay_1_1>> openDisplay_1_1(uint8_t port) override;
+    Return<void> getUltrasonicsArrayList(getUltrasonicsArrayList_cb _hidl_cb) override;
+    Return<sp<IEvsUltrasonicsArray>> openUltrasonicsArray(
+            const hidl_string& ultrasonicsArrayId) override;
+    Return<void> closeUltrasonicsArray(
+            const ::android::sp<IEvsUltrasonicsArray>& evsUltrasonicsArray) override;
 
     // Implementation details
     EvsEnumerator(sp<IAutomotiveDisplayProxyService> proxyService = nullptr);
@@ -109,6 +113,7 @@ private:
     static sp<IAutomotiveDisplayProxyService> sDisplayProxy;
     static std::unordered_map<uint8_t,
                               uint64_t>       sDisplayPortList;
+    static uint64_t                           sInternalDisplayId;
 };
 
 } // namespace implementation

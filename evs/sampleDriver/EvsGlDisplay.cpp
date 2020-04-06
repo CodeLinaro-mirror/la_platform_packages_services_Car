@@ -32,15 +32,11 @@ namespace implementation {
 
 static bool sDebugFirstFrameDisplayed = false;
 
-EvsGlDisplay::EvsGlDisplay() {
-    EvsGlDisplay(nullptr, 0);
-}
-
 
 EvsGlDisplay::EvsGlDisplay(sp<IAutomotiveDisplayProxyService> pDisplayProxy, uint64_t displayId)
     : mDisplayProxy(pDisplayProxy),
       mDisplayId(displayId) {
-    ALOGD("EvsGlDisplay instantiated");
+    LOG(DEBUG) << "EvsGlDisplay instantiated";
 
     // Set up our self description
     // NOTE:  These are arbitrary values chosen for testing
@@ -50,7 +46,7 @@ EvsGlDisplay::EvsGlDisplay(sp<IAutomotiveDisplayProxyService> pDisplayProxy, uin
 
 
 EvsGlDisplay::~EvsGlDisplay() {
-    ALOGD("EvsGlDisplay being destroyed");
+    LOG(DEBUG) << "EvsGlDisplay being destroyed";
     forceShutdown();
 }
 
@@ -60,7 +56,7 @@ EvsGlDisplay::~EvsGlDisplay() {
  */
 void EvsGlDisplay::forceShutdown()
 {
-    ALOGD("EvsGlDisplay forceShutdown");
+    LOG(DEBUG) << "EvsGlDisplay forceShutdown";
     std::lock_guard<std::mutex> lock(mAccessLock);
 
     // If the buffer isn't being held by a remote client, release it now as an
@@ -69,7 +65,7 @@ void EvsGlDisplay::forceShutdown()
     if (mBuffer.memHandle) {
         // Report if we're going away while a buffer is outstanding
         if (mFrameBusy) {
-            ALOGE("EvsGlDisplay going down while client is holding a buffer");
+            LOG(ERROR) << "EvsGlDisplay going down while client is holding a buffer";
         }
 
         // Drop the graphics buffer we've been using
@@ -91,7 +87,7 @@ void EvsGlDisplay::forceShutdown()
  * See the description of the DisplayDesc structure for details.
  */
 Return<void> EvsGlDisplay::getDisplayInfo(getDisplayInfo_cb _hidl_cb)  {
-    ALOGD("getDisplayInfo");
+    LOG(DEBUG) << __FUNCTION__;
 
     // Send back our self description
     _hidl_cb(mInfo);
@@ -109,7 +105,7 @@ Return<void> EvsGlDisplay::getDisplayInfo(getDisplayInfo_cb _hidl_cb)  {
  * is expected to request the NOT_VISIBLE state after passing the last video frame.
  */
 Return<EvsResult> EvsGlDisplay::setDisplayState(EvsDisplayState state) {
-    ALOGD("setDisplayState");
+    LOG(DEBUG) << __FUNCTION__;
     std::lock_guard<std::mutex> lock(mAccessLock);
 
     if (mRequestedState == EvsDisplayState::DEAD) {
@@ -148,7 +144,7 @@ Return<EvsResult> EvsGlDisplay::setDisplayState(EvsDisplayState state) {
  * spontaneously change display states.
  */
 Return<EvsDisplayState> EvsGlDisplay::getDisplayState()  {
-    ALOGD("getDisplayState");
+    LOG(DEBUG) << __FUNCTION__;
     std::lock_guard<std::mutex> lock(mAccessLock);
 
     return mRequestedState;
@@ -162,13 +158,12 @@ Return<EvsDisplayState> EvsGlDisplay::getDisplayState()  {
  * display is no longer visible.
  */
 Return<void> EvsGlDisplay::getTargetBuffer(getTargetBuffer_cb _hidl_cb)  {
-    ALOGV("getTargetBuffer");
+    LOG(DEBUG) << __FUNCTION__;
     std::lock_guard<std::mutex> lock(mAccessLock);
 
     if (mRequestedState == EvsDisplayState::DEAD) {
-        ALOGE("Rejecting buffer request from object that lost ownership of the display.");
-        BufferDesc_1_0 nullBuff = {};
-        _hidl_cb(nullBuff);
+        LOG(ERROR) << "Rejecting buffer request from object that lost ownership of the display.";
+        _hidl_cb({});
         return Void();
     }
 
@@ -180,9 +175,8 @@ Return<void> EvsGlDisplay::getTargetBuffer(getTargetBuffer_cb _hidl_cb)  {
         // (briefly) shown.
         if (!mGlWrapper.initialize(mDisplayProxy, mDisplayId)) {
             // Report the failure
-            ALOGE("Failed to initialize GL display");
-            BufferDesc_1_0 nullBuff = {};
-            _hidl_cb(nullBuff);
+            LOG(ERROR) << "Failed to initialize GL display";
+            _hidl_cb({});
             return Void();
         }
 
@@ -203,24 +197,23 @@ Return<void> EvsGlDisplay::getTargetBuffer(getTargetBuffer_cb _hidl_cb)  {
                                          &mBuffer.stride,
                                          0, "EvsGlDisplay");
         if (result != NO_ERROR) {
-            ALOGE("Error %d allocating %d x %d graphics buffer",
-                  result, mBuffer.width, mBuffer.height);
-            BufferDesc_1_0 nullBuff = {};
-            _hidl_cb(nullBuff);
+            LOG(ERROR) << "Error " << result
+                       << " allocating " << mBuffer.width << " x " << mBuffer.height
+                       << " graphics buffer.";
+            _hidl_cb({});
             mGlWrapper.shutdown();
             return Void();
         }
         if (!handle) {
-            ALOGE("We didn't get a buffer handle back from the allocator");
-            BufferDesc_1_0 nullBuff = {};
-            _hidl_cb(nullBuff);
+            LOG(ERROR) << "We didn't get a buffer handle back from the allocator";
+            _hidl_cb({});
             mGlWrapper.shutdown();
             return Void();
         }
 
         mBuffer.memHandle = handle;
-        ALOGD("Allocated new buffer %p with stride %u",
-              mBuffer.memHandle.getNativeHandle(), mBuffer.stride);
+        LOG(DEBUG) << "Allocated new buffer " << mBuffer.memHandle.getNativeHandle()
+                   << " with stride " <<  mBuffer.stride;
         mFrameBusy = false;
     }
 
@@ -230,17 +223,16 @@ Return<void> EvsGlDisplay::getTargetBuffer(getTargetBuffer_cb _hidl_cb)  {
         // (an unsupported mode of operation) or else the client hasn't returned
         // a previously issued buffer yet (they're behaving badly).
         // NOTE:  We have to make the callback even if we have nothing to provide
-        ALOGE("getTargetBuffer called while no buffers available.");
-        BufferDesc_1_0 nullBuff = {};
-        _hidl_cb(nullBuff);
+        LOG(ERROR) << "getTargetBuffer called while no buffers available.";
+        _hidl_cb({});
         return Void();
     } else {
         // Mark our buffer as busy
         mFrameBusy = true;
 
         // Send the buffer to the client
-        ALOGV("Providing display buffer handle %p as id %d",
-              mBuffer.memHandle.getNativeHandle(), mBuffer.bufferId);
+        LOG(VERBOSE) << "Providing display buffer handle " << mBuffer.memHandle.getNativeHandle()
+                     << " as id " << mBuffer.bufferId;
         _hidl_cb(mBuffer);
         return Void();
     }
@@ -252,20 +244,21 @@ Return<void> EvsGlDisplay::getTargetBuffer(getTargetBuffer_cb _hidl_cb)  {
  * The buffer is no longer valid for use by the client after this call.
  */
 Return<EvsResult> EvsGlDisplay::returnTargetBufferForDisplay(const BufferDesc_1_0& buffer)  {
-    ALOGV("returnTargetBufferForDisplay %p", buffer.memHandle.getNativeHandle());
+    LOG(VERBOSE) << __FUNCTION__ << " " << buffer.memHandle.getNativeHandle();
     std::lock_guard<std::mutex> lock(mAccessLock);
 
     // Nobody should call us with a null handle
     if (!buffer.memHandle.getNativeHandle()) {
-        ALOGE ("returnTargetBufferForDisplay called without a valid buffer handle.\n");
+        LOG(ERROR) << __FUNCTION__
+                   << " called without a valid buffer handle.";
         return EvsResult::INVALID_ARG;
     }
     if (buffer.bufferId != mBuffer.bufferId) {
-        ALOGE ("Got an unrecognized frame returned.\n");
+        LOG(ERROR) << "Got an unrecognized frame returned.";
         return EvsResult::INVALID_ARG;
     }
     if (!mFrameBusy) {
-        ALOGE ("A frame was returned with no outstanding frames.\n");
+        LOG(ERROR) << "A frame was returned with no outstanding frames.";
         return EvsResult::BUFFER_NOT_AVAILABLE;
     }
 
@@ -285,7 +278,7 @@ Return<EvsResult> EvsGlDisplay::returnTargetBufferForDisplay(const BufferDesc_1_
     // Validate we're in an expected state
     if (mRequestedState != EvsDisplayState::VISIBLE) {
         // Not sure why a client would send frames back when we're not visible.
-        ALOGW ("Got a frame returned while not visible - ignoring.\n");
+        LOG(WARNING) << "Got a frame returned while not visible - ignoring.";
     } else {
         // Update the texture contents with the provided data
 // TODO:  Why doesn't it work to pass in the buffer handle we got from HIDL?
@@ -296,10 +289,13 @@ Return<EvsResult> EvsGlDisplay::returnTargetBufferForDisplay(const BufferDesc_1_
 
         // Put the image on the screen
         mGlWrapper.renderImageToScreen();
+#ifdef EVS_DEBUG
         if (!sDebugFirstFrameDisplayed) {
-            ALOGD("EvsFirstFrameDisplayTiming start time: %" PRId64 "ms", elapsedRealtime());
+            LOG(DEBUG) << "EvsFirstFrameDisplayTiming start time: "
+                       << elapsedRealtime() << " ms.";
             sDebugFirstFrameDisplayed = true;
         }
+#endif
 
     }
 
@@ -311,9 +307,7 @@ Return<void> EvsGlDisplay::getDisplayInfo_1_1(getDisplayInfo_1_1_cb _info_cb) {
     if (mDisplayProxy != nullptr) {
         return mDisplayProxy->getDisplayInfo(mDisplayId, _info_cb);
     } else {
-        HwDisplayConfig nullConfig;
-        HwDisplayState  nullState;
-        _info_cb(nullConfig, nullState);
+        _info_cb({}, {});
         return Void();
     }
 }

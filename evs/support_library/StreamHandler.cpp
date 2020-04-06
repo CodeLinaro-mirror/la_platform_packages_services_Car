@@ -37,7 +37,9 @@ using ::std::lock_guard;
 using ::std::unique_lock;
 
 StreamHandler::StreamHandler(android::sp <IEvsCamera> pCamera) :
-    mCamera(pCamera)
+    mCamera(pCamera),
+    mAnalyzeCallback(nullptr),
+    mAnalyzerRunning(false)
 {
     // We rely on the camera having at least two buffers available since we'll hold one and
     // expect the camera to be able to capture a new image in the background.
@@ -174,8 +176,11 @@ Return<void> StreamHandler::deliverFrame(const BufferDesc& buffer) {
             // If analyze callback is not null and the analyze thread is
             // available, copy the frame and run the analyze callback in
             // analyze thread.
-            if (mAnalyzeCallback != nullptr && !mAnalyzerRunning) {
-                copyAndAnalyzeFrame(mOriginalBuffers[mReadyBuffer]);
+            {
+                std::shared_lock<std::shared_mutex> analyzerLock(mAnalyzerLock);
+                if (mAnalyzeCallback != nullptr && !mAnalyzerRunning) {
+                    copyAndAnalyzeFrame(mOriginalBuffers[mReadyBuffer]);
+                }
             }
         }
     }
@@ -209,20 +214,27 @@ void StreamHandler::detachRenderCallback() {
 void StreamHandler::attachAnalyzeCallback(BaseAnalyzeCallback* callback) {
     ALOGD("StreamHandler::attachAnalyzeCallback");
 
-    lock_guard<mutex> lock(mLock);
-
     if (mAnalyzeCallback != nullptr) {
         ALOGW("Ignored! There should only be one analyze callcack");
         return;
     }
-    mAnalyzeCallback = callback;
+
+    {
+        lock_guard<std::shared_mutex> lock(mAnalyzerLock);
+        mAnalyzeCallback = callback;
+    }
 }
 
 void StreamHandler::detachAnalyzeCallback() {
     ALOGD("StreamHandler::detachAnalyzeCallback");
-    lock_guard<mutex> lock(mLock);
 
-    mAnalyzeCallback = nullptr;
+    {
+        std::unique_lock<std::shared_mutex> lock(mAnalyzerLock);
+
+        // Wait until current running analyzer ends
+        mAnalyzerSignal.wait(lock, [this] { return !mAnalyzerRunning; });
+        mAnalyzeCallback = nullptr;
+    }
 }
 
 bool isSameFormat(const BufferDesc& input, const BufferDesc& output) {
@@ -449,16 +461,18 @@ bool StreamHandler::copyAndAnalyzeFrame(const BufferDesc& input) {
     inputBuffer->unlock();
 
     mAnalyzerRunning = true;
-
-    mAnalyzeThread = std::thread([this, analyzeFrame]() {
+    std::thread([this, analyzeFrame]() {
         ALOGD("StreamHandler: Analyze Thread starts");
 
-        this->mAnalyzeCallback->analyze(analyzeFrame);
-        android::GraphicBufferMapper::get().unlock(this->mAnalyzeBuffer.memHandle);
+        std::shared_lock<std::shared_mutex> lock(mAnalyzerLock);
+        if (this->mAnalyzeCallback != nullptr) {
+            this->mAnalyzeCallback->analyze(analyzeFrame);
+            android::GraphicBufferMapper::get().unlock(this->mAnalyzeBuffer.memHandle);
+        }
         this->mAnalyzerRunning = false;
+        mAnalyzerSignal.notify_one();
         ALOGD("StreamHandler: Analyze Thread ends");
-    });
-    mAnalyzeThread.detach();
+    }).detach();
 
     return true;
 }

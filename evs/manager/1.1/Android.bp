@@ -31,8 +31,8 @@ cc_binary {
     ],
 
     shared_libs: [
+        "libbase",
         "libcutils",
-        "liblog",
         "libutils",
         "libui",
         "libsync",
@@ -63,4 +63,12 @@ cc_binary {
     include_dirs: [
         "system/core/libsync",
     ],
+
+    product_variables: {
+        debuggable: {
+            cflags: [
+                "-DEVS_DEBUG",
+            ]
+        }
+    }
 }

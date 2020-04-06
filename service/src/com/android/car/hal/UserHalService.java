@@ -17,9 +17,12 @@ package com.android.car.hal;
 
 import static android.car.VehiclePropertyIds.INITIAL_USER_INFO;
 
+import static com.android.internal.util.function.pooled.PooledLambda.obtainMessage;
+
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.car.hardware.property.CarPropertyManager;
 import android.hardware.automotive.vehicle.V2_0.InitialUserInfoResponse;
 import android.hardware.automotive.vehicle.V2_0.InitialUserInfoResponseAction;
 import android.hardware.automotive.vehicle.V2_0.UserFlags;
@@ -29,15 +32,16 @@ import android.hardware.automotive.vehicle.V2_0.VehiclePropConfig;
 import android.hardware.automotive.vehicle.V2_0.VehiclePropValue;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.ServiceSpecificException;
 import android.os.SystemClock;
 import android.os.UserHandle;
+import android.sysprop.CarProperties;
 import android.util.Log;
 import android.util.Pair;
 import android.util.Slog;
 import android.util.SparseArray;
 
-import com.android.car.CarLog;
-import com.android.car.hal.UserHalService.HalCallback.HalCallbackStatus;
+import com.android.car.hal.UserHalService.HalCallback;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.util.Preconditions;
 
@@ -48,15 +52,18 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Service used to integrate the OEM's custom user management with Android's.
  */
 public final class UserHalService extends HalServiceBase {
 
-    private static final String TAG = CarLog.TAG_USER;
+    private static final String UNSUPPORTED_MSG = "Vehicle HAL does not support user management";
 
-    // TODO(b/146207078): STOPSHIP - change to false before R is launched
+    private static final String TAG = UserHalService.class.getSimpleName();
+
+    // TODO(b/150413515): STOPSHIP - change to false before R is launched
     private static final boolean DBG = true;
 
     private final Object mLock = new Object();
@@ -64,12 +71,13 @@ public final class UserHalService extends HalServiceBase {
     private final VehicleHal mHal;
 
     @GuardedBy("mLock")
-    private final SparseArray<VehiclePropConfig> mProperties = new SparseArray<>(1);
+    @Nullable
+    private SparseArray<VehiclePropConfig> mProperties;
 
-    // NOTE: handler is currently only used to check if HAL times out replying to requests, by
-    // posting messages whose id is the request id. If it needs to be used for more messages, we'll
-    // need to change the mechanism (i.e., rename to mHandler and use msg.what)
-    private final Handler mTimeoutHandler = new Handler(Looper.getMainLooper());
+    // This handler handles 2 types of messages:
+    // - "Anonymous" messages (what=0) containing runnables.
+    // - "Identifiable" messages used to check for timeouts (whose 'what' is the request id).
+    private final Handler mHandler = new Handler(Looper.getMainLooper());
 
     /**
      * Value used on the next request.
@@ -78,9 +86,9 @@ public final class UserHalService extends HalServiceBase {
     private int mNextRequestId = 1;
 
     /**
-     * Map of callback by request id.
+     * Map of callbacks by request id.
      */
-    @GuardedBy("mHandler")
+    @GuardedBy("mLock")
     private SparseArray<Pair<Class<?>, HalCallback<?>>> mPendingCallbacks = new SparseArray<>();
 
     public UserHalService(VehicleHal hal) {
@@ -114,7 +122,8 @@ public final class UserHalService extends HalServiceBase {
             VehiclePropValue value = values.get(i);
             switch (value.prop) {
                 case INITIAL_USER_INFO:
-                    mTimeoutHandler.post(() -> handleOnInitialUserInfoResponse(value));
+                    mHandler.sendMessage(obtainMessage(
+                            UserHalService::handleOnInitialUserInfoResponse, this, value));
                     break;
                 default:
                     Slog.w(TAG, "received unsupported event from HAL: " + value);
@@ -123,7 +132,8 @@ public final class UserHalService extends HalServiceBase {
     }
 
     @Override
-    public void onPropertySetError(int property, int area) {
+    public void onPropertySetError(int property, int area,
+            @CarPropertyManager.CarSetPropertyErrorCode int errorCode) {
         if (DBG)Log.d(TAG, "handlePropertySetError(" + property + "/" + area + ")");
     }
 
@@ -131,19 +141,28 @@ public final class UserHalService extends HalServiceBase {
     @Nullable
     public Collection<VehiclePropConfig> takeSupportedProperties(
             Collection<VehiclePropConfig> allProperties) {
-        ArrayList<VehiclePropConfig> supported = new ArrayList<>();
-        synchronized (mLock) {
-            for (VehiclePropConfig config : allProperties) {
-                switch (config.prop) {
-                    case INITIAL_USER_INFO:
-                        supported.add(config);
-                        mProperties.put(config.prop, config);
-                        break;
-                }
-
+        boolean supported = false;
+        // TODO(b/150413515): increase capacity once it supports more
+        SparseArray<VehiclePropConfig> properties = new SparseArray<>(1);
+        ArrayList<VehiclePropConfig> taken = new ArrayList<>();
+        for (VehiclePropConfig config : allProperties) {
+            switch (config.prop) {
+                case INITIAL_USER_INFO:
+                    supported = true;
+                    taken.add(config);
+                    properties.put(config.prop, config);
+                    break;
             }
+
         }
-        return supported.isEmpty() ? null : supported;
+        if (!supported) {
+            Log.w(TAG, UNSUPPORTED_MSG);
+            return null;
+        }
+        synchronized (mLock) {
+            mProperties = properties;
+        }
+        return taken;
     }
 
     /**
@@ -157,13 +176,15 @@ public final class UserHalService extends HalServiceBase {
         int STATUS_HAL_SET_TIMEOUT = 2;
         int STATUS_HAL_RESPONSE_TIMEOUT = 3;
         int STATUS_WRONG_HAL_RESPONSE = 4;
+        int STATUS_CONCURRENT_OPERATION = 5;
 
         /** @hide */
         @IntDef(prefix = { "STATUS_" }, value = {
                 STATUS_OK,
                 STATUS_HAL_SET_TIMEOUT,
                 STATUS_HAL_RESPONSE_TIMEOUT,
-                STATUS_WRONG_HAL_RESPONSE
+                STATUS_WRONG_HAL_RESPONSE,
+                STATUS_CONCURRENT_OPERATION
         })
         @Retention(RetentionPolicy.SOURCE)
         @interface HalCallbackStatus{}
@@ -179,6 +200,20 @@ public final class UserHalService extends HalServiceBase {
     }
 
     /**
+     * Checks if the Vehicle HAL supports user management.
+     */
+    public boolean isSupported() {
+        synchronized (mLock) {
+            return mProperties != null;
+        }
+    }
+
+    @GuardedBy("mLock")
+    private void checkSupportedLocked() {
+        Preconditions.checkState(isSupported(), UNSUPPORTED_MSG);
+    }
+
+    /**
      * Calls HAL to asynchronously get info about the initial user.
      *
      * @param requestType type of request (as defined by
@@ -186,12 +221,16 @@ public final class UserHalService extends HalServiceBase {
      * @param timeoutMs how long to wait (in ms) for the property change event.
      * @param usersInfo current state of Android users.
      * @param callback callback to handle the response.
+     *
+     * @throws IllegalStateException if the HAL does not support user management (callers should
+     * call {@link #isSupported()} first to avoid this exception).
      */
     public void getInitialUserInfo(int requestType, int timeoutMs, @NonNull UsersInfo usersInfo,
             @NonNull HalCallback<InitialUserInfoResponse> callback) {
+        if (DBG) Log.d(TAG, "getInitialInfo(" + requestType + ")");
         Preconditions.checkArgumentPositive(timeoutMs, "timeout must be positive");
         Objects.requireNonNull(usersInfo);
-        // TODO(b/146207078): use helper method to convert request to prop value and check usersInfo
+        // TODO(b/150413515): use helper method to convert request to prop value and check usersInfo
         // is valid
         Objects.requireNonNull(callback);
 
@@ -199,8 +238,10 @@ public final class UserHalService extends HalServiceBase {
         propRequest.prop = INITIAL_USER_INFO;
         int requestId;
         synchronized (mLock) {
+            checkSupportedLocked();
+            if (hasPendingRequestLocked(InitialUserInfoResponse.class, callback)) return;
             requestId = mNextRequestId++;
-            // TODO(b/146207078): use helper method to convert request to prop value
+            // TODO(b/150413515): use helper method to convert request to prop value
             propRequest.value.int32Values.add(requestId);
             propRequest.value.int32Values.add(requestType);
             propRequest.value.int32Values.add(usersInfo.currentUser.userId);
@@ -212,18 +253,47 @@ public final class UserHalService extends HalServiceBase {
                 propRequest.value.int32Values.add(userInfo.flags);
             }
             setTimestamp(propRequest);
-            if (DBG) Log.d(TAG, "adding pending callback for request " + requestId);
-            mPendingCallbacks.put(requestId, new Pair<>(InitialUserInfoResponse.class, callback));
+            addPendingRequestLocked(requestId, InitialUserInfoResponse.class, callback);
         }
 
-        mTimeoutHandler.postDelayed(() -> handleCheckIfRequestTimedOut(requestId), timeoutMs);
+        mHandler.sendMessageDelayed(obtainMessage(
+                UserHalService::handleCheckIfRequestTimedOut, this, requestId).setWhat(requestId),
+                timeoutMs);
         try {
             if (DBG) Log.d(TAG, "Calling hal.set(): " + propRequest);
             mHal.set(propRequest);
-        } catch (PropertyTimeoutException e) {
+        } catch (ServiceSpecificException e) {
             Log.w(TAG, "Failed to set INITIAL_USER_INFO", e);
             callback.onResponse(HalCallback.STATUS_HAL_SET_TIMEOUT, null);
         }
+    }
+
+    @GuardedBy("mLock")
+    private void addPendingRequestLocked(int requestId, @NonNull Class<?> responseClass,
+            @NonNull HalCallback<?> callback) {
+        if (DBG) {
+            Log.d(TAG, "adding pending callback (of type " + responseClass.getName()
+                    + ") for request " + requestId);
+        }
+        mPendingCallbacks.put(requestId, new Pair<>(responseClass, callback));
+    }
+
+    /**
+     * Checks if there is a pending request of type {@code requestClass}, calling {@code callback}
+     * with {@link HalCallback#STATUS_CONCURRENT_OPERATION} when there is.
+     */
+    @GuardedBy("mLock")
+    private boolean hasPendingRequestLocked(@NonNull Class<?> requestClass,
+            @NonNull HalCallback<?> callback) {
+        for (int i = 0; i < mPendingCallbacks.size(); i++) {
+            Pair<Class<?>, HalCallback<?>> pair = mPendingCallbacks.valueAt(i);
+            if (pair.first == requestClass) {
+                Log.w(TAG, "Already have pending request of type " + requestClass);
+                callback.onResponse(HalCallback.STATUS_CONCURRENT_OPERATION, null);
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -231,12 +301,14 @@ public final class UserHalService extends HalServiceBase {
      */
     private void handleRemovePendingRequest(int requestId) {
         if (DBG) Log.d(TAG, "Removing pending request #" + requestId);
-        mTimeoutHandler.removeMessages(requestId);
-        mPendingCallbacks.remove(requestId);
+        mHandler.removeMessages(requestId);
+        synchronized (mLock) {
+            mPendingCallbacks.remove(requestId);
+        }
     }
 
     private void handleCheckIfRequestTimedOut(int requestId) {
-        Pair<Class<?>, HalCallback<?>> pair = mPendingCallbacks.get(requestId);
+        Pair<Class<?>, HalCallback<?>> pair = getPendingCallback(requestId);
         if (pair == null) return;
 
         Log.w(TAG, "Request #" + requestId + " timed out");
@@ -244,9 +316,15 @@ public final class UserHalService extends HalServiceBase {
         pair.second.onResponse(HalCallback.STATUS_HAL_RESPONSE_TIMEOUT, null);
     }
 
-    @GuardedBy("mHandle")
+    @Nullable
+    private Pair<Class<?>, HalCallback<?>> getPendingCallback(int requestId) {
+        synchronized (mLock) {
+            return mPendingCallbacks.get(requestId);
+        }
+    }
+
     private void handleOnInitialUserInfoResponse(VehiclePropValue value) {
-        // TODO(b/146207078): record (for dumping()) the last N responses.
+        // TODO(b/150413515): record (for dumping()) the last N responses.
         int requestId = value.value.int32Values.get(0);
         HalCallback<InitialUserInfoResponse> callback = handleGetPendingCallback(requestId,
                 InitialUserInfoResponse.class);
@@ -256,7 +334,7 @@ public final class UserHalService extends HalServiceBase {
         }
         handleRemovePendingRequest(requestId);
         InitialUserInfoResponse response = new InitialUserInfoResponse();
-        // TODO(b/146207078): use helper method to convert prop value to proper response
+        // TODO(b/150413515): use helper method to convert prop value to proper response
         response.requestId = requestId;
         response.action = value.value.int32Values.get(1);
         switch (response.action) {
@@ -283,15 +361,14 @@ public final class UserHalService extends HalServiceBase {
         callback.onResponse(HalCallback.STATUS_OK, response);
     }
 
-    @GuardedBy("mHandle")
     private <T> HalCallback<T> handleGetPendingCallback(int requestId, Class<T> clazz) {
-        Pair<Class<?>, HalCallback<?>> pair = mPendingCallbacks.get(requestId);
+        Pair<Class<?>, HalCallback<?>> pair = getPendingCallback(requestId);
         if (pair == null) return null;
 
         if (pair.first != clazz) {
             Slog.e(TAG, "Invalid callback class for request " + requestId + ": expected" + clazz
                     + ", but got is " + pair.first);
-            // TODO(b/146207078): add unit test for this scenario once it supports other properties
+            // TODO(b/150413515): add unit test for this scenario once it supports other properties
             return null;
         }
         @SuppressWarnings("unchecked")
@@ -299,15 +376,31 @@ public final class UserHalService extends HalServiceBase {
         return callback;
     }
 
-    private void setTimestamp(VehiclePropValue propRequest) {
+    private void setTimestamp(@NonNull VehiclePropValue propRequest) {
         propRequest.timestamp = SystemClock.elapsedRealtime();
     }
 
     @Override
     public void dump(PrintWriter writer) {
+        String indent = "  ";
         writer.printf("*User HAL*\n");
+
+        writer.printf("Relevant CarProperties\n");
+        dumpSystemProperty(writer, indent, "user_hal_enabled", CarProperties.user_hal_enabled());
+        dumpSystemProperty(writer, indent, "user_hal_timeout", CarProperties.user_hal_timeout());
+
         synchronized (mLock) {
+            if (!isSupported()) {
+                writer.println(UNSUPPORTED_MSG);
+                return;
+            }
+            int numberProperties = mProperties.size();
+            writer.printf("%d supported properties\n", numberProperties);
+            for (int i = 0; i < numberProperties; i++) {
+                writer.printf("%s%s\n", indent, mProperties.valueAt(i));
+            }
             writer.printf("next request id: %d\n", mNextRequestId);
+
             if (mPendingCallbacks.size() == 0) {
                 writer.println("no pending callbacks");
             } else {
@@ -315,4 +408,11 @@ public final class UserHalService extends HalServiceBase {
             }
         }
     }
+
+    private void dumpSystemProperty(@NonNull PrintWriter writer, @NonNull String indent,
+            @NonNull String name, Optional<?> prop) {
+        String value = prop.isPresent() ? prop.get().toString() : "<NOT SET>";
+        writer.printf("%s%s=%s\n", indent, name, value);
+    }
+
 }

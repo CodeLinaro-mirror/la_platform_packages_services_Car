@@ -17,8 +17,10 @@
 #ifndef EVS_VTS_STREAMHANDLER_H
 #define EVS_VTS_STREAMHANDLER_H
 
+#include <condition_variable>
 #include <queue>
 #include <thread>
+#include <shared_mutex>
 #include <ui/GraphicBuffer.h>
 #include <android/hardware/automotive/evs/1.0/IEvsCameraStream.h>
 #include <android/hardware/automotive/evs/1.0/IEvsCamera.h>
@@ -148,13 +150,14 @@ private:
     int                         mReadyBuffer = -1;  // Index of the newest available buffer
 
     BufferDesc                  mProcessedBuffers[2];
-    BufferDesc                  mAnalyzeBuffer;
+    BufferDesc                  mAnalyzeBuffer GUARDED_BY(mAnalyzerLock);
 
     BaseRenderCallback*         mRenderCallback = nullptr;
 
-    BaseAnalyzeCallback*        mAnalyzeCallback = nullptr;
-    bool                        mAnalyzerRunning = false;
-    std::thread                 mAnalyzeThread;
+    BaseAnalyzeCallback*        mAnalyzeCallback GUARDED_BY(mAnalyzerLock);
+    std::atomic<bool>           mAnalyzerRunning;
+    std::shared_mutex           mAnalyzerLock;
+    std::condition_variable_any mAnalyzerSignal;
 };
 
 }  // namespace support

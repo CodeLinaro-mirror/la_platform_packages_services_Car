@@ -29,6 +29,7 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.testng.Assert.assertThrows;
 
+import android.car.hardware.property.VehicleHalStatusCode;
 import android.hardware.automotive.vehicle.V2_0.InitialUserInfoResponse;
 import android.hardware.automotive.vehicle.V2_0.InitialUserInfoResponseAction;
 import android.hardware.automotive.vehicle.V2_0.UserFlags;
@@ -38,6 +39,7 @@ import android.hardware.automotive.vehicle.V2_0.VehiclePropConfig;
 import android.hardware.automotive.vehicle.V2_0.VehiclePropValue;
 import android.hardware.automotive.vehicle.V2_0.VehiclePropertyAccess;
 import android.hardware.automotive.vehicle.V2_0.VehiclePropertyChangeMode;
+import android.os.ServiceSpecificException;
 import android.os.UserHandle;
 import android.util.Log;
 
@@ -99,6 +101,8 @@ public final class UserHalServiceTest {
     @Before
     public void setFixtures() {
         mUserHalService = new UserHalService(mVehicleHal);
+        mUserHalService
+                .takeSupportedProperties(Arrays.asList(newSubscribableConfig(INITIAL_USER_INFO)));
 
         mUser0.userId = 0;
         mUser0.flags = 100;
@@ -114,24 +118,32 @@ public final class UserHalServiceTest {
 
     @Test
     public void testTakeSupportedProperties_unsupportedOnly() {
+        // Cannot use mUserHalService because it's already set with supported properties
+        UserHalService myHalService = new UserHalService(mVehicleHal);
+
         List<VehiclePropConfig> input = Arrays.asList(newConfig(CURRENT_GEAR));
-        Collection<VehiclePropConfig> output = mUserHalService.takeSupportedProperties(input);
+        Collection<VehiclePropConfig> output = myHalService.takeSupportedProperties(input);
+        assertThat(myHalService.isSupported()).isFalse();
         assertThat(output).isNull();
     }
 
     @Test
     public void testTakeSupportedPropertiesAndInit() {
+        // Cannot use mUserHalService because it's already set with supported properties
+        UserHalService myHalService = new UserHalService(mVehicleHal);
+
         VehiclePropConfig unsupportedConfig = newConfig(CURRENT_GEAR);
         VehiclePropConfig userInfoConfig = newSubscribableConfig(INITIAL_USER_INFO);
         List<VehiclePropConfig> input = Arrays.asList(unsupportedConfig, userInfoConfig);
-        Collection<VehiclePropConfig> output = mUserHalService.takeSupportedProperties(input);
+        Collection<VehiclePropConfig> output = myHalService.takeSupportedProperties(input);
+        assertThat(mUserHalService.isSupported()).isTrue();
         assertThat(output).containsExactly(userInfoConfig);
 
         // Ideally there should be 2 test methods (one for takeSupportedProperties() and one for
         // init()), but on "real life" VehicleHal calls these 2 methods in sequence, and the latter
         // depends on the properties set by the former, so it's ok to test both here...
-        mUserHalService.init();
-        verify(mVehicleHal).subscribeProperty(mUserHalService, INITIAL_USER_INFO);
+        myHalService.init();
+        verify(mVehicleHal).subscribeProperty(myHalService, INITIAL_USER_INFO);
     }
 
     @Test
@@ -186,8 +198,28 @@ public final class UserHalServiceTest {
     }
 
     @Test
+    public void testGetUserInfo_secondCallFailWhilePending() throws Exception {
+        GenericHalCallback<InitialUserInfoResponse> callback1 = new GenericHalCallback<>(
+                INITIAL_USER_CALLBACK_TIMEOUT_TIMEOUT);
+        GenericHalCallback<InitialUserInfoResponse> callback2 = new GenericHalCallback<>(
+                INITIAL_USER_CALLBACK_TIMEOUT_TIMEOUT);
+        mUserHalService.getInitialUserInfo(COLD_BOOT, INITIAL_USER_TIMEOUT_MS, mUsersInfo,
+                callback1);
+        mUserHalService.getInitialUserInfo(COLD_BOOT, INITIAL_USER_TIMEOUT_MS, mUsersInfo,
+                callback2);
+
+        callback1.assertCalled();
+        assertCallbackStatus(callback1, HalCallback.STATUS_HAL_RESPONSE_TIMEOUT);
+        assertThat(callback1.response).isNull();
+
+        callback2.assertCalled();
+        assertCallbackStatus(callback2, HalCallback.STATUS_CONCURRENT_OPERATION);
+        assertThat(callback1.response).isNull();
+    }
+
+    @Test
     public void testGetUserInfo_halReplyWithWrongRequestId() throws Exception {
-        // TODO(b/146207078): use helper method to convert prop value to proper req
+        // TODO(b/150419600): use helper method to convert prop value to proper req
         VehiclePropValue propResponse = new VehiclePropValue();
         propResponse.prop = INITIAL_USER_INFO;
         propResponse.value.int32Values.add(REQUEST_ID_PLACE_HOLDER);
@@ -207,7 +239,7 @@ public final class UserHalServiceTest {
 
     @Test
     public void testGetUserInfo_halReturnedInvalidAction() throws Exception {
-        // TODO(b/146207078): use helper method to convert prop value to proper req
+        // TODO(b/150419600): use helper method to convert prop value to proper req
         VehiclePropValue propResponse = new VehiclePropValue();
         propResponse.prop = INITIAL_USER_INFO;
         propResponse.value.int32Values.add(REQUEST_ID_PLACE_HOLDER);
@@ -233,7 +265,7 @@ public final class UserHalServiceTest {
 
     @Test
     public void testGetUserInfo_successDefault() throws Exception {
-        // TODO(b/146207078): use helper method to convert prop value to proper req
+        // TODO(b/150419600): use helper method to convert prop value to proper req
         VehiclePropValue propResponse = new VehiclePropValue();
         propResponse.prop = INITIAL_USER_INFO;
         propResponse.value.int32Values.add(REQUEST_ID_PLACE_HOLDER);
@@ -265,7 +297,7 @@ public final class UserHalServiceTest {
     @Test
     public void testGetUserInfo_successSwitchUser() throws Exception {
         int userIdToSwitch = 42;
-        // TODO(b/146207078): use helper method to convert prop value to proper req
+        // TODO(b/150419600): use helper method to convert prop value to proper req
         VehiclePropValue propResponse = new VehiclePropValue();
         propResponse.prop = INITIAL_USER_INFO;
         propResponse.value.int32Values.add(REQUEST_ID_PLACE_HOLDER);
@@ -299,7 +331,7 @@ public final class UserHalServiceTest {
     public void testGetUserInfo_successCreateUser() throws Exception {
         int newUserFlags = 108;
         String newUserName = "Groot";
-        // TODO(b/146207078): use helper method to convert prop value to proper req
+        // TODO(b/150419600): use helper method to convert prop value to proper req
         VehiclePropValue propResponse = new VehiclePropValue();
         propResponse.prop = INITIAL_USER_INFO;
         propResponse.value.int32Values.add(REQUEST_ID_PLACE_HOLDER);
@@ -331,6 +363,12 @@ public final class UserHalServiceTest {
         assertThat(newUser.flags).isEqualTo(newUserFlags);
     }
 
+    @Test
+    public void testGetUserInfo_twoSuccessfulCalls() throws Exception {
+        testGetUserInfo_successDefault();
+        testGetUserInfo_successDefault();
+    }
+
     /**
      * Asserts the given {@link UsersInfo} is properly represented in the {@link VehiclePropValue}.
      *
@@ -339,7 +377,7 @@ public final class UserHalServiceTest {
      * @param initialIndex first index of the info values in the property's {@code int32Values}
      */
     private void assertUsersInfo(VehiclePropValue value, UsersInfo info, int initialIndex) {
-        // TODO(b/146207078): use helper method to convert prop value to proper req to check users
+        // TODO(b/150419600): use helper method to convert prop value to proper req to check users
         ArrayList<Integer> values = value.value.int32Values;
         assertWithMessage("wrong values size").that(values)
                 .hasSize(initialIndex + 3 + info.numberUsers * 2);
@@ -396,7 +434,8 @@ public final class UserHalServiceTest {
      * Sets the VHAL mock to emulate a property timeout exception upon a call to set a property.
      */
     private void replySetPropertyWithTimeoutException(int prop) throws Exception {
-        doThrow(new PropertyTimeoutException(prop)).when(mVehicleHal).set(isProperty(prop));
+        doThrow(new ServiceSpecificException(VehicleHalStatusCode.STATUS_TRY_AGAIN,
+                "PropId: 0x" + Integer.toHexString(prop))).when(mVehicleHal).set(isProperty(prop));
     }
 
     private void assertInitialUserInfoSetRequest(VehiclePropValue req, int requestType) {

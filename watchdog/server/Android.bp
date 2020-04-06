@@ -33,7 +33,11 @@ cc_defaults {
         "libbase",
         "libcutils",
         "liblog",
+        "libprocessgroup",
         "libutils",
+    ],
+    static_libs: [
+        "libgtest_prod",
     ],
 }
 
@@ -45,11 +49,10 @@ cc_library {
     ],
     srcs: [
         "src/IoPerfCollection.cpp",
+        "src/LooperWrapper.cpp",
+        "src/ProcPidStat.cpp",
+        "src/ProcStat.cpp",
         "src/UidIoStats.cpp",
-        "src/ProcStat.cpp"
-    ],
-    static_libs: [
-        "libgtest_prod",
     ],
     export_include_dirs: [
         "src",
@@ -65,7 +68,10 @@ cc_test {
     test_suites: ["general-tests"],
     srcs: [
         "tests/IoPerfCollectionTest.cpp",
+        "tests/LooperStub.cpp",
         "tests/UidIoStatsTest.cpp",
+        "tests/ProcPidDir.cpp",
+        "tests/ProcPidStatTest.cpp",
         "tests/ProcStatTest.cpp",
     ],
     static_libs: [
@@ -102,6 +108,7 @@ cc_binary {
     defaults: [
         "carwatchdogd_defaults",
         "libwatchdog_process_service_defaults",
+        "libwatchdog_ioperfcollection_defaults",
     ],
     srcs: [
         "src/main.cpp",
@@ -110,6 +117,7 @@ cc_binary {
     init_rc: ["carwatchdogd.rc"],
     shared_libs: [
     	"libwatchdog_process_service",
+        "libwatchdog_ioperfcollection",
     ],
     vintf_fragments: ["carwatchdogd.xml"],
 }

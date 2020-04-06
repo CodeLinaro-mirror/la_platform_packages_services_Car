@@ -23,6 +23,7 @@ import static com.android.car.CarServiceUtils.toIntArray;
 import static java.lang.Integer.toHexString;
 
 import android.annotation.CheckResult;
+import android.car.hardware.property.CarPropertyManager;
 import android.content.Context;
 import android.hardware.automotive.vehicle.V2_0.IVehicle;
 import android.hardware.automotive.vehicle.V2_0.IVehicleCallback;
@@ -323,12 +324,12 @@ public class VehicleHal extends IVehicleCallback.Stub {
     public Collection<VehiclePropConfig> getAllPropConfigs() {
         return mAllProperties.values();
     }
-
-    public VehiclePropValue get(int propertyId) throws PropertyTimeoutException {
+    
+    public VehiclePropValue get(int propertyId) {
         return get(propertyId, NO_AREA);
     }
 
-    public VehiclePropValue get(int propertyId, int areaId) throws PropertyTimeoutException {
+    public VehiclePropValue get(int propertyId, int areaId) {
         if (DBG) {
             Log.i(CarLog.TAG_HAL, "get, property: 0x" + toHexString(propertyId)
                     + ", areaId: 0x" + toHexString(areaId));
@@ -339,17 +340,16 @@ public class VehicleHal extends IVehicleCallback.Stub {
         return mHalClient.getValue(propValue);
     }
 
-    public <T> T get(Class clazz, int propertyId) throws PropertyTimeoutException {
+    public <T> T get(Class clazz, int propertyId) {
         return get(clazz, createPropValue(propertyId, NO_AREA));
     }
 
-    public <T> T get(Class clazz, int propertyId, int areaId) throws PropertyTimeoutException {
+    public <T> T get(Class clazz, int propertyId, int areaId) {
         return get(clazz, createPropValue(propertyId, areaId));
     }
 
     @SuppressWarnings("unchecked")
-    public <T> T get(Class clazz, VehiclePropValue requestedPropValue)
-            throws PropertyTimeoutException {
+    public <T> T get(Class clazz, VehiclePropValue requestedPropValue) {
         VehiclePropValue propValue;
         propValue = mHalClient.getValue(requestedPropValue);
 
@@ -378,8 +378,7 @@ public class VehicleHal extends IVehicleCallback.Stub {
         }
     }
 
-    public VehiclePropValue get(VehiclePropValue requestedPropValue)
-            throws PropertyTimeoutException {
+    public VehiclePropValue get(VehiclePropValue requestedPropValue) {
         return mHalClient.getValue(requestedPropValue);
     }
 
@@ -400,7 +399,7 @@ public class VehicleHal extends IVehicleCallback.Stub {
         }
     }
 
-    protected void set(VehiclePropValue propValue) throws PropertyTimeoutException {
+    protected void set(VehiclePropValue propValue) {
         mHalClient.setValue(propValue);
     }
 
@@ -464,13 +463,14 @@ public class VehicleHal extends IVehicleCallback.Stub {
     }
 
     @Override
-    public void onPropertySetError(int errorCode, int propId, int areaId) {
+    public void onPropertySetError(@CarPropertyManager.CarSetPropertyErrorCode int errorCode,
+            int propId, int areaId) {
         Log.e(CarLog.TAG_HAL, String.format("onPropertySetError, errorCode: %d, prop: 0x%x, "
                 + "area: 0x%x", errorCode, propId, areaId));
         if (propId != VehicleProperty.INVALID) {
             HalServiceBase service = mPropertyHandlers.get(propId);
             if (service != null) {
-                service.onPropertySetError(propId, areaId);
+                service.onPropertySetError(propId, areaId, errorCode);
             }
         }
     }
@@ -713,28 +713,28 @@ public class VehicleHal extends IVehicleCallback.Stub {
             mPropValue.areaId = areaId;
         }
 
-        void to(boolean value) throws PropertyTimeoutException {
+        void to(boolean value) {
             to(value ? 1 : 0);
         }
 
-        void to(int value) throws PropertyTimeoutException {
+        void to(int value) {
             mPropValue.value.int32Values.add(value);
             submit();
         }
 
-        void to(int[] values) throws PropertyTimeoutException {
+        void to(int[] values) {
             for (int value : values) {
                 mPropValue.value.int32Values.add(value);
             }
             submit();
         }
 
-        void to(Collection<Integer> values) throws PropertyTimeoutException {
+        void to(Collection<Integer> values) {
             mPropValue.value.int32Values.addAll(values);
             submit();
         }
 
-        void submit() throws PropertyTimeoutException {
+        void submit() {
             HalClient client =  mClient.get();
             if (client != null) {
                 if (DBG) {

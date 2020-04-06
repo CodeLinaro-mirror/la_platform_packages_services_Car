@@ -130,8 +130,16 @@ Status DefaultEngine::processClientCommand(const proto::ControlCommand& command)
         return Status::SUCCESS;
     }
     if (command.has_death_notification()) {
-        mCurrentPhaseError = std::make_unique<ComponentError>(
-                "ClientInterface", "Client death", mCurrentPhase, false);
+        if (mCurrentPhase == kResetPhase) {
+            /**
+             * The runner is already in reset state, no need to broadcast client death
+             * to components
+             */
+            LOG(INFO) << "client death notification with no configuration";
+            return Status::SUCCESS;
+        }
+        mCurrentPhaseError = std::make_unique<ComponentError>("ClientInterface", "Client death",
+                                                              mCurrentPhase, false);
         mWakeLooper.notify_all();
         return Status::SUCCESS;
     }
@@ -243,7 +251,6 @@ Status DefaultEngine::broadcastStartRun() {
     std::vector<int> successfulStreams;
     std::vector<int> successfulInputs;
     for (auto& it : mStreamManagers) {
-        LOG(INFO) << "Engine::sending start run to stream manager " << it.first << " failed";
         if (it.second->handleExecutionPhase(runEvent) != Status::SUCCESS) {
             LOG(ERROR) << "Engine::failure to enter run phase for stream " << it.first;
             broadcastAbortRun(successfulStreams, successfulInputs);

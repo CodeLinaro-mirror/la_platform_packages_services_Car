@@ -33,9 +33,12 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.notNull;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.testng.Assert.assertThrows;
 
 import android.annotation.NonNull;
 import android.annotation.UserIdInt;
@@ -44,6 +47,9 @@ import android.app.IActivityManager;
 import android.car.CarOccupantZoneManager.OccupantTypeEnum;
 import android.car.CarOccupantZoneManager.OccupantZoneInfo;
 import android.car.settings.CarSettings;
+import android.car.user.CarUserManager;
+import android.car.user.CarUserManager.UserLifecycleEvent;
+import android.car.user.CarUserManager.UserLifecycleListener;
 import android.car.userlib.CarUserManagerHelper;
 import android.content.Context;
 import android.content.pm.UserInfo;
@@ -76,6 +82,8 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.MockitoSession;
 import org.mockito.junit.MockitoJUnitRunner;
@@ -116,6 +124,8 @@ public class CarUserServiceTest {
     @Mock private UserManager mMockedUserManager;
     @Mock private Resources mMockedResources;
     @Mock private Drawable mMockedDrawable;
+    @Mock private UserLifecycleListener mUserLifecycleListener;
+    @Captor private ArgumentCaptor<UserLifecycleEvent> mArgumentCaptor;
 
     private MockitoSession mSession;
     private CarUserService mCarUserService;
@@ -136,9 +146,8 @@ public class CarUserServiceTest {
             .setGuest(true)
             .setEphemeral(true)
             .build();
-    private final UserInfo[] mExistingUsers = new UserInfo[] {
-            mSystemUser, mAdminUser, mGuestUser
-    };
+    private final List<UserInfo> mExistingUsers = Arrays.asList(mSystemUser, mAdminUser,
+            mGuestUser);
 
     /**
      * Initialize all of the objects with the @Mock annotation.
@@ -199,6 +208,60 @@ public class CarUserServiceTest {
                         UserManager.DISALLOW_MODIFY_ACCOUNTS,
                         true,
                         UserHandle.of(UserHandle.USER_SYSTEM));
+    }
+
+    @Test
+    public void testAddUserLifecycleListener_checkNullParameter() {
+        assertThrows(NullPointerException.class,
+                () -> mCarUserService.addUserLifecycleListener(null));
+    }
+
+    @Test
+    public void testRemoveUserLifecycleListener_checkNullParameter() {
+        assertThrows(NullPointerException.class,
+                () -> mCarUserService.removeUserLifecycleListener(null));
+    }
+
+    @Test
+    public void testOnSwitchUser_addListenerAndReceiveEvent() {
+        // Arrange
+        mCarUserService.addUserLifecycleListener(mUserLifecycleListener);
+
+        // Act
+        int anyNewUserId = 11;
+        mCarUserService.onSwitchUser(anyNewUserId);
+
+        // Verify
+        verifyListenerOnEventInvoked(anyNewUserId,
+                CarUserManager.USER_LIFECYCLE_EVENT_TYPE_SWITCHING);
+    }
+
+    @Test
+    public void testOnSwitchUser_ensureAllListenersAreNotified() {
+        // Arrange: add two listeners, one to fail on onEvent
+        // Adding the failure listener first.
+        UserLifecycleListener failureListener = mock(UserLifecycleListener.class);
+        doThrow(new RuntimeException("Failed onEvent invocation")).when(
+                failureListener).onEvent(any(UserLifecycleEvent.class));
+        mCarUserService.addUserLifecycleListener(failureListener);
+
+        // Adding the non-failure listener later.
+        mCarUserService.addUserLifecycleListener(mUserLifecycleListener);
+
+        // Act
+        int anyNewUserId = 11;
+        mCarUserService.onSwitchUser(anyNewUserId);
+
+        // Verify
+        verifyListenerOnEventInvoked(anyNewUserId,
+                CarUserManager.USER_LIFECYCLE_EVENT_TYPE_SWITCHING);
+    }
+
+    private void verifyListenerOnEventInvoked(int expectedNewUserId, int expectedEventType) {
+        verify(mUserLifecycleListener).onEvent(mArgumentCaptor.capture());
+        UserLifecycleEvent actualEvent = mArgumentCaptor.getValue();
+        assertThat(actualEvent.getEventType()).isEqualTo(expectedEventType);
+        assertThat(actualEvent.getUserHandle().getIdentifier()).isEqualTo(expectedNewUserId);
     }
 
     /**
@@ -579,34 +642,41 @@ public class CarUserServiceTest {
     }
 
     @Test
-    public void testGetUserInfo_defaultResponse() throws Exception {
-        int currentUserId = mAdminUser.id;
-
-        mGetUserInfoResponse.action = InitialUserInfoResponseAction.DEFAULT;
-        mockGetInitialInfo(currentUserId, mGetUserInfoResponse);
-
-        mCarUserService.getInitialUserInfo(mGetUserInfoRequestType, mAsyncCallTimeoutMs,
-                mExistingUsers, currentUserId, mReceiver);
-
-        assertThat(mReceiver.getResultCode()).isEqualTo(HalCallback.STATUS_OK);
-        assertThat(mReceiver.getResultData()).isNull();
+    public void testGetUserInfo_nullReceiver() throws Exception {
+        assertThrows(NullPointerException.class, () -> mCarUserService
+                .getInitialUserInfo(mGetUserInfoRequestType, mAsyncCallTimeoutMs, null));
     }
 
     @Test
-    public void testGetUserInfo_switchUserResponse() throws Exception {
-        int currentUserId = mAdminUser.id;
-        int switchUserId = mGuestUser.id;
+    public void testGetUserInfo_defaultResponse() throws Exception {
+        mockCurrentUsers(mAdminUser);
 
-        mGetUserInfoResponse.action = InitialUserInfoResponseAction.SWITCH;
-        mGetUserInfoResponse.userToSwitchOrCreate.userId = switchUserId;
-        mockGetInitialInfo(currentUserId, mGetUserInfoResponse);
+        mGetUserInfoResponse.action = InitialUserInfoResponseAction.DEFAULT;
+        mockGetInitialInfo(mAdminUser.id, mGetUserInfoResponse);
 
-        mCarUserService.getInitialUserInfo(mGetUserInfoRequestType, mAsyncCallTimeoutMs,
-                mExistingUsers, currentUserId, mReceiver);
+        mCarUserService.getInitialUserInfo(mGetUserInfoRequestType, mAsyncCallTimeoutMs, mReceiver);
 
         assertThat(mReceiver.getResultCode()).isEqualTo(HalCallback.STATUS_OK);
         Bundle resultData = mReceiver.getResultData();
         assertThat(resultData).isNotNull();
+        assertInitialInfoAction(resultData, mGetUserInfoResponse.action);
+    }
+
+    @Test
+    public void testGetUserInfo_switchUserResponse() throws Exception {
+        int switchUserId = mGuestUser.id;
+        mockCurrentUsers(mAdminUser);
+
+        mGetUserInfoResponse.action = InitialUserInfoResponseAction.SWITCH;
+        mGetUserInfoResponse.userToSwitchOrCreate.userId = switchUserId;
+        mockGetInitialInfo(mAdminUser.id, mGetUserInfoResponse);
+
+        mCarUserService.getInitialUserInfo(mGetUserInfoRequestType, mAsyncCallTimeoutMs, mReceiver);
+
+        assertThat(mReceiver.getResultCode()).isEqualTo(HalCallback.STATUS_OK);
+        Bundle resultData = mReceiver.getResultData();
+        assertThat(resultData).isNotNull();
+        assertInitialInfoAction(resultData, mGetUserInfoResponse.action);
         assertUserId(resultData, switchUserId);
         assertNoUserFlags(resultData);
         assertNoUserName(resultData);
@@ -614,24 +684,33 @@ public class CarUserServiceTest {
 
     @Test
     public void testGetUserInfo_createUserResponse() throws Exception {
-        int currentUserId = mAdminUser.id;
         int newUserFlags = 42;
         String newUserName = "TheDude";
+
+        mockCurrentUsers(mAdminUser);
 
         mGetUserInfoResponse.action = InitialUserInfoResponseAction.CREATE;
         mGetUserInfoResponse.userToSwitchOrCreate.flags = newUserFlags;
         mGetUserInfoResponse.userNameToCreate = newUserName;
-        mockGetInitialInfo(currentUserId, mGetUserInfoResponse);
+        mockGetInitialInfo(mAdminUser.id, mGetUserInfoResponse);
 
-        mCarUserService.getInitialUserInfo(mGetUserInfoRequestType, mAsyncCallTimeoutMs,
-                mExistingUsers, currentUserId, mReceiver);
+        mCarUserService.getInitialUserInfo(mGetUserInfoRequestType, mAsyncCallTimeoutMs, mReceiver);
 
         assertThat(mReceiver.getResultCode()).isEqualTo(HalCallback.STATUS_OK);
         Bundle resultData = mReceiver.getResultData();
         assertThat(resultData).isNotNull();
+        assertInitialInfoAction(resultData, mGetUserInfoResponse.action);
         assertNoUserId(resultData);
         assertUserFlags(resultData, newUserFlags);
         assertUserName(resultData, newUserName);
+    }
+
+    /**
+     * Mock calls that generate a {@code UsersInfo}.
+     */
+    private void mockCurrentUsers(@NonNull UserInfo user) throws Exception {
+        when(mMockedIActivityManager.getCurrentUser()).thenReturn(user);
+        when(mMockedUserManager.getUsers()).thenReturn(mExistingUsers);
     }
 
     private void mockGetInitialInfo(@UserIdInt int currentUserId,
@@ -651,7 +730,7 @@ public class CarUserServiceTest {
     @NonNull
     private UsersInfo newUsersInfo(@UserIdInt int currentUserId) {
         UsersInfo infos = new UsersInfo();
-        infos.numberUsers = mExistingUsers.length;
+        infos.numberUsers = mExistingUsers.size();
         boolean foundCurrentUser = false;
         for (UserInfo info : mExistingUsers) {
             android.hardware.automotive.vehicle.V2_0.UserInfo existingUser =
@@ -716,6 +795,13 @@ public class CarUserServiceTest {
     private void assertNoExtra(@NonNull Bundle resultData, @NonNull String extra) {
         Object value = resultData.get(extra);
         assertWithMessage("should not have extra %s", extra).that(value).isNull();
+    }
+
+    private void assertInitialInfoAction(@NonNull Bundle resultData, int expectedAction) {
+        int actualAction = resultData.getInt(CarUserService.BUNDLE_INITIAL_INFO_ACTION);
+        assertWithMessage("wrong request type on bundle extra %s",
+                CarUserService.BUNDLE_INITIAL_INFO_ACTION).that(actualAction)
+            .isEqualTo(expectedAction);
     }
 
     static final class FakeCarOccupantZoneService {

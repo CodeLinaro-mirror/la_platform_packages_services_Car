@@ -380,11 +380,16 @@ public final class CarUserManager extends CarManagerBase {
     @TestApi
     // TODO(b/144120654): temp method used by CTS; will eventually be refactored to take a listener
     @UserIdInt
-    public int createUser(@Nullable String name) {
+    public int createUser(@Nullable String name, boolean isGuestUser) {
         Log.i(TAG, "createUser()"); // name is PII
         UserManager userManager = getContext().getSystemService(UserManager.class);
-        UserInfo info = userManager.createUser(name, /* flags= */ 0);
-        return info.id;
+
+        if (isGuestUser) {
+            return userManager.createUser(name, UserManager.USER_TYPE_FULL_GUEST, /* flags= */ 0)
+                    .id;
+        }
+
+        return userManager.createUser(name, /* flags= */ 0).id;
     }
 
     /** @hide */
@@ -400,6 +405,7 @@ public final class CarUserManager extends CarManagerBase {
      * {@code IResultReceiver} used to receive lifecycle events and dispatch to the proper listener.
      */
     private class LifecycleResultReceiver extends IResultReceiver.Stub {
+        @Override
         public void send(int resultCode, Bundle resultData) {
             if (resultData == null) {
                 Log.w(TAG, "Received result (" + resultCode + ") without data");
@@ -481,12 +487,13 @@ public final class CarUserManager extends CarManagerBase {
      */
     @SystemApi
     @TestApi
-    public final class UserLifecycleEvent {
+    public static final class UserLifecycleEvent {
         private final @UserLifecycleEventType int mEventType;
         private final @NonNull UserHandle mUserHandle;
         private final @Nullable UserHandle mPreviousUserHandle;
 
-        private UserLifecycleEvent(@UserLifecycleEventType int eventType,
+        /** @hide */
+        public UserLifecycleEvent(@UserLifecycleEventType int eventType,
                 @NonNull UserHandle from, @Nullable UserHandle to) {
             mEventType = eventType;
             mPreviousUserHandle = from;
