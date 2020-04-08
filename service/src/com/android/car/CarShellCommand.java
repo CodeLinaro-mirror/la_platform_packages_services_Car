@@ -20,9 +20,14 @@ import android.app.ActivityManager;
 import android.app.ActivityOptions;
 import android.app.UiModeManager;
 import android.car.Car;
+import android.car.input.CarInputManager;
+import android.car.input.RotaryEvent;
+import android.car.user.CarUserManager;
+import android.car.user.CarUserManager.UserSwitchResult;
 import android.car.userlib.HalCallback;
 import android.car.userlib.UserHalHelper;
 import android.content.ComponentName;
+import android.content.Context;
 import android.content.Intent;
 import android.hardware.automotive.vehicle.V2_0.InitialUserInfoResponseAction;
 import android.hardware.automotive.vehicle.V2_0.SwitchUserMessageType;
@@ -47,10 +52,12 @@ import com.android.car.hal.VehicleHal;
 import com.android.car.pm.CarPackageManagerService;
 import com.android.car.systeminterface.SystemInterface;
 import com.android.car.trust.CarTrustedDeviceService;
+import com.android.car.user.CarUserService;
 import com.android.internal.util.ArrayUtils;
 
 import java.io.PrintWriter;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
@@ -79,6 +86,7 @@ final class CarShellCommand extends ShellCommand {
     private static final String COMMAND_ENABLE_FEATURE = "enable-feature";
     private static final String COMMAND_DISABLE_FEATURE = "disable-feature";
     private static final String COMMAND_INJECT_KEY = "inject-key";
+    private static final String COMMAND_INJECT_ROTARY = "inject-rotary";
     private static final String COMMAND_GET_INITIAL_USER_INFO = "get-initial-user-info";
     private static final String COMMAND_SWITCH_USER = "switch-user";
 
@@ -94,6 +102,7 @@ final class CarShellCommand extends ShellCommand {
     private static final int RESULT_OK = 0;
     private static final int RESULT_ERROR = -1; // Arbitrary value, any non-0 is fine
 
+    private final Context mContext;
     private final VehicleHal mHal;
     private final CarAudioService mCarAudioService;
     private final CarPackageManagerService mCarPackageManagerService;
@@ -106,8 +115,10 @@ final class CarShellCommand extends ShellCommand {
     private final CarNightService mCarNightService;
     private final SystemInterface mSystemInterface;
     private final GarageModeService mGarageModeService;
+    private final CarUserService mCarUserService;
 
-    CarShellCommand(VehicleHal hal,
+    CarShellCommand(Context context,
+            VehicleHal hal,
             CarAudioService carAudioService,
             CarPackageManagerService carPackageManagerService,
             CarProjectionService carProjectionService,
@@ -118,7 +129,9 @@ final class CarShellCommand extends ShellCommand {
             CarInputService carInputService,
             CarNightService carNightService,
             SystemInterface systemInterface,
-            GarageModeService garageModeService) {
+            GarageModeService garageModeService,
+            CarUserService carUserService) {
+        mContext = context;
         mHal = hal;
         mCarAudioService = carAudioService;
         mCarPackageManagerService = carPackageManagerService;
@@ -131,6 +144,7 @@ final class CarShellCommand extends ShellCommand {
         mCarNightService = carNightService;
         mSystemInterface = systemInterface;
         mGarageModeService = garageModeService;
+        mCarUserService = carUserService;
     }
 
     @Override
@@ -212,6 +226,16 @@ final class CarShellCommand extends ShellCommand {
         pw.println("\t  down_delay_ms: delay from down to up key event. If not specified,");
         pw.println("\t                 it will be 0");
         pw.println("\t  key_code: int key code defined in android KeyEvent");
+        pw.println("\tinject-rotary [-d display] [-i input_type] [-c clockwise]");
+        pw.println("\t              [-dt delta_times_ms]");
+        pw.println("\t  inject rotary input event to car service.");
+        pw.println("\t  display: 0 for main, 1 for cluster. If not specified, it will be 0.");
+        pw.println("\t  input_type: 10 for navigation controller input, 11 for volume");
+        pw.println("\t              controller input. If not specified, it will be 10.");
+        pw.println("\t  clockwise: true if the event is clockwise, false if the event is");
+        pw.println("\t             counter-clockwise. If not specified, it will be false.");
+        pw.println("\t  delta_times_ms: a list of delta time (current time minus event time)");
+        pw.println("\t                  in descending order. If not specified, it will be 0.");
 
         pw.printf("\t%s <REQ_TYPE> [--timeout TIMEOUT_MS]\n", COMMAND_GET_INITIAL_USER_INFO);
         pw.println("\t  Calls the Vehicle HAL to get the initial boot info, passing the given");
@@ -385,6 +409,12 @@ final class CarShellCommand extends ShellCommand {
                 }
                 injectKey(args, writer);
                 break;
+            case COMMAND_INJECT_ROTARY:
+                if (args.length < 1) {
+                    return showInvalidArguments(writer);
+                }
+                injectRotary(args, writer);
+                break;
             case COMMAND_GET_INITIAL_USER_INFO:
                 getInitialUserInfo(args, writer);
                 break;
@@ -539,6 +569,70 @@ final class CarShellCommand extends ShellCommand {
         writer.println("Succeeded");
     }
 
+    private void injectRotary(String[] args, PrintWriter writer) {
+        int i = 1; // 0 is command itself
+        int display = InputHalService.DISPLAY_MAIN;
+        int inputType = CarInputManager.INPUT_TYPE_ROTARY_NAVIGATION;
+        boolean clockwise = false;
+        List<Long> deltaTimeMs = new ArrayList<>();
+        try {
+            while (i < args.length) {
+                switch (args[i]) {
+                    case "-d":
+                        i++;
+                        display = Integer.parseInt(args[i]);
+                        break;
+                    case "-i":
+                        i++;
+                        inputType = Integer.parseInt(args[i]);
+                        break;
+                    case "-c":
+                        i++;
+                        clockwise = Boolean.parseBoolean(args[i]);
+                        break;
+                    case "-dt":
+                        i++;
+                        while (i < args.length) {
+                            deltaTimeMs.add(Long.parseLong(args[i]));
+                            i++;
+                        }
+                        break;
+                    default:
+                        writer.println("Invalid option at index " + i + ": " + args[i]);
+                        return;
+                }
+                i++;
+            }
+        } catch (Exception e) {
+            writer.println("Invalid args:" + e);
+            showHelp(writer);
+            return;
+        }
+        if (deltaTimeMs.isEmpty()) {
+            deltaTimeMs.add(0L);
+        }
+        for (int j = 0; j < deltaTimeMs.size(); j++) {
+            if (deltaTimeMs.get(j) < 0) {
+                writer.println("Delta time shouldn't be negative: " + deltaTimeMs.get(j));
+                showHelp(writer);
+                return;
+            }
+            if (j > 0 && deltaTimeMs.get(j) > deltaTimeMs.get(j - 1)) {
+                writer.println("Delta times should be in descending order");
+                showHelp(writer);
+                return;
+            }
+        }
+        long[] uptimeMs = new long[deltaTimeMs.size()];
+        long currentUptime = SystemClock.uptimeMillis();
+        for (int j = 0; j < deltaTimeMs.size(); j++) {
+            uptimeMs[j] = currentUptime - deltaTimeMs.get(j);
+        }
+        RotaryEvent rotaryEvent = new RotaryEvent(inputType, clockwise, uptimeMs);
+        mCarInputService.onRotaryEvent(rotaryEvent, display);
+        writer.println("Succeeded in injecting: " + rotaryEvent);
+    }
+
     private void getInitialUserInfo(String[] args, PrintWriter writer) {
         if (args.length < 2) {
             writer.println("Insufficient number of args");
@@ -629,40 +723,59 @@ final class CarShellCommand extends ShellCommand {
         Log.d(TAG, "handleSwitchUser(): target=" + targetUserId + ", dryRun=" + dryRun
                 + ", timeout=" + timeout);
 
-        if (!dryRun) {
-            writer.println("'Wet' run not supported yet, please use --dry-run");
-            // TODO(b/150409110): implement by calling CarUserManager.switchUser
-            return;
+        CountDownLatch latch = new CountDownLatch(1);
+
+        if (dryRun) {
+            UserHalService userHal = mHal.getUserHal();
+            // TODO(b/150413515): use UserHalHelper to populate it with current users
+            UsersInfo usersInfo = new UsersInfo();
+            UserInfo targetUserInfo = new UserInfo();
+            targetUserInfo.userId = targetUserId;
+            // TODO(b/150413515): use UserHalHelper to set user flags
+
+            userHal.switchUser(targetUserInfo, timeout, usersInfo, (status, resp) -> {
+                try {
+                    Log.d(TAG, "SwitchUserResponse: status=" + status + ", resp=" + resp);
+                    writer.printf("Call Status: %s\n",
+                            UserHalHelper.halCallbackStatusToString(status));
+                    if (status != HalCallback.STATUS_OK) {
+                        return;
+                    }
+                    writer.printf("Request id: %d\n", resp.requestId);
+                    writer.printf("Message type: %s\n",
+                            SwitchUserMessageType.toString(resp.messageType));
+                    writer.printf("Switch Status: %s\n", SwitchUserStatus.toString(resp.status));
+                    String errorMessage = resp.errorMessage;
+                    if (!TextUtils.isEmpty(errorMessage)) {
+                        writer.printf("Error message: %s", errorMessage);
+                    }
+                    // TODO: If HAL returned OK, make a "post-switch" call to the HAL indicating an
+                    // Android error. This is to "rollback" the HAL switch.
+                } finally {
+                    latch.countDown();
+                }
+            });
+        } else {
+            Car car = Car.createCar(mContext);
+            CarUserManager carUserManager =
+                    (CarUserManager) car.getCarManager(Car.CAR_USER_SERVICE);
+            carUserManager.switchUser(targetUserId, new CarUserManager.UserSwitchListener() {
+                @Override
+                public void onResult(UserSwitchResult result) {
+                    try {
+                        writer.printf("UserSwitchResult: status = %s\n",
+                                CarUserManager.userSwitchStatusToString(result.getStatus()));
+                        String msg = result.getErrorMessage();
+                        if (msg != null && !msg.isEmpty()) {
+                            writer.printf("UserSwitchResult: Message = %s\n", msg);
+                        }
+                    } finally {
+                        latch.countDown();
+                    }
+                }
+            });
         }
 
-        UserHalService userHal = mHal.getUserHal();
-        // TODO(b/150413515): use UserHalHelper to populate it with current users
-        UsersInfo usersInfo = new UsersInfo();
-        UserInfo targetUserInfo = new UserInfo();
-        targetUserInfo.userId = targetUserId;
-        // TODO(b/150413515): use UserHalHelper to set user flags
-
-        CountDownLatch latch = new CountDownLatch(1);
-        userHal.switchUser(targetUserInfo, timeout, usersInfo, (status, resp) -> {
-            try {
-                Log.d(TAG, "SwitchUserResponse: status=" + status + ", resp=" + resp);
-                writer.printf("Call Status: %s\n",
-                        UserHalHelper.halCallbackStatusToString(status));
-                if (status != HalCallback.STATUS_OK) {
-                    return;
-                }
-                writer.printf("Request id: %d\n", resp.requestId);
-                writer.printf("Message type: %s\n",
-                        SwitchUserMessageType.toString(resp.messageType));
-                writer.printf("Switch Status: %s\n", SwitchUserStatus.toString(resp.status));
-                String errorMessage = resp.errorMessage;
-                if (!TextUtils.isEmpty(errorMessage)) {
-                    writer.printf("Error message: %s", errorMessage);
-                }
-            } finally {
-                latch.countDown();
-            }
-        });
         waitForHal(writer, latch, timeout);
     }
 
