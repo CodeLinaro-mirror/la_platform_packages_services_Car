@@ -48,8 +48,6 @@ import com.android.internal.os.IResultReceiver;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Executor;
 
@@ -63,13 +61,6 @@ import java.util.concurrent.Executor;
 public final class CarUserManager extends CarManagerBase {
 
     private static final String TAG = CarUserManager.class.getSimpleName();
-
-    /**
-     *  User id representing invalid user.
-     *
-     * @hide
-     */
-    public static final int INVALID_USER_ID = UserHandle.USER_NULL;
 
     // TODO(b/144120654): STOPSHIP - set to false
     private static final boolean DBG = true;
@@ -143,10 +134,70 @@ public final class CarUserManager extends CarManagerBase {
     /** @hide */
     public static final String BUNDLE_PARAM_ACTION = "action";
     /** @hide */
-    public static final String BUNDLE_PARAM_PREVIOUS_USER_HANDLE = "previous_user";
+    public static final String BUNDLE_PARAM_PREVIOUS_USER_ID = "previous_user";
+
+    /**
+     * {@code int} extra used to represent the user switch status {@link IResultReceiver}
+     * response.
+     *
+     * @hide
+     */
+    public static final String BUNDLE_USER_SWITCH_STATUS = "user_switch.status";
+    /**
+     * {@code int} extra used to represent the user switch message type {@link IResultReceiver}
+     * response.
+     *
+     * @hide
+     */
+    public static final String BUNDLE_USER_SWITCH_MSG_TYPE = "user_switch.messageType";
+    /**
+     * {@code string} extra used to represent the user switch error {@link IResultReceiver}
+     * response.
+     *
+     * @hide
+     */
+    public static final String BUNDLE_USER_SWITCH_ERROR_MSG = "user_switch.errorMessage";
+
+    /**
+     * {@link UserSwitchStatus} called user switch status is unknown.
+     *
+     * @hide
+     */
+    public static final int USER_SWICTH_STATUS_UNKNOWN = 0;
+    /**
+     * {@link UserSwitchStatus} called when user switch is successful for both HAL and Android.
+     *
+     * @hide
+     */
+    public static final int USER_SWICTH_STATUS_SUCCESSFUL = 1;
+    /**
+     * {@link UserSwitchStatus} called when user switch is only successful for Hal but not for
+     * Android. Hal user switch rollover message have been sent.
+     *
+     * @hide
+     */
+    public static final int USER_SWICTH_STATUS_ANDROID_FAILURE = 2;
+    /**
+     * {@link UserSwitchStatus} called when user switch is failed for HAL.
+     * Andrid user switch is not called.
+     *
+     * @hide
+     */
+    public static final int USER_SWICTH_STATUS_HAL_FAILURE = 3;
+
+    /** @hide */
+    @IntDef(prefix = { "USER_SWICTH_STATUS_" }, value = {
+            USER_SWICTH_STATUS_UNKNOWN,
+            USER_SWICTH_STATUS_SUCCESSFUL,
+            USER_SWICTH_STATUS_ANDROID_FAILURE,
+            USER_SWICTH_STATUS_HAL_FAILURE,
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface UserSwitchStatus{}
 
     private final Object mLock = new Object();
     private final ICarUserService mService;
+    private final UserManager mUserManager;
 
     @Nullable
     @GuardedBy("mLock")
@@ -159,142 +210,20 @@ public final class CarUserManager extends CarManagerBase {
     /**
      * @hide
      */
-    @VisibleForTesting
     public CarUserManager(@NonNull Car car, @NonNull IBinder service) {
+        this(car, service, UserManager.get(car.getContext()));
+    }
+
+    /**
+     * @hide
+     */
+    @VisibleForTesting
+    public CarUserManager(@NonNull Car car, @NonNull IBinder service,
+            @NonNull UserManager userManager) {
         super(car);
         mService = ICarUserService.Stub.asInterface(service);
+        mUserManager = userManager;
     }
-
-    /**
-     * Creates a driver who is a regular user and is allowed to login to the driving occupant zone.
-     *
-     * @param name The name of the driver to be created.
-     * @param admin Whether the created driver will be an admin.
-     * @return user id of the created driver, or {@code INVALID_USER_ID} if the driver could
-     *         not be created.
-     *
-     * @hide
-     */
-    @RequiresPermission(android.Manifest.permission.MANAGE_USERS)
-    @Nullable
-    public int createDriver(@NonNull String name, boolean admin) {
-        try {
-            UserInfo ui = mService.createDriver(name, admin);
-            return ui != null ? ui.id : INVALID_USER_ID;
-        } catch (RemoteException e) {
-            return handleRemoteExceptionFromCarService(e, null);
-        }
-    }
-
-    /**
-     * Creates a passenger who is a profile of the given driver.
-     *
-     * @param name The name of the passenger to be created.
-     * @param driverId User id of the driver under whom a passenger is created.
-     * @return user id of the created passenger, or {@code INVALID_USER_ID} if the passenger
-     *         could not be created.
-     *
-     * @hide
-     */
-    @RequiresPermission(android.Manifest.permission.MANAGE_USERS)
-    @Nullable
-    public int createPassenger(@NonNull String name, @UserIdInt int driverId) {
-        try {
-            UserInfo ui = mService.createPassenger(name, driverId);
-            return ui != null ? ui.id : INVALID_USER_ID;
-        } catch (RemoteException e) {
-            return handleRemoteExceptionFromCarService(e, null);
-        }
-    }
-
-    /**
-     * Switches a driver to the given user.
-     *
-     * @param driverId User id of the driver to switch to.
-     * @return {@code true} if user switching succeeds, or {@code false} if it fails.
-     *
-     * @hide
-     */
-    @RequiresPermission(android.Manifest.permission.MANAGE_USERS)
-    public boolean switchDriver(@UserIdInt int driverId) {
-        try {
-            return mService.switchDriver(driverId);
-        } catch (RemoteException e) {
-            return handleRemoteExceptionFromCarService(e, false);
-        }
-    }
-
-    /**
-     * Returns all drivers who can occupy the driving zone. Guest users are included in the list.
-     *
-     * @return the list of user ids who can be a driver on the device.
-     *
-     * @hide
-     */
-    @RequiresPermission(android.Manifest.permission.MANAGE_USERS)
-    @NonNull
-    public List<Integer> getAllDrivers() {
-        try {
-            return getUserIdsFromUserInfos(mService.getAllDrivers());
-        } catch (RemoteException e) {
-            return handleRemoteExceptionFromCarService(e, Collections.emptyList());
-        }
-    }
-
-    /**
-     * Returns all passengers under the given driver.
-     *
-     * @param driverId User id of a driver.
-     * @return the list of user ids who are passengers under the given driver.
-     *
-     * @hide
-     */
-    @RequiresPermission(android.Manifest.permission.MANAGE_USERS)
-    @NonNull
-    public List<Integer> getPassengers(@UserIdInt int driverId) {
-        try {
-            return getUserIdsFromUserInfos(mService.getPassengers(driverId));
-        } catch (RemoteException e) {
-            return handleRemoteExceptionFromCarService(e, Collections.emptyList());
-        }
-    }
-
-    /**
-     * Assigns the passenger to the zone and starts the user if it is not started yet.
-     *
-     * @param passengerId User id of the passenger to be started.
-     * @param zoneId Zone id to which the passenger is assigned.
-     * @return {@code true} if the user is successfully started or the user is already running.
-     *         Otherwise, {@code false}.
-     *
-     * @hide
-     */
-    @RequiresPermission(android.Manifest.permission.MANAGE_USERS)
-    public boolean startPassenger(@UserIdInt int passengerId, int zoneId) {
-        try {
-            return mService.startPassenger(passengerId, zoneId);
-        } catch (RemoteException e) {
-            return handleRemoteExceptionFromCarService(e, false);
-        }
-    }
-
-    /**
-     * Stops the given passenger.
-     *
-     * @param passengerId User id of the passenger to be stopped.
-     * @return {@code true} if successfully stopped, or {@code false} if failed.
-     *
-     * @hide
-     */
-    @RequiresPermission(android.Manifest.permission.MANAGE_USERS)
-    public boolean stopPassenger(@UserIdInt int passengerId) {
-        try {
-            return mService.stopPassenger(passengerId);
-        } catch (RemoteException e) {
-            return handleRemoteExceptionFromCarService(e, false);
-        }
-    }
-
     /**
      * Adds a listener for {@link UserLifecycleEvent user lifecycle events}.
      *
@@ -382,14 +311,13 @@ public final class CarUserManager extends CarManagerBase {
     @UserIdInt
     public int createUser(@Nullable String name, boolean isGuestUser) {
         Log.i(TAG, "createUser()"); // name is PII
-        UserManager userManager = getContext().getSystemService(UserManager.class);
 
         if (isGuestUser) {
-            return userManager.createUser(name, UserManager.USER_TYPE_FULL_GUEST, /* flags= */ 0)
+            return mUserManager.createUser(name, UserManager.USER_TYPE_FULL_GUEST, /* flags= */ 0)
                     .id;
         }
 
-        return userManager.createUser(name, /* flags= */ 0).id;
+        return mUserManager.createUser(name, /* flags= */ 0).id;
     }
 
     /** @hide */
@@ -397,8 +325,7 @@ public final class CarUserManager extends CarManagerBase {
     // TODO(b/144120654): temp method used by CTS; will eventually be refactored to take a listener
     public void removeUser(@UserIdInt int userId) {
         Log.i(TAG, "removeUser(" + userId + ")");
-        UserManager userManager = getContext().getSystemService(UserManager.class);
-        userManager.removeUser(userId);
+        mUserManager.removeUser(userId);
     }
 
     /**
@@ -411,10 +338,10 @@ public final class CarUserManager extends CarManagerBase {
                 Log.w(TAG, "Received result (" + resultCode + ") without data");
                 return;
             }
-            UserHandle toHandle = new UserHandle(resultCode);
-            UserHandle fromHandle = resultData.getParcelable(BUNDLE_PARAM_PREVIOUS_USER_HANDLE);
+            int from = resultData.getInt(BUNDLE_PARAM_PREVIOUS_USER_ID, UserHandle.USER_NULL);
+            int to = resultCode;
             int eventType = resultData.getInt(BUNDLE_PARAM_ACTION);
-            UserLifecycleEvent event = new UserLifecycleEvent(eventType, fromHandle, toHandle);
+            UserLifecycleEvent event = new UserLifecycleEvent(eventType, from, to);
             ArrayMap<UserLifecycleListener, Executor> listeners;
             synchronized (mLock) {
                 listeners = mListeners;
@@ -461,16 +388,11 @@ public final class CarUserManager extends CarManagerBase {
         }
     }
 
-    private List<Integer> getUserIdsFromUserInfos(List<UserInfo> infos) {
-        List<Integer> ids = new ArrayList<>(infos.size());
-        for (UserInfo ui : infos) {
-            ids.add(ui.id);
-        }
-        return ids;
+    private void checkInteractAcrossUsersPermission() {
+        checkInteractAcrossUsersPermission(getContext());
     }
 
-    private void checkInteractAcrossUsersPermission() {
-        Context context = getContext();
+    private static void checkInteractAcrossUsersPermission(Context context) {
         if (context.checkSelfPermission(INTERACT_ACROSS_USERS) != PERMISSION_GRANTED
                 && context.checkSelfPermission(INTERACT_ACROSS_USERS_FULL) != PERMISSION_GRANTED) {
             throw new SecurityException(
@@ -478,6 +400,40 @@ public final class CarUserManager extends CarManagerBase {
                             + android.Manifest.permission.INTERACT_ACROSS_USERS_FULL
                             + " permission");
         }
+    }
+
+    // NOTE: this method is called by ExperimentalCarUserManager, so it can get the mService.
+    // "Real" ExperimentalCarUserManager instances should be obtained through
+    //    ExperimentalCarUserManager.from(mCarUserManager)
+    // instead.
+    ExperimentalCarUserManager newExperimentalCarUserManager() {
+        return new ExperimentalCarUserManager(mCar, mService);
+    }
+
+    /**
+     * Checks if the given {@code userId} represents a valid user.
+     *
+     * <p>A "valid" user:
+     *
+     * <ul>
+     *   <li>Must exist in the device.
+     *   <li>Is not in the process of being deleted.
+     *   <li>Cannot be the {@link UserHandle#isSystem() system} user on devices that use
+     *   {@link UserManager#isHeadlessSystemUserMode() headless system mode}.
+     * </ul>
+     *
+     * @hide
+     */
+    public boolean isValidUser(@UserIdInt int userId) {
+        List<UserInfo> allUsers = mUserManager.getUsers();
+        for (int i = 0; i < allUsers.size(); i++) {
+            UserInfo user = allUsers.get(i);
+            if (user.id == userId && (userId != UserHandle.USER_SYSTEM
+                    || !UserManager.isHeadlessSystemUserMode())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -489,15 +445,20 @@ public final class CarUserManager extends CarManagerBase {
     @TestApi
     public static final class UserLifecycleEvent {
         private final @UserLifecycleEventType int mEventType;
-        private final @NonNull UserHandle mUserHandle;
-        private final @Nullable UserHandle mPreviousUserHandle;
+        private final @UserIdInt int mUserId;
+        private final @UserIdInt int mPreviousUserId;
 
         /** @hide */
         public UserLifecycleEvent(@UserLifecycleEventType int eventType,
-                @NonNull UserHandle from, @Nullable UserHandle to) {
+                @UserIdInt int from, @UserIdInt int to) {
             mEventType = eventType;
-            mPreviousUserHandle = from;
-            mUserHandle = to;
+            mPreviousUserId = from;
+            mUserId = to;
+        }
+
+        /** @hide */
+        public UserLifecycleEvent(@UserLifecycleEventType int eventType, @UserIdInt int to) {
+            this(eventType, UserHandle.USER_NULL, to);
         }
 
         /**
@@ -516,11 +477,34 @@ public final class CarUserManager extends CarManagerBase {
         }
 
         /**
+         * Gets the id of the user whose event is being reported.
+         *
+         * @hide
+         */
+        @UserIdInt
+        public int getUserId() {
+            return mUserId;
+        }
+
+        /**
          * Gets the handle of the user whose event is being reported.
          */
         @NonNull
         public UserHandle getUserHandle() {
-            return mUserHandle;
+            return UserHandle.of(mUserId);
+        }
+
+        /**
+         * Gets the id of the user being switched from.
+         *
+         * <p>This method returns {@link UserHandle#USER_NULL} for all event types but
+         * {@link CarUserManager#USER_LIFECYCLE_EVENT_TYPE_SWITCHING}.
+         *
+         * @hide
+         */
+        @UserIdInt
+        public int getPreviousUserId() {
+            return mPreviousUserId;
         }
 
         /**
@@ -531,19 +515,19 @@ public final class CarUserManager extends CarManagerBase {
          */
         @Nullable
         public UserHandle getPreviousUserHandle() {
-            return mPreviousUserHandle;
+            return mPreviousUserId == UserHandle.USER_NULL ? null : UserHandle.of(mPreviousUserId);
         }
 
         @Override
         public String toString() {
             StringBuilder builder = new StringBuilder("Event[type=")
                     .append(lifecycleEventTypeToString(mEventType));
-            if (mPreviousUserHandle != null) {
+            if (mPreviousUserId != UserHandle.USER_NULL) {
                 builder
-                    .append(",from=").append(mPreviousUserHandle)
-                    .append(",to=").append(mUserHandle);
+                    .append(",from=").append(mPreviousUserId)
+                    .append(",to=").append(mUserId);
             } else {
-                builder.append(",user=").append(mUserHandle);
+                builder.append(",user=").append(mUserId);
             }
 
             return builder.append(']').toString();
