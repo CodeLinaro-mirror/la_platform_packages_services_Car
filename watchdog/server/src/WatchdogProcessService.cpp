@@ -117,12 +117,10 @@ Status WatchdogProcessService::unregisterMediator(const sp<ICarWatchdogClient>& 
 
 Status WatchdogProcessService::registerMonitor(const sp<ICarWatchdogMonitor>& monitor) {
     Mutex::Autolock lock(mMutex);
-    if (mMonitor != nullptr) {
-        ALOGW("Cannot register the monitor. The other monitor is already registered.");
-        return Status::fromExceptionCode(Status::EX_ILLEGAL_ARGUMENT,
-                                         "The other monitor is already registered.");
-    }
     sp<IBinder> binder = BnCarWatchdog::asBinder(monitor);
+    if (mMonitor != nullptr && binder == BnCarWatchdog::asBinder(mMonitor)) {
+        return Status::ok();
+    }
     status_t ret = binder->linkToDeath(this);
     if (ret != OK) {
         ALOGW("Cannot register the monitor. The monitor is dead.");
@@ -219,8 +217,7 @@ Status WatchdogProcessService::notifyPowerCycleChange(PowerCycle cycle) {
         default:
             ALOGW("Unsupported power cycle: %d", cycle);
             return Status::fromExceptionCode(Status::EX_ILLEGAL_ARGUMENT,
-                                             "The monitor is not registered or an invalid monitor "
-                                             "is given");
+                                             "Unsupported power cycle");
     }
     ALOGI("Received %s", buffer.c_str());
     if (oldStatus != mWatchdogEnabled) {
@@ -230,9 +227,22 @@ Status WatchdogProcessService::notifyPowerCycleChange(PowerCycle cycle) {
 }
 
 Status WatchdogProcessService::notifyUserStateChange(userid_t userId, UserState state) {
-    // TODO(b/146086037): implement this method.
-    (void)userId;
-    (void)state;
+    std::string buffer;
+    Mutex::Autolock lock(mMutex);
+    switch (state) {
+        case UserState::USER_STATE_STARTED:
+            mStoppedUserId.erase(userId);
+            buffer = StringPrintf("user(%d) is started", userId);
+            break;
+        case UserState::USER_STATE_STOPPED:
+            mStoppedUserId.insert(userId);
+            buffer = StringPrintf("user(%d) is stopped", userId);
+            break;
+        default:
+            ALOGW("Unsupported user state: %d", state);
+            return Status::fromExceptionCode(Status::EX_ILLEGAL_ARGUMENT, "Unsupported user state");
+    }
+    ALOGI("Received user state change: %s", buffer.c_str());
     return Status::ok();
 }
 
@@ -255,12 +265,23 @@ Result<void> WatchdogProcessService::dump(int fd, const Vector<String16>& /*args
                             fd);
         }
     }
-    WriteStringToFd(StringPrintf("\n%sMonitor registered: %s\n", indent,
+    WriteStringToFd(StringPrintf("%sMonitor registered: %s\n", indent,
                                  mMonitor == nullptr ? "false" : "true"),
                     fd);
     WriteStringToFd(StringPrintf("%sisSystemShuttingDown: %s\n", indent,
                                  isSystemShuttingDown() ? "true" : "false"),
                     fd);
+    buffer = "none";
+    bool first = true;
+    for (const auto& userId : mStoppedUserId) {
+        if (first) {
+            buffer = StringPrintf("%d", userId);
+            first = false;
+        } else {
+            StringAppendF(&buffer, ", %d", userId);
+        }
+    }
+    WriteStringToFd(StringPrintf("%sStopped users: %s\n", indent, buffer.c_str()), fd);
     return {};
 }
 
@@ -283,6 +304,9 @@ void WatchdogProcessService::doHealthCheck(int what) {
         pingedClients.clear();
         clientsToCheck = mClients[timeout];
         for (auto& clientInfo : clientsToCheck) {
+            if (mStoppedUserId.count(clientInfo.userId) > 0) {
+                continue;
+            }
             int sessionId = getNewSessionId();
             clientInfo.sessionId = sessionId;
             pingedClients.insert(std::make_pair(sessionId, clientInfo));
@@ -359,7 +383,8 @@ Status WatchdogProcessService::registerClientLocked(const sp<ICarWatchdogClient>
     }
     std::vector<ClientInfo>& clients = mClients[timeout];
     pid_t callingPid = IPCThreadState::self()->getCallingPid();
-    clients.push_back(ClientInfo(client, callingPid, clientType));
+    uid_t callingUid = IPCThreadState::self()->getCallingUid();
+    clients.push_back(ClientInfo(client, callingPid, callingUid, clientType));
 
     // If the client array becomes non-empty, start health checking.
     if (clients.size() == 1) {
@@ -385,7 +410,7 @@ Status WatchdogProcessService::unregisterClientLocked(const std::vector<TimeoutL
         std::string errorStr = StringPrintf("The %s has not been registered", clientName);
         const char* errorCause = errorStr.c_str();
         ALOGW("Cannot unregister the %s: %s", clientName, errorCause);
-        Status::fromExceptionCode(Status::EX_ILLEGAL_ARGUMENT, errorCause);
+        return Status::fromExceptionCode(Status::EX_ILLEGAL_ARGUMENT, errorCause);
     }
     if (DEBUG) {
         ALOGD("Car watchdog %s is unregistered", clientName);
@@ -443,6 +468,7 @@ Result<void> WatchdogProcessService::dumpAndKillClientsIfNotResponding(TimeoutLe
         PingedClientMap& clients = mPingedClients[timeout];
         for (PingedClientMap::const_iterator it = clients.cbegin(); it != clients.cend(); it++) {
             pid_t pid = -1;
+            userid_t userId = -1;
             sp<IBinder> binder = BnCarWatchdog::asBinder(it->second.client);
             std::vector<TimeoutLength> timeouts = {timeout};
             // Unhealthy clients are eventually removed from the list through binderDied when they
@@ -451,8 +477,9 @@ Result<void> WatchdogProcessService::dumpAndKillClientsIfNotResponding(TimeoutLe
                                        [&](std::vector<ClientInfo>& /*clients*/,
                                            std::vector<ClientInfo>::const_iterator it) {
                                            pid = (*it).pid;
+                                           userId = (*it).userId;
                                        });
-            if (pid != -1) {
+            if (pid != -1 && mStoppedUserId.count(userId) == 0) {
                 processIds.push_back(pid);
             }
         }
@@ -506,7 +533,8 @@ bool WatchdogProcessService::isWatchdogEnabled() {
 
 std::string WatchdogProcessService::ClientInfo::toString() {
     std::string buffer;
-    StringAppendF(&buffer, "pid = %d, type = %s", pid, type == Regular ? "Regular" : "Mediator");
+    StringAppendF(&buffer, "pid = %d, userId = %d, type = %s", pid, userId,
+                  type == Regular ? "Regular" : "Mediator");
     return buffer;
 }
 
