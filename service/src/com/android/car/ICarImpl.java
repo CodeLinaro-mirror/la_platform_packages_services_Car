@@ -24,6 +24,7 @@ import android.car.CarFeatures;
 import android.car.ICar;
 import android.car.cluster.renderer.IInstrumentClusterNavigation;
 import android.car.user.CarUserManager;
+import android.car.user.CarUserManager.UserLifecycleEvent;
 import android.car.userlib.CarUserManagerHelper;
 import android.content.Context;
 import android.content.pm.PackageManager;
@@ -125,11 +126,13 @@ public class ICarImpl extends ICar.Stub {
 
     private TimingsTraceLog mBootTiming;
 
+    private final Object mLock = new Object();
+
     /** Test only service. Populate it only when necessary. */
-    @GuardedBy("this")
+    @GuardedBy("mLock")
     private CarTestService mCarTestService;
 
-    @GuardedBy("this")
+    @GuardedBy("mLock")
     private ICarServiceHelper mICarServiceHelper;
 
     private final String mVehicleInterfaceName;
@@ -185,7 +188,7 @@ public class ICarImpl extends ICar.Stub {
         mCarOccupantZoneService = new CarOccupantZoneService(serviceContext);
         mSystemActivityMonitoringService = new SystemActivityMonitoringService(serviceContext);
         mCarPowerManagementService = new CarPowerManagementService(mContext, mHal.getPowerHal(),
-                systemInterface, mUserManagerHelper, mCarUserService);
+                systemInterface, mCarUserService);
         if (mFeatureController.isFeatureEnabled(CarFeatures.FEATURE_CAR_USER_NOTICE_SERVICE)) {
             mCarUserNoticeService = new CarUserNoticeService(serviceContext);
         } else {
@@ -342,34 +345,23 @@ public class ICarImpl extends ICar.Stub {
     @Override
     public void setCarServiceHelper(IBinder helper) {
         assertCallingFromSystemProcess();
-        synchronized (this) {
-            mICarServiceHelper = ICarServiceHelper.Stub.asInterface(helper);
-            mSystemInterface.setCarServiceHelper(mICarServiceHelper);
+        ICarServiceHelper carServiceHelper = ICarServiceHelper.Stub.asInterface(helper);
+        synchronized (mLock) {
+            mICarServiceHelper = carServiceHelper;
         }
+        mSystemInterface.setCarServiceHelper(carServiceHelper);
+        mCarOccupantZoneService.setCarServiceHelper(carServiceHelper);
     }
 
     @Override
     public void onUserLifecycleEvent(int eventType, long timestampMs, int fromUserId,
             int toUserId) {
         assertCallingFromSystemProcess();
-        Log.i(TAG, "onUserLifecycleEvent(" + CarUserManager.lifecycleEventTypeToString(eventType)
-                + ", " + toUserId + ")");
+        Log.i(TAG, "onUserLifecycleEvent("
+                + CarUserManager.lifecycleEventTypeToString(eventType) + ", " + toUserId + ")");
+        UserLifecycleEvent event = new UserLifecycleEvent(eventType, toUserId);
+        mCarUserService.onUserLifecycleEvent(event);
         mUserMetrics.onEvent(eventType, timestampMs, fromUserId, toUserId);
-        if (eventType == CarUserManager.USER_LIFECYCLE_EVENT_TYPE_UNLOCKING) {
-            setUserLockStatus(toUserId);
-        } else if (eventType == CarUserManager.USER_LIFECYCLE_EVENT_TYPE_SWITCHING) {
-            onSwitchUser(toUserId);
-        }
-    }
-
-    private void setUserLockStatus(int userId) {
-        mCarUserService.setUserLockStatus(userId, /* unlocked= */ true);
-        mCarMediaService.setUserLockStatus(userId, /* unlocked= */ true);
-    }
-
-    private void onSwitchUser(int userId) {
-        Log.i(TAG, "Foreground user switched to " + userId);
-        mCarUserService.onSwitchUser(userId);
     }
 
     @Override
@@ -490,7 +482,7 @@ public class ICarImpl extends ICar.Stub {
                 return mVmsBrokerService;
             case Car.TEST_SERVICE: {
                 assertPermission(mContext, Car.PERMISSION_CAR_TEST_SERVICE);
-                synchronized (this) {
+                synchronized (mLock) {
                     if (mCarTestService == null) {
                         mCarTestService = new CarTestService(mContext, this);
                     }
@@ -752,10 +744,10 @@ public class ICarImpl extends ICar.Stub {
     }
 
     private CarShellCommand newCarShellCommand() {
-        return new CarShellCommand(mHal, mCarAudioService, mCarPackageManagerService,
+        return new CarShellCommand(mContext, mHal, mCarAudioService, mCarPackageManagerService,
                 mCarProjectionService, mCarPowerManagementService, mCarTrustedDeviceService,
-                mFixedActivityService, mFeatureController, mCarInputService,
-                mCarNightService, mSystemInterface, mGarageModeService);
+                mFixedActivityService, mFeatureController, mCarInputService, mCarNightService,
+                mSystemInterface, mGarageModeService, mCarUserService);
     }
 
     private void dumpListOfServices(PrintWriter writer) {

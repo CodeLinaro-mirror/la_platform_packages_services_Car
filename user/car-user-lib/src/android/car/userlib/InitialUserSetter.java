@@ -21,14 +21,20 @@ import static android.car.userlib.UserHelper.safeName;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UserIdInt;
+import android.app.ActivityManager;
 import android.content.Context;
 import android.content.pm.UserInfo;
 import android.hardware.automotive.vehicle.V2_0.UserFlags;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.util.Log;
+import android.util.Pair;
+import android.util.Slog;
 
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.util.Preconditions;
+
+import java.io.PrintWriter;
 
 /**
  * Helper used to set the initial Android user on boot or when resuming from RAM.
@@ -48,21 +54,29 @@ public final class InitialUserSetter {
     // TODO(b/151758646): make sure it's unit tested
     private final boolean mSupportsOverrideUserIdProperty;
 
-    private final String mOwnerName;
+    private final String mNewUserName;
+    private final String mNewGuestName;
 
     public InitialUserSetter(@NonNull Context context, boolean supportsOverrideUserIdProperty) {
+        this(context, /* newGuestName= */ null, supportsOverrideUserIdProperty);
+    }
+
+    public InitialUserSetter(@NonNull Context context, @Nullable String newGuestName,
+            boolean supportsOverrideUserIdProperty) {
         this(new CarUserManagerHelper(context), UserManager.get(context),
-                context.getString(com.android.internal.R.string.owner_name),
+                context.getString(com.android.internal.R.string.owner_name), newGuestName,
                 supportsOverrideUserIdProperty);
     }
 
     @VisibleForTesting
     public InitialUserSetter(@NonNull CarUserManagerHelper helper, @NonNull UserManager um,
-            @Nullable String ownerName, boolean supportsOverrideUserIdProperty) {
+            @Nullable String newUserName, @Nullable String newGuestName,
+            boolean supportsOverrideUserIdProperty) {
         mHelper = helper;
         mUm = um;
         mSupportsOverrideUserIdProperty = supportsOverrideUserIdProperty;
-        mOwnerName = ownerName;
+        mNewUserName = newUserName;
+        mNewGuestName = newGuestName;
     }
 
     /**
@@ -87,7 +101,7 @@ public final class InitialUserSetter {
     private void executeDefaultBehavior(boolean fallback) {
         if (!mHelper.hasInitialUser()) {
             if (DBG) Log.d(TAG, "executeDefaultBehavior(): no initial user, creating it");
-            createUser(mOwnerName, UserFlags.ADMIN, fallback);
+            createAndSwitchUser(mNewUserName, UserFlags.ADMIN, fallback);
         } else {
             if (DBG) Log.d(TAG, "executeDefaultBehavior(): switching to initial user");
             int userId = mHelper.getInitialUser(mSupportsOverrideUserIdProperty);
@@ -116,18 +130,84 @@ public final class InitialUserSetter {
     }
 
     private void switchUser(@UserIdInt int userId, boolean fallback) {
-        if (DBG) Log.d(TAG, "switchUser(): userId= " + userId);
+        if (DBG) Log.d(TAG, "switchUser(): userId=" + userId);
+
+        UserInfo user = mUm.getUserInfo(userId);
+        if (user == null) {
+            fallbackDefaultBehavior(fallback, "user with id " + userId + " doesn't exist");
+            return;
+        }
+
+        int actualUserId = replaceGuestIfNeeded(user);
+
+        if (actualUserId == UserHandle.USER_NULL) {
+            fallbackDefaultBehavior(fallback, "could not replace guest " + user.toFullString());
+            return;
+        }
 
         // If system user is the only user to unlock, it will be handled when boot is complete.
-        if (userId != UserHandle.USER_SYSTEM) {
+        if (actualUserId != UserHandle.USER_SYSTEM) {
             mHelper.unlockSystemUser();
         }
 
-        if (!mHelper.startForegroundUser(userId)) {
-            fallbackDefaultBehavior(fallback, "am.switchUser(" + userId + ") failed");
-            return;
+        int currentUserId = ActivityManager.getCurrentUser();
+        if (actualUserId != currentUserId) {
+            if (!mHelper.startForegroundUser(actualUserId)) {
+                fallbackDefaultBehavior(fallback, "am.switchUser(" + actualUserId + ") failed");
+                return;
+            }
+            mHelper.setLastActiveUser(actualUserId);
         }
-        mHelper.setLastActiveUser(userId);
+
+        if (actualUserId != userId) {
+            Slog.i(TAG, "Removing old guest " + userId);
+            if (!mUm.removeUser(userId)) {
+                Slog.w(TAG, "Could not remove old guest " + userId);
+            }
+        }
+    }
+
+    /**
+     * Replaces {@code user} by a new guest, if necessary.
+     *
+     * <p>If {@code user} is not a guest, it doesn't do anything and returns its id.
+     *
+     * <p>Otherwise, it marks the current guest for deletion, creates a new one, and returns its
+     * id (or {@link UserHandle#USER_NULL} if a new guest could not be created).
+     */
+    @UserIdInt
+    public int replaceGuestIfNeeded(@NonNull UserInfo user) {
+        Preconditions.checkArgument(user != null, "user cannot be null");
+
+        if (!user.isGuest()) return user.id;
+
+        Log.i(TAG, "Replacing guest (" + user.toFullString() + ")");
+
+        int halFlags = UserFlags.GUEST;
+        if (user.isEphemeral()) {
+            halFlags |= UserFlags.EPHEMERAL;
+        } else {
+            // TODO(b/150413515): decide whether we should allow it or not. Right now we're
+            // just logging, as UserManagerService will automatically set it to ephemeral if
+            // platform is set to do so.
+            Log.w(TAG, "guest being replaced is not ephemeral: " + user.toFullString());
+        }
+
+        if (!mUm.markGuestForDeletion(user.id)) {
+            // Don't need to recover in case of failure - most likely create new user will fail
+            // because there is already a guest
+            Log.w(TAG, "failed to mark guest " + user.id + " for deletion");
+        }
+
+        Pair<UserInfo, String> result = createNewUser(mNewGuestName, halFlags);
+
+        String errorMessage = result.second;
+        if (errorMessage != null) {
+            Log.w(TAG, "could not replace guest " + user.toFullString() + ": " + errorMessage);
+            return UserHandle.USER_NULL;
+        }
+
+        return result.first.id;
     }
 
     /**
@@ -138,18 +218,35 @@ public final class InitialUserSetter {
      * @param halFlags user flags as defined by Vehicle HAL ({@code UserFlags} enum).
      */
     public void createUser(@Nullable String name, int halFlags) {
-        createUser(name, halFlags, /* fallback= */ true);
+        createAndSwitchUser(name, halFlags, /* fallback= */ true);
     }
 
-    private void createUser(@Nullable String name, int halFlags, boolean fallback) {
+    private void createAndSwitchUser(@Nullable String name, int halFlags, boolean fallback) {
+        Pair<UserInfo, String> result = createNewUser(name, halFlags);
+        String reason = result.second;
+        if (reason != null) {
+            fallbackDefaultBehavior(fallback, reason);
+            return;
+        }
+
+        switchUser(result.first.id, fallback);
+    }
+
+    /**
+     * Creates a new user.
+     *
+     * @return on success, first element is the new user; on failure, second element contains the
+     * error message.
+     */
+    @NonNull
+    private Pair<UserInfo, String> createNewUser(@Nullable String name, int halFlags) {
         if (DBG) {
             Log.d(TAG, "createUser(name=" + safeName(name) + ", flags="
                     + userFlagsToString(halFlags) + ")");
         }
 
         if (UserHalHelper.isSystem(halFlags)) {
-            fallbackDefaultBehavior(fallback, "Cannot create system user");
-            return;
+            return new Pair<>(null, "Cannot create system user");
         }
 
         if (UserHalHelper.isAdmin(halFlags)) {
@@ -163,8 +260,7 @@ public final class InitialUserSetter {
                 validAdmin = false;
             }
             if (!validAdmin) {
-                fallbackDefaultBehavior(fallback, "Invalid flags for admin user");
-                return;
+                return new Pair<>(null, "Invalid flags for admin user");
             }
         }
         // TODO(b/150413515): decide what to if HAL requested a non-ephemeral guest but framework
@@ -181,12 +277,23 @@ public final class InitialUserSetter {
 
         UserInfo userInfo = mUm.createUser(name, type, flags);
         if (userInfo == null) {
-            fallbackDefaultBehavior(fallback, "createUser(name=" + safeName(name) + ", flags="
+            return new Pair<>(null, "createUser(name=" + safeName(name) + ", flags="
                     + userFlagsToString(halFlags) + "): failed to create user");
-            return;
         }
 
         if (DBG) Log.d(TAG, "user created: " + userInfo.id);
-        switchUser(userInfo.id, fallback);
+        return new Pair<>(userInfo, null);
+    }
+
+    /**
+     * Dumps it state.
+     */
+    public void dump(@NonNull PrintWriter writer) {
+        writer.println("InitialUserSetter");
+        String indent = "  ";
+        writer.printf("%smSupportsOverrideUserIdProperty: %s\n", indent,
+                mSupportsOverrideUserIdProperty);
+        writer.printf("%smNewUserName: %s\n", indent, mNewUserName);
+        writer.printf("%smNewGuestName: %s\n", indent, mNewGuestName);
     }
 }
