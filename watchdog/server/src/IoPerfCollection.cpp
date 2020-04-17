@@ -27,6 +27,7 @@
 #include <inttypes.h>
 #include <log/log.h>
 #include <processgroup/sched_policy.h>
+#include <pthread.h>
 #include <pwd.h>
 
 #include <iomanip>
@@ -282,6 +283,10 @@ Result<void> IoPerfCollection::start() {
             ALOGW("Failed to set background scheduling priority to I/O performance data collection "
                   "thread");
         }
+        int ret = pthread_setname_np(pthread_self(), "IoPerfCollect");
+        if (ret != 0) {
+            ALOGE("Failed to set I/O perf collection thread name: %d", ret);
+        }
         bool isCollectionActive = true;
         // Loop until the collection is not active -- I/O perf collection runs on this thread in a
         // handler.
@@ -323,10 +328,9 @@ Result<void> IoPerfCollection::onBootFinished() {
                 toString(CollectionEvent::BOOT_TIME).c_str());
         return {};
     }
+    mBoottimeCollection.lastCollectionUptime = mHandlerLooper->now();
     mHandlerLooper->removeMessages(this);
-    mCurrCollectionEvent = CollectionEvent::PERIODIC;
-    mPeriodicCollection.lastCollectionUptime = mHandlerLooper->now();
-    mHandlerLooper->sendMessage(this, CollectionEvent::PERIODIC);
+    mHandlerLooper->sendMessage(this, SwitchEvent::END_BOOTTIME_COLLECTION);
     return {};
 }
 
@@ -515,6 +519,17 @@ void IoPerfCollection::handleMessage(const Message& message) {
         case static_cast<int>(CollectionEvent::BOOT_TIME):
             result = processCollectionEvent(CollectionEvent::BOOT_TIME, &mBoottimeCollection);
             break;
+        case static_cast<int>(SwitchEvent::END_BOOTTIME_COLLECTION):
+            result = processCollectionEvent(CollectionEvent::BOOT_TIME, &mBoottimeCollection);
+            if (result.ok()) {
+                mHandlerLooper->removeMessages(this);
+                mCurrCollectionEvent = CollectionEvent::PERIODIC;
+                mPeriodicCollection.lastCollectionUptime =
+                        mHandlerLooper->now() + mPeriodicCollection.interval.count();
+                mHandlerLooper->sendMessageAtTime(mPeriodicCollection.lastCollectionUptime, this,
+                                                  CollectionEvent::PERIODIC);
+            }
+            break;
         case static_cast<int>(CollectionEvent::PERIODIC):
             result = processCollectionEvent(CollectionEvent::PERIODIC, &mPeriodicCollection);
             break;
@@ -540,7 +555,7 @@ void IoPerfCollection::handleMessage(const Message& message) {
             result = Error() << "Unknown message: " << message.what;
     }
 
-    if (!result) {
+    if (!result.ok()) {
         Mutex::Autolock lock(mMutex);
         ALOGE("Terminating I/O performance data collection: %s", result.error().message().c_str());
         // DO NOT CALL terminate() as it tries to join the collection thread but this code is

@@ -24,7 +24,6 @@ import android.car.CarFeatures;
 import android.car.ICar;
 import android.car.cluster.renderer.IInstrumentClusterNavigation;
 import android.car.user.CarUserManager;
-import android.car.user.CarUserManager.UserLifecycleEvent;
 import android.car.userlib.CarUserManagerHelper;
 import android.content.Context;
 import android.content.pm.PackageManager;
@@ -41,6 +40,7 @@ import android.os.ResultReceiver;
 import android.os.ShellCallback;
 import android.os.Trace;
 import android.os.UserManager;
+import android.util.EventLog;
 import android.util.Log;
 import android.util.Slog;
 import android.util.TimingsTraceLog;
@@ -56,11 +56,11 @@ import com.android.car.systeminterface.SystemInterface;
 import com.android.car.trust.CarTrustedDeviceService;
 import com.android.car.user.CarUserNoticeService;
 import com.android.car.user.CarUserService;
-import com.android.car.user.UserMetrics;
 import com.android.car.vms.VmsBrokerService;
 import com.android.car.watchdog.CarWatchdogService;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.car.EventLogTags;
 import com.android.internal.car.ICarServiceHelper;
 import com.android.internal.os.IResultReceiver;
 
@@ -123,7 +123,7 @@ public class ICarImpl extends ICar.Stub {
 
     private static final String TAG = "ICarImpl";
     private static final String VHAL_TIMING_TAG = "VehicleHalTiming";
-    private static final boolean DBG = true; // TODO(b/153104378): STOPSHIP if true
+    private static final boolean DBG = true; // TODO(b/154033860): STOPSHIP if true
 
     private TimingsTraceLog mBootTiming;
 
@@ -137,8 +137,6 @@ public class ICarImpl extends ICar.Stub {
     private ICarServiceHelper mICarServiceHelper;
 
     private final String mVehicleInterfaceName;
-
-    private final UserMetrics mUserMetrics = new UserMetrics();
 
     public ICarImpl(Context serviceContext, IVehicle vehicle, SystemInterface systemInterface,
             CanBusErrorNotifier errorNotifier, String vehicleInterfaceName) {
@@ -337,6 +335,7 @@ public class ICarImpl extends ICar.Stub {
     }
 
     void vehicleHalReconnected(IVehicle vehicle) {
+        EventLog.writeEvent(EventLogTags.CAR_SERVICE_VHAL_RECONNECTED, mAllServices.length);
         mHal.vehicleHalReconnected(vehicle);
         for (CarServiceBase service : mAllServices) {
             service.vehicleHalReconnected();
@@ -345,6 +344,8 @@ public class ICarImpl extends ICar.Stub {
 
     @Override
     public void setCarServiceHelper(IBinder helper) {
+        EventLog.writeEvent(EventLogTags.CAR_SERVICE_SET_CAR_SERVICE_HELPER,
+                Binder.getCallingPid());
         assertCallingFromSystemProcess();
         ICarServiceHelper carServiceHelper = ICarServiceHelper.Stub.asInterface(helper);
         synchronized (mLock) {
@@ -358,16 +359,19 @@ public class ICarImpl extends ICar.Stub {
     public void onUserLifecycleEvent(int eventType, long timestampMs, int fromUserId,
             int toUserId) {
         assertCallingFromSystemProcess();
-        Log.i(TAG, "onUserLifecycleEvent("
-                + CarUserManager.lifecycleEventTypeToString(eventType) + ", " + toUserId + ")");
-        UserLifecycleEvent event = new UserLifecycleEvent(eventType, toUserId);
-        mCarUserService.onUserLifecycleEvent(event);
-        mUserMetrics.onEvent(eventType, timestampMs, fromUserId, toUserId);
+        EventLog.writeEvent(EventLogTags.CAR_SERVICE_ON_USER_LIFECYCLE, eventType, fromUserId,
+                toUserId);
+        if (DBG) {
+            Log.d(TAG, "onUserLifecycleEvent("
+                    + CarUserManager.lifecycleEventTypeToString(eventType) + ", " + toUserId + ")");
+        }
+        mCarUserService.onUserLifecycleEvent(eventType, timestampMs, fromUserId, toUserId);
     }
 
     @Override
-    public void onFirstUserUnlocked(int userId, long timestampMs, long duration) {
-        mUserMetrics.logFirstUnlockedUser(userId, timestampMs, duration);
+    public void onFirstUserUnlocked(int userId, long timestampMs, long duration,
+            int halResponseTime) {
+        mCarUserService.onFirstUserUnlocked(userId, timestampMs, duration, halResponseTime);
     }
 
     @Override
@@ -378,6 +382,7 @@ public class ICarImpl extends ICar.Stub {
 
     @Override
     public void setInitialUser(int userId) {
+        EventLog.writeEvent(EventLogTags.CAR_SERVICE_SET_INITIAL_USER, userId);
         if (DBG) Log.d(TAG, "setInitialUser(): " + userId);
         mCarUserService.setInitialUser(userId);
     }
@@ -656,7 +661,6 @@ public class ICarImpl extends ICar.Stub {
             writer.println("*Dump car service*");
             dumpAllServices(writer);
             dumpAllHals(writer);
-            mUserMetrics.dump(writer);
         } else if ("--list".equals(args[0])) {
             dumpListOfServices(writer);
             return;
@@ -690,9 +694,9 @@ public class ICarImpl extends ICar.Stub {
             mHal.dumpListHals(writer);
             return;
         } else if ("--user-metrics".equals(args[0])) {
-            mUserMetrics.dump(writer);
+            mCarUserService.dumpUserMetrics(writer);
         } else if ("--first-user-metrics".equals(args[0])) {
-            mUserMetrics.dumpFirstUserUnlockDuration(writer);
+            mCarUserService.dumpFirstUserUnlockDuration(writer);
         } else if ("--help".equals(args[0])) {
             showDumpHelp(writer);
         } else if (Build.IS_USERDEBUG || Build.IS_ENG) {
