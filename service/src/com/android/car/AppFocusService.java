@@ -34,6 +34,7 @@ import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 
 import java.io.PrintWriter;
+import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -51,11 +52,13 @@ public class AppFocusService extends IAppFocus.Stub implements CarServiceBase,
 
     private final Object mLock = new Object();
 
+    @VisibleForTesting
     @GuardedBy("mLock")
-    private final ClientHolder mAllChangeClients;
+    final ClientHolder mAllChangeClients;
 
+    @VisibleForTesting
     @GuardedBy("mLock")
-    private final OwnershipClientHolder mAllOwnershipClients;
+    final OwnershipClientHolder mAllOwnershipClients;
 
     /** K: appType, V: client owning it */
     @GuardedBy("mLock")
@@ -70,11 +73,10 @@ public class AppFocusService extends IAppFocus.Stub implements CarServiceBase,
     private final BinderInterfaceContainer.BinderEventHandler<IAppFocusListener>
             mAllBinderEventHandler = bInterface -> { /* nothing to do.*/ };
 
-    @GuardedBy("mLock")
-    private DispatchHandler mDispatchHandler;
-
-    @GuardedBy("mLock")
-    private HandlerThread mHandlerThread;
+    private final HandlerThread mHandlerThread = CarServiceUtils.getHandlerThread(
+            getClass().getSimpleName());
+    private final DispatchHandler mDispatchHandler = new DispatchHandler(mHandlerThread.getLooper(),
+            this);
 
     public AppFocusService(Context context,
             SystemActivityMonitoringService systemActivityMonitoringService) {
@@ -230,34 +232,18 @@ public class AppFocusService extends IAppFocus.Stub implements CarServiceBase,
 
     @Override
     public void init() {
-        synchronized (mLock) {
-            mHandlerThread = new HandlerThread(AppFocusService.class.getSimpleName());
-            mHandlerThread.start();
-            mDispatchHandler = new DispatchHandler(mHandlerThread.getLooper());
-        }
+        // nothing to do
     }
 
     @VisibleForTesting
     public Looper getLooper() {
-        synchronized (mLock) {
-            return mHandlerThread.getLooper();
-        }
+        return mHandlerThread.getLooper();
+
     }
 
     @Override
     public void release() {
         synchronized (mLock) {
-            if (mDispatchHandler == null) {
-                return;
-            }
-            mHandlerThread.quitSafely();
-            try {
-                mHandlerThread.join(1000);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                Log.e(CarLog.TAG_APP_FOCUS, "Timeout while waiting for handler thread to join.");
-            }
-            mDispatchHandler = null;
             mAllChangeClients.clear();
             mAllOwnershipClients.clear();
             mFocusOwners.clear();
@@ -372,13 +358,15 @@ public class AppFocusService extends IAppFocus.Stub implements CarServiceBase,
         }
     }
 
-    private static class ClientHolder extends BinderInterfaceContainer<IAppFocusListener> {
+    @VisibleForTesting
+    static class ClientHolder extends BinderInterfaceContainer<IAppFocusListener> {
         private ClientHolder(BinderEventHandler<IAppFocusListener> holder) {
             super(holder);
         }
     }
 
-    private static class OwnershipClientHolder extends
+    @VisibleForTesting
+    static class OwnershipClientHolder extends
             BinderInterfaceContainer<IAppFocusOwnershipCallback> {
         private OwnershipClientHolder(AppFocusService service) {
             super(service);
@@ -487,13 +475,18 @@ public class AppFocusService extends IAppFocus.Stub implements CarServiceBase,
         }
     }
 
-    private class DispatchHandler extends Handler {
+    private static final class DispatchHandler extends Handler {
+        private static final String TAG = DispatchHandler.class.getSimpleName();
+
         private static final int MSG_DISPATCH_OWNERSHIP_LOSS = 0;
         private static final int MSG_DISPATCH_OWNERSHIP_GRANT = 1;
         private static final int MSG_DISPATCH_FOCUS_CHANGE = 2;
 
-        private DispatchHandler(Looper looper) {
+        private final WeakReference<AppFocusService> mService;
+
+        private DispatchHandler(Looper looper, AppFocusService service) {
             super(looper);
+            mService = new WeakReference<AppFocusService>(service);
         }
 
         private void requestAppFocusOwnershipLossDispatch(IAppFocusOwnershipCallback callback,
@@ -517,15 +510,23 @@ public class AppFocusService extends IAppFocus.Stub implements CarServiceBase,
 
         @Override
         public void handleMessage(Message msg) {
+            AppFocusService service = mService.get();
+            if (service == null) {
+                Log.i(TAG, "handleMessage null service");
+                return;
+            }
             switch (msg.what) {
                 case MSG_DISPATCH_OWNERSHIP_LOSS:
-                    dispatchAppFocusOwnershipLoss((IAppFocusOwnershipCallback) msg.obj, msg.arg1);
+                    service.dispatchAppFocusOwnershipLoss((IAppFocusOwnershipCallback) msg.obj,
+                            msg.arg1);
                     break;
                 case MSG_DISPATCH_OWNERSHIP_GRANT:
-                    dispatchAppFocusOwnershipGrant((IAppFocusOwnershipCallback) msg.obj, msg.arg1);
+                    service.dispatchAppFocusOwnershipGrant((IAppFocusOwnershipCallback) msg.obj,
+                            msg.arg1);
                     break;
                 case MSG_DISPATCH_FOCUS_CHANGE:
-                    dispatchAppFocusChange((IAppFocusListener) msg.obj, msg.arg1, msg.arg2 == 1);
+                    service.dispatchAppFocusChange((IAppFocusListener) msg.obj, msg.arg1,
+                            msg.arg2 == 1);
                     break;
                 default:
                     Log.e(CarLog.TAG_APP_FOCUS, "Can't dispatch message: " + msg);
