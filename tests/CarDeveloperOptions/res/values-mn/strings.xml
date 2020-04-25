@@ -481,8 +481,7 @@
     <string name="face_lock_screen_setup_skip_dialog_text" product="tablet" msgid="2998863111689476550">"Таблетаа дэлгэцийн түгжээний сонголтоор хамгаалснаар үүнийг алга болгосон эсвэл хулгайд алдсан тохиолдолд хэн нэгэн ашиглах боломжгүй болно. Мөн та царайн нотолгоог тохируулахын тулд дэлгэцийн түгжээг сонгох шаардлагатай. Цуцлах гэснийг товшоод ПИН-г тохируулах эсвэл дэлгэцийн өөр түгжээ сонгоно уу."</string>
     <string name="face_lock_screen_setup_skip_dialog_text" product="device" msgid="6780557259734235952">"Төхөөрөмжөө дэлгэцийн түгжээний сонголтоор хамгаалснаар үүнийг алга болгосон эсвэл хулгайд алдсан тохиолдолд хэн нэгэн ашиглах боломжгүй болно. Мөн та царайн нотолгоог тохируулахын тулд дэлгэцийн түгжээг сонгох шаардлагатай. Цуцлах гэснийг товшоод ПИН-г тохируулах эсвэл дэлгэцийн өөр түгжээ сонгоно уу."</string>
     <string name="face_lock_screen_setup_skip_dialog_text" product="default" msgid="8541640018478926775">"Утсаа дэлгэцийн түгжээний сонголтоор хамгаалснаар үүнийг алга болгосон эсвэл хулгайд алдсан тохиолдолд хэн нэгэн ашиглах боломжгүй болно. Мөн та царайн нотолгоог тохируулахын тулд дэлгэцийн түгжээг сонгох шаардлагатай. Цуцлах гэснийг товшоод ПИН-г тохируулах эсвэл дэлгэцийн өөр түгжээ сонгоно уу."</string>
-    <!-- no translation found for lock_screen_pin_skip_title (8217519439213393785) -->
-    <skip />
+    <string name="lock_screen_pin_skip_title" msgid="8217519439213393785">"ПИН-н тохируулгыг алгасах уу?"</string>
     <string name="lock_screen_password_skip_title" msgid="3725788215672959827">"Нууц үгийн тохируулгыг алгасах уу?"</string>
     <string name="lock_screen_pattern_skip_title" msgid="4237030500353932005">"Хээний тохируулгыг алгасах уу?"</string>
     <string name="security_settings_fingerprint_enroll_setup_screen_lock" msgid="9036983528330627756">"Дэлгэцийн түгжээ тохируулах"</string>
@@ -1092,8 +1091,11 @@
     <item msgid="2552412793005571845">"@*android:string/wfc_mode_cellular_preferred_summary"</item>
     <item msgid="742811521969300868">"@*android:string/wfc_mode_wifi_only_summary"</item>
   </string-array>
-    <!-- no translation found for wifi_calling_mode_choices_v2:0 (9149346657812979257) -->
-    <!-- no translation found for wifi_calling_mode_choices_v2:2 (6007360612667098926) -->
+  <string-array name="wifi_calling_mode_choices_v2">
+    <item msgid="9149346657812979257">"Wi-Fi"</item>
+    <item msgid="4421333712484542489">"Мобайл"</item>
+    <item msgid="6007360612667098926">"Зөвхөн Wi-Fi"</item>
+  </string-array>
   <string-array name="wifi_calling_mode_choices_without_wifi_only">
     <item msgid="3658897985297386665">"@*android:string/wfc_mode_wifi_preferred_summary"</item>
     <item msgid="4191802193352447215">"@*android:string/wfc_mode_cellular_preferred_summary"</item>
@@ -1421,7 +1423,7 @@
     <string name="usb_midi_title" msgid="8626512517313340943">"MIDI"</string>
     <string name="usb_midi_summary" msgid="3607444815743771712">"MIDI-г идэвхжүүлсэн програмуудыг өөрийн компьютер дээрх MIDI програм хангамжийг USB дээр ажиллуулах."</string>
     <string name="storage_other_users" msgid="1055693465220962928">"Бусад хэрэглэгчид"</string>
-    <string name="storage_internal_title" msgid="7969898703086593200">"Төхөөрөмжийн санах ой"</string>
+    <string name="storage_internal_title" msgid="7969898703086593200">"Төхөөрөмжийн хадгалах сан"</string>
     <string name="storage_external_title" msgid="3308178326521953306">"Зөөврийн санах ой"</string>
     <string name="storage_volume_summary" msgid="3938298080954984809">"<xliff:g id="TOTAL">%2$s</xliff:g>-ын <xliff:g id="USED">%1$s</xliff:g>-г ашигласан"</string>
     <string name="storage_size_large" msgid="2252229139037320440">"<xliff:g id="NUMBER">^1</xliff:g>"<small><small>" <xliff:g id="UNIT">^2</xliff:g>"</small></small>""</string>
@@ -2265,10 +2267,10 @@
     <string name="battery_tip_summary_summary" product="tablet" msgid="5280099016800644130">"Таблет батарейг цаана энгийн байдлаар ашигладаг"</string>
     <string name="battery_tip_summary_summary" product="device" msgid="4459840492610842705">"Төхөөрөмж батарейг цаана энгийн байдлаар ашигладаг"</string>
     <string name="battery_tip_low_battery_title" msgid="6784043681672161175">"Бага батерейны багтаамж"</string>
-    <string name="battery_tip_low_battery_summary" msgid="9151355911381188604">"Батерейны амь бага байна"</string>
-    <string name="battery_tip_smart_battery_title" product="default" msgid="5517122075918038665">"Утасныхаа батерейны амийг сайжруулах"</string>
-    <string name="battery_tip_smart_battery_title" product="tablet" msgid="203494973250969040">"Таблетынхаа батерейны амийг сайжруулах"</string>
-    <string name="battery_tip_smart_battery_title" product="device" msgid="7419448992583346364">"Төхөөрөмжийнхөө батерейны амийг сайжруулах"</string>
+    <string name="battery_tip_low_battery_summary" msgid="9151355911381188604">"Батарейн ажиллах хугацаа бага байна"</string>
+    <string name="battery_tip_smart_battery_title" product="default" msgid="5517122075918038665">"Утасныхаа батарейн ажиллах хугацааг нэмэгдүүлэх"</string>
+    <string name="battery_tip_smart_battery_title" product="tablet" msgid="203494973250969040">"Таблетынхаа батарейн ажиллах хугацааг нэмэгдүүлэх"</string>
+    <string name="battery_tip_smart_battery_title" product="device" msgid="7419448992583346364">"Төхөөрөмжийнхөө батарейн ажиллах хугацааг нэмэгдүүлэх"</string>
     <string name="battery_tip_smart_battery_summary" msgid="5344821856478265778">"Батерейны менежерийг асаах"</string>
     <string name="battery_tip_early_heads_up_title" msgid="707163785378746813">"Тэжээл хэмнэгчийг асаах"</string>
     <string name="battery_tip_early_heads_up_summary" msgid="4231489566422395156">"Батерей ердийнхөөс хурдан дуусаж болзошгүй"</string>
@@ -2621,7 +2623,7 @@
     <string name="header_account_settings" msgid="8586173964125512219">"Акаунтын тохиргоо"</string>
     <string name="remove_account_label" msgid="5885425720323823387">"Бүртгэлийг хасах"</string>
     <string name="header_add_an_account" msgid="8482614556580804956">"Бүртгэл нэмэх"</string>
-    <string name="really_remove_account_title" msgid="4166512362915154319">"Акаунтыг арилгах уу?"</string>
+    <string name="really_remove_account_title" msgid="4166512362915154319">"Бүртгэлийг арилгах уу?"</string>
     <string name="really_remove_account_message" product="tablet" msgid="7403843371045856719">"Энэ акаунтыг арилгаснаас үүний бүх зурвас, харилцагчид болон бусад өгөгдлүүдийг таблетаас устгах болно!"</string>
     <string name="really_remove_account_message" product="default" msgid="8951224626153163914">"Энэ акаунтыг арилгаснаар үүний бүх зурвас, харилцагчид, бусад өгөгдлүүдийг утаснаас устгах болно!"</string>
     <string name="really_remove_account_message" product="device" msgid="3751798556257519916">"Энэ бүртгэлийг устгаснаар үүний бүх зурвас, харилцагч болон бусад өгөгдлийг төхөөрөмжөөс устгана!"</string>
@@ -4308,9 +4310,9 @@
     <string name="media_output_summary_unavailable" msgid="6629338032551086053">"Боломжгүй"</string>
     <string name="take_call_on_title" msgid="6570776899869030724">"Дуудлага авах"</string>
     <string name="cannot_change_apn_toast" msgid="5405823369239466817">"Энэ APN-г өөрчлөх боломжгүй."</string>
-    <string name="battery_suggestion_title" product="tablet" msgid="10172199242166440">"Таблетын батерейны амийг сайжруулах"</string>
-    <string name="battery_suggestion_title" product="device" msgid="765005476863631528">"Төхөөрөмжийн батерейны амийг сайжруулах"</string>
-    <string name="battery_suggestion_title" product="default" msgid="3295786171830183688">"Утасны батерейны амийг сайжруулах"</string>
+    <string name="battery_suggestion_title" product="tablet" msgid="10172199242166440">"Таблетын батарейн ажиллах хугацааг нэмэгдүүлэх"</string>
+    <string name="battery_suggestion_title" product="device" msgid="765005476863631528">"Төхөөрөмжийн батарейн ажиллах хугацааг нэмэгдүүлэх"</string>
+    <string name="battery_suggestion_title" product="default" msgid="3295786171830183688">"Утасны батарейн ажиллах хугацааг нэмэгдүүлэх"</string>
     <string name="battery_suggestion_summary" msgid="2669070349482656490"></string>
     <string name="gesture_prevent_ringing_screen_title" msgid="4173494225145223638">"Хонх дуугаргахаас сэргийлэх"</string>
     <string name="gesture_prevent_ringing_title" msgid="8827963588425673557">"Асаах &amp; Дууны түвшинг нэмэх товчлуурыг зэрэг дарж"</string>
