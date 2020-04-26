@@ -33,6 +33,7 @@ import android.car.user.CarUserManager;
 import android.car.user.CarUserManager.UserLifecycleEvent;
 import android.car.user.CarUserManager.UserLifecycleEventType;
 import android.car.user.CarUserManager.UserLifecycleListener;
+import android.car.user.UserSwitchResult;
 import android.car.userlib.CarUserManagerHelper;
 import android.car.userlib.HalCallback;
 import android.car.userlib.UserHalHelper;
@@ -62,11 +63,13 @@ import android.util.SparseArray;
 import android.util.TimingsTraceLog;
 
 import com.android.car.CarServiceBase;
+import com.android.car.CarServiceUtils;
 import com.android.car.R;
 import com.android.car.hal.UserHalService;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.car.EventLogTags;
+import com.android.internal.infra.AndroidFuture;
 import com.android.internal.os.IResultReceiver;
 import com.android.internal.util.FunctionalUtils;
 import com.android.internal.util.Preconditions;
@@ -93,6 +96,8 @@ import java.util.concurrent.TimeUnit;
  * <ol/>
  */
 public final class CarUserService extends ICarUserService.Stub implements CarServiceBase {
+
+    private static final String TAG = TAG_USER;
 
     /** {@code int} extra used to represent a user id in a {@link IResultReceiver} response. */
     public static final String BUNDLE_USER_ID = "user.id";
@@ -133,8 +138,9 @@ public final class CarUserService extends ICarUserService.Stub implements CarSer
     private final UserHalService mHal;
 
     // HandlerThread and Handler used when notifying app listeners (mAppLifecycleListeners).
-    private final HandlerThread mHandlerThread;
-    private final Handler mHandler;
+    private final HandlerThread mHandlerThread = CarServiceUtils.getHandlerThread(
+            getClass().getSimpleName());
+    private final Handler mHandler = new Handler(mHandlerThread.getLooper());
 
     /**
      * List of listeners to be notified on new user activities events.
@@ -152,12 +158,12 @@ public final class CarUserService extends ICarUserService.Stub implements CarSer
      * User Id for the user switch in process, if any.
      */
     @GuardedBy("mLockUser")
-    private int mUserSwitchInProcess = UserHandle.USER_NULL;
+    private int mUserIdForUserSwitchInProcess = UserHandle.USER_NULL;
     /**
      * Request Id for the user switch in process, if any.
      */
     @GuardedBy("mLockUser")
-    private int mRequestIdForUserSwitchInProcess = UserHandle.USER_NULL;
+    private int mRequestIdForUserSwitchInProcess;
     private final int mHalTimeoutMs = CarProperties.user_hal_timeout().orElse(5_000);
 
     private final CopyOnWriteArrayList<PassengerCallback> mPassengerCallbacks =
@@ -208,9 +214,6 @@ public final class CarUserService extends ICarUserService.Stub implements CarSer
         mUserManager = userManager;
         mLastPassengerId = UserHandle.USER_NULL;
         mEnablePassengerSupport = context.getResources().getBoolean(R.bool.enablePassengerSupport);
-        mHandlerThread = new HandlerThread(CarUserService.class.getSimpleName());
-        mHandlerThread.start();
-        mHandler = new Handler(mHandlerThread.getLooper());
     }
 
     @Override
@@ -269,7 +272,7 @@ public final class CarUserService extends ICarUserService.Stub implements CarSer
                 res.getString(com.android.internal.R.string.owner_name));
         writer.printf("%sdefault_guest_name=%s\n", indent,
                 res.getString(R.string.default_guest_name));
-        writer.printf("User switch in process=%d\n", mUserSwitchInProcess);
+        writer.printf("User switch in process=%d\n", mUserIdForUserSwitchInProcess);
         writer.printf("Request Id for the user switch in process=%d\n ",
                     mRequestIdForUserSwitchInProcess);
 
@@ -681,32 +684,33 @@ public final class CarUserService extends ICarUserService.Stub implements CarSer
      */
     @Override
     public void switchUser(@UserIdInt int targetUserId, int timeoutMs,
-            @NonNull IResultReceiver receiver) {
+            @NonNull AndroidFuture<UserSwitchResult> receiver) {
         EventLog.writeEvent(EventLogTags.CAR_USER_SVC_SWITCH_USER_REQ, targetUserId,
                 timeoutMs);
         checkManageUsersPermission("switchUser");
         Objects.requireNonNull(receiver);
         UserInfo targetUser = mUserManager.getUserInfo(targetUserId);
-        Preconditions.checkArgument(targetUser != null, "Invalid target user Id");
+        Preconditions.checkArgument(targetUser != null, "Target user doesn't exist");
 
-        if (ActivityManager.getCurrentUser() == targetUserId) {
+        int currentUser = ActivityManager.getCurrentUser();
+        if (currentUser == targetUserId) {
             if (Log.isLoggable(TAG_USER, Log.DEBUG)) {
                 Log.d(TAG_USER, "Current user is same as requested target user: " + targetUserId);
             }
-            int resultStatus = CarUserManager.USER_SWITCH_STATUS_ALREADY_REQUESTED_USER;
-            sendResult(receiver, resultStatus, null);
+            int resultStatus = UserSwitchResult.STATUS_ALREADY_REQUESTED_USER;
+            sendResult(receiver, resultStatus);
             return;
         }
 
         synchronized (mLockUser) {
-            if (mUserSwitchInProcess == targetUserId) {
-                if (Log.isLoggable(TAG_USER, Log.DEBUG)) {
-                    Log.d(TAG_USER,
-                            "A user switch request is already in process for the target user: "
-                                    + targetUserId);
-                }
-                int resultStatus = CarUserManager.USER_SWITCH_STATUS_ANOTHER_REQUEST_IN_PROCESS;
-                sendResult(receiver, resultStatus, null);
+            if (Log.isLoggable(TAG_USER, Log.DEBUG)) {
+                Log.d(TAG_USER, "switchUser(" + targetUserId + "): currentuser=" + currentUser
+                        + ", mUserIdForUserSwitchInProcess=" + mUserIdForUserSwitchInProcess);
+            }
+
+            if (mUserIdForUserSwitchInProcess == targetUserId) {
+                int resultStatus = UserSwitchResult.STATUS_ANOTHER_REQUEST_IN_PROCESS;
+                sendResult(receiver, resultStatus);
                 return;
             }
         }
@@ -717,45 +721,48 @@ public final class CarUserService extends ICarUserService.Stub implements CarSer
         halTargetUser.userId = targetUser.id;
         halTargetUser.flags = UserHalHelper.convertFlags(targetUser);
         mHal.switchUser(halTargetUser, timeoutMs, usersInfo, (status, resp) -> {
-            Bundle resultData = null;
-            resultData = new Bundle();
-            int resultStatus = CarUserManager.USER_SWITCH_STATUS_HAL_INTERNAL_FAILURE;
-            if (resp != null) {
-                EventLog.writeEvent(EventLogTags.CAR_USER_SVC_SWITCH_USER_REQ, status,
-                        resp.status, resp.messageType);
-                resultData.putInt(CarUserManager.BUNDLE_USER_SWITCH_STATUS, resp.status);
-                resultData.putInt(CarUserManager.BUNDLE_USER_SWITCH_MSG_TYPE, resp.messageType);
-                if (resp.errorMessage != null) {
-                    resultData.putString(CarUserManager.BUNDLE_USER_SWITCH_ERROR_MSG,
-                            resp.errorMessage);
-                }
-                switch (resp.status) {
-                    case SwitchUserStatus.SUCCESS:
-                        boolean result;
-                        try {
-                            result = mAm.switchUser(targetUserId);
-                            if (result) {
-                                resultStatus = CarUserManager.USER_SWITCH_STATUS_SUCCESSFUL;
-                                updateUserSwitchInProcess(targetUserId, resp);
-                            } else {
-                                resultStatus = CarUserManager.USER_SWITCH_STATUS_ANDROID_FAILURE;
-                                postSwitchHalResponse(resp.requestId, targetUserId);
-                            }
-                        } catch (RemoteException e) {
-                            // ignore
-                            Log.w(TAG_USER,
-                                    "error while switching user " + targetUser.toFullString(), e);
-                        }
-                        break;
-                    case SwitchUserStatus.FAILURE:
-                        // HAL failed to switch user
-                        resultStatus = CarUserManager.USER_SWITCH_STATUS_HAL_FAILURE;
-                        break;
-                }
-            } else {
-                EventLog.writeEvent(EventLogTags.CAR_USER_SVC_SWITCH_USER_REQ, status);
+            if (Log.isLoggable(TAG_USER, Log.DEBUG)) {
+                Log.d(TAG, "switch response: status="
+                        + UserHalHelper.halCallbackStatusToString(status) + ", resp=" + resp);
             }
-            sendResult(receiver, resultStatus, resultData);
+
+            int resultStatus = UserSwitchResult.STATUS_HAL_INTERNAL_FAILURE;
+
+            if (status != HalCallback.STATUS_OK) {
+                EventLog.writeEvent(EventLogTags.CAR_USER_SVC_SWITCH_USER_RESP, status);
+                Log.w(TAG, "invalid callback status ("
+                        + UserHalHelper.halCallbackStatusToString(status) + ") for response "
+                        + resp);
+                sendResult(receiver, resultStatus);
+                return;
+            }
+            EventLog.writeEvent(EventLogTags.CAR_USER_SVC_SWITCH_USER_RESP, status,
+                    resp.status, resp.errorMessage);
+
+            switch (resp.status) {
+                case SwitchUserStatus.SUCCESS:
+                    boolean result;
+                    try {
+                        result = mAm.switchUser(targetUserId);
+                        if (result) {
+                            resultStatus = UserSwitchResult.STATUS_SUCCESSFUL;
+                            updateUserSwitchInProcess(targetUserId, resp);
+                        } else {
+                            resultStatus = UserSwitchResult.STATUS_ANDROID_FAILURE;
+                            postSwitchHalResponse(resp.requestId, targetUserId);
+                        }
+                    } catch (RemoteException e) {
+                        // ignore
+                        Log.w(TAG_USER,
+                                "error while switching user " + targetUser.toFullString(), e);
+                    }
+                    break;
+                case SwitchUserStatus.FAILURE:
+                    // HAL failed to switch user
+                    resultStatus = UserSwitchResult.STATUS_HAL_FAILURE;
+                    break;
+            }
+            sendResult(receiver, resultStatus, resp.errorMessage);
         });
     }
 
@@ -769,19 +776,30 @@ public final class CarUserService extends ICarUserService.Stub implements CarSer
         }
     }
 
+    private void sendResult(@NonNull AndroidFuture<UserSwitchResult> receiver,
+            @UserSwitchResult.Status int status) {
+        sendResult(receiver, status, /* errorMessage= */ null);
+    }
+
+    private void sendResult(@NonNull AndroidFuture<UserSwitchResult> receiver,
+            @UserSwitchResult.Status int status, @Nullable String errorMessage) {
+        receiver.complete(new UserSwitchResult(status, errorMessage));
+    }
+
     private void updateUserSwitchInProcess(@UserIdInt int targetUserId,
             @NonNull SwitchUserResponse resp) {
         synchronized (mLockUser) {
-            if (mUserSwitchInProcess != UserHandle.USER_NULL) {
+            if (mUserIdForUserSwitchInProcess != UserHandle.USER_NULL) {
                 // Some other user switch is in process.
                 if (Log.isLoggable(TAG_USER, Log.DEBUG)) {
-                    Log.d(TAG_USER, "User switch for user: " + mUserSwitchInProcess
+                    Log.d(TAG_USER, "User switch for user: " + mUserIdForUserSwitchInProcess
                             + " is in process. Sending failed android post switch response for it "
                             + " as new user switch is requested for user: " + targetUserId);
                 }
-                postSwitchHalResponse(mRequestIdForUserSwitchInProcess, mUserSwitchInProcess);
+                postSwitchHalResponse(mRequestIdForUserSwitchInProcess,
+                        mUserIdForUserSwitchInProcess);
             }
-            mUserSwitchInProcess = targetUserId;
+            mUserIdForUserSwitchInProcess = targetUserId;
             mRequestIdForUserSwitchInProcess = resp.requestId;
         }
     }
@@ -1031,7 +1049,7 @@ public final class CarUserService extends ICarUserService.Stub implements CarSer
         }
 
         // ...then notify listeners.
-        UserLifecycleEvent event = new UserLifecycleEvent(eventType, userId);
+        UserLifecycleEvent event = new UserLifecycleEvent(eventType, fromUserId, userId);
 
         mHandler.post(() -> {
             handleNotifyServiceUserLifecycleListeners(event);
@@ -1051,14 +1069,15 @@ public final class CarUserService extends ICarUserService.Stub implements CarSer
     }
 
     private void sendPostSwitchToHalLocked(@UserIdInt int userId) {
-        if (mUserSwitchInProcess == UserHandle.USER_NULL || mUserSwitchInProcess != userId) {
+        if (mUserIdForUserSwitchInProcess == UserHandle.USER_NULL
+                || mUserIdForUserSwitchInProcess != userId) {
             if (Log.isLoggable(TAG_USER, Log.DEBUG)) {
                 Log.d(TAG_USER, "No user switch request Id. No android post switch sent.");
             }
             return;
         }
-        postSwitchHalResponse(mRequestIdForUserSwitchInProcess, mUserSwitchInProcess);
-        mUserSwitchInProcess = UserHandle.USER_NULL;
+        postSwitchHalResponse(mRequestIdForUserSwitchInProcess, mUserIdForUserSwitchInProcess);
+        mUserIdForUserSwitchInProcess = UserHandle.USER_NULL;
         mRequestIdForUserSwitchInProcess = UserHandle.USER_NULL;
     }
 
@@ -1082,8 +1101,12 @@ public final class CarUserService extends ICarUserService.Stub implements CarSer
             IResultReceiver listener = mAppLifecycleListeners.valueAt(i);
             Bundle data = new Bundle();
             data.putInt(CarUserManager.BUNDLE_PARAM_ACTION, event.getEventType());
-            // TODO(b/144120654): should pass currentId from CarServiceHelperService so it
-            // can set BUNDLE_PARAM_PREVIOUS_USER_ID (and unit test it)
+
+            int fromUid = event.getPreviousUserId();
+            if (fromUid != UserHandle.USER_NULL) {
+                data.putInt(CarUserManager.BUNDLE_PARAM_PREVIOUS_USER_ID, fromUid);
+            }
+
             if (Log.isLoggable(TAG_USER, Log.DEBUG)) {
                 Log.d(TAG_USER, "Notifying listener for uid " + uid);
             }
