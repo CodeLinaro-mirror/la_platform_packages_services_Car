@@ -481,8 +481,7 @@
     <string name="face_lock_screen_setup_skip_dialog_text" product="tablet" msgid="2998863111689476550">"Suojaa tablettiasi näytön lukituksella, jotta kukaan ei voi käyttää sitä, jos se katoaa tai varastetaan. Tarvitset näytön lukituksen myös määrittääksesi kasvojentunnistuksen. Valitse Peruuta, ja määritä sitten PIN-koodi tai valitse toinen näytönlukitustapa."</string>
     <string name="face_lock_screen_setup_skip_dialog_text" product="device" msgid="6780557259734235952">"Suojaa laitettasi näytön lukituksella, jotta kukaan ei voi käyttää sitä, jos se katoaa tai varastetaan. Tarvitset näytön lukituksen myös määrittääksesi kasvojentunnistuksen. Valitse Peruuta, ja määritä sitten PIN-koodi tai valitse toinen näytönlukitustapa."</string>
     <string name="face_lock_screen_setup_skip_dialog_text" product="default" msgid="8541640018478926775">"Suojaa puhelintasi näytön lukituksella, jotta kukaan ei voi käyttää sitä, jos se katoaa tai varastetaan. Tarvitset näytön lukituksen myös määrittääksesi kasvojentunnistuksen. Valitse Peruuta, ja määritä sitten PIN-koodi tai valitse toinen näytönlukitustapa."</string>
-    <!-- no translation found for lock_screen_pin_skip_title (8217519439213393785) -->
-    <skip />
+    <string name="lock_screen_pin_skip_title" msgid="8217519439213393785">"Ohitetaanko PIN-koodin asetus?"</string>
     <string name="lock_screen_password_skip_title" msgid="3725788215672959827">"Ohitetaanko salasanan asetus?"</string>
     <string name="lock_screen_pattern_skip_title" msgid="4237030500353932005">"Ohitetaanko kuvion asetus?"</string>
     <string name="security_settings_fingerprint_enroll_setup_screen_lock" msgid="9036983528330627756">"Ota näytön lukitus käyttöön"</string>
@@ -943,7 +942,7 @@
     <string name="wifi_dpp_scan_open_network_qr_code_with_another_device" msgid="572011882416511818">"Yhdistä <xliff:g id="SSID">%1$s</xliff:g> skannaamalla tämä QR-koodi"</string>
     <string name="wifi_dpp_could_not_detect_valid_qr_code" msgid="27667719861826438">"QR-koodin luku epäonnistui. Keskitä koodi ja yritä uudelleen."</string>
     <string name="wifi_dpp_failure_authentication_or_configuration" msgid="9142051662156233679">"Yritä uudelleen. Jos ongelma ei ratkea, ota yhteyttä laitteen valmistajaan"</string>
-    <string name="wifi_dpp_failure_not_compatible" msgid="4320027179973678283">"Jokin meni pieleen"</string>
+    <string name="wifi_dpp_failure_not_compatible" msgid="4320027179973678283">"Jotain meni pieleen"</string>
     <string name="wifi_dpp_failure_timeout" msgid="5060065168142109420">"Varmista, että laite on liitetty virtalähteeseen, ladattu ja päällä"</string>
     <string name="wifi_dpp_failure_generic" msgid="7840142544736640189">"Varmista, että laite on liitetty virtalähteeseen, ladattu ja päällä. Jos ongelma ei ratkea, ota yhteyttä laitteen valmistajaan"</string>
     <string name="wifi_dpp_failure_not_supported" msgid="111779621766171626">"Tämä laite ei tue <xliff:g id="SSID">%1$s</xliff:g>:n lisäämistä"</string>
@@ -1092,8 +1091,11 @@
     <item msgid="2552412793005571845">"@*android:string/wfc_mode_cellular_preferred_summary"</item>
     <item msgid="742811521969300868">"@*android:string/wfc_mode_wifi_only_summary"</item>
   </string-array>
-    <!-- no translation found for wifi_calling_mode_choices_v2:0 (9149346657812979257) -->
-    <!-- no translation found for wifi_calling_mode_choices_v2:2 (6007360612667098926) -->
+  <string-array name="wifi_calling_mode_choices_v2">
+    <item msgid="9149346657812979257">"Wi-Fi"</item>
+    <item msgid="4421333712484542489">"Mobiili"</item>
+    <item msgid="6007360612667098926">"Vain Wi-Fi"</item>
+  </string-array>
   <string-array name="wifi_calling_mode_choices_without_wifi_only">
     <item msgid="3658897985297386665">"@*android:string/wfc_mode_wifi_preferred_summary"</item>
     <item msgid="4191802193352447215">"@*android:string/wfc_mode_cellular_preferred_summary"</item>
@@ -1258,7 +1260,7 @@
     <string name="doze_summary" msgid="6762274282827831706">"Aktivoi näyttö, kun saat ilmoituksia."</string>
     <string name="doze_always_on_title" msgid="8555184965031789941">"Aina käytössä"</string>
     <string name="doze_always_on_summary" msgid="7654436900436328950">"Näytä aika, ilmoituskuvakkeet ja muut tiedot. Tämä asetus kuluttaa akkua nopeammin."</string>
-    <string name="title_font_size" msgid="5021464556860010851">"Kirjasimen koko"</string>
+    <string name="title_font_size" msgid="5021464556860010851">"Fontin koko"</string>
     <string name="short_summary_font_size" msgid="4141077908728522946">"Suurenna tai pienennä tekstiä."</string>
     <string name="sim_lock_settings" msgid="1986924650622642189">"SIM-kortin lukitusasetukset"</string>
     <string name="sim_lock_settings_category" msgid="1126759898277681516">"SIM-kortin lukitus"</string>
@@ -1706,7 +1708,7 @@
     <string name="lockpassword_choose_your_pin_message" msgid="8942598950627277885">"Määritä PIN-koodi tietoturvan parantamiseksi."</string>
     <string name="lockpassword_choose_your_pin_header_for_fingerprint" msgid="1102927520952116303">"Sormenjälki: aseta PIN-koodi"</string>
     <string name="lockpassword_choose_your_pattern_message" msgid="1503075455752279687">"Aseta kuvio tietoturvan parantamiseksi."</string>
-    <string name="lockpassword_confirm_your_password_header" msgid="9055242184126838887">"Anna salasana uudelleen"</string>
+    <string name="lockpassword_confirm_your_password_header" msgid="9055242184126838887">"Lisää salasana uudelleen"</string>
     <string name="lockpassword_confirm_your_pattern_header" msgid="7137526922696316545">"Vahvista kuvio"</string>
     <string name="lockpassword_confirm_your_pin_header" msgid="4335593948303036343">"Anna PIN-koodi uudelleen"</string>
     <string name="lockpassword_confirm_passwords_dont_match" msgid="1783767008133345784">"Salasanat eivät täsmää"</string>
@@ -2032,7 +2034,7 @@
     <string name="accessibility_settings_summary" msgid="5742379519336396561">"Näytönlukijat, näyttö, käytönhallinta"</string>
     <string name="vision_settings_title" msgid="7315352351051423944">"Näköasetukset"</string>
     <string name="vision_settings_description" msgid="3476589459009287332">"Voit muokata laitteen ominaisuuksia tarpeidesi mukaan. Käytettävyysvalintoja voi muuttaa myöhemmin asetuksissa."</string>
-    <string name="vision_settings_suggestion_title" msgid="7268661419110951128">"Muuta kirjasinkokoa"</string>
+    <string name="vision_settings_suggestion_title" msgid="7268661419110951128">"Muuta fonttikokoa"</string>
     <string name="screen_reader_category_title" msgid="6300714148519645544">"Näytönlukuohjelmat"</string>
     <string name="audio_and_captions_category_title" msgid="6140472938769619212">"Ääni ja näyttöteksti"</string>
     <string name="display_category_title" msgid="545168481672250195">"Näyttö"</string>
@@ -2154,7 +2156,7 @@
     <string name="captioning_foreground_opacity" msgid="7635639017810117478">"Tekstin läpinäkyvyys"</string>
     <string name="captioning_edge_color" msgid="4330622137047993780">"Reunan väri"</string>
     <string name="captioning_edge_type" msgid="4414946407430588162">"Reunan tyyppi"</string>
-    <string name="captioning_typeface" msgid="7893208796949341767">"Kirjasinperhe"</string>
+    <string name="captioning_typeface" msgid="7893208796949341767">"Fonttiperhe"</string>
     <string name="captioning_preview_text" msgid="4877753964772618049">"Tekstitys näyttää tältä"</string>
     <string name="captioning_preview_characters" msgid="6469599599352973561">"Aa"</string>
     <string name="locale_default" msgid="910074908458214054">"Oletus"</string>
@@ -3855,8 +3857,8 @@
     <string name="storage_summary_with_sdcard" msgid="8742907204848352697">"Sisäinen tallennustila: <xliff:g id="PERCENTAGE">%1$s</xliff:g> käytössä, <xliff:g id="FREE_SPACE">%2$s</xliff:g> vapaana"</string>
     <string name="display_summary" msgid="5725269449657325797">"Jos laitetta ei käytetä, se siirtyy virransäästötilaan, kun <xliff:g id="TIMEOUT_DESCRIPTION">%1$s</xliff:g> on kulunut."</string>
     <string name="display_dashboard_summary" msgid="7678566148167010682">"Taustakuva, virransäästö, fonttikoko"</string>
-    <string name="display_dashboard_summary_with_style" msgid="8981059474501210956">"Tyylit ja taustakuvat, virransäästö, kirjasinkoko"</string>
-    <string name="display_dashboard_nowallpaper_summary" msgid="8612534364908229000">"Virransäästö, kirjasinkoko"</string>
+    <string name="display_dashboard_summary_with_style" msgid="8981059474501210956">"Tyylit ja taustakuvat, virransäästö, fonttikoko"</string>
+    <string name="display_dashboard_nowallpaper_summary" msgid="8612534364908229000">"Virransäästö, fonttikoko"</string>
     <string name="display_summary_example" msgid="4555020581960719296">"Jos laitetta ei käytetä, se siirtyy virransäästötilaan, kun 10 minuuttia on kulunut."</string>
     <string name="memory_summary" msgid="9121871336058042600">"Muistia käytetty keskimäärin <xliff:g id="USED_MEMORY">%1$s</xliff:g>/<xliff:g id="TOTAL_MEMORY">%2$s</xliff:g>"</string>
     <string name="users_summary" msgid="6693338169439092387">"Kirjautunut sisään käyttäjänä <xliff:g id="USER_NAME">%1$s</xliff:g>"</string>
