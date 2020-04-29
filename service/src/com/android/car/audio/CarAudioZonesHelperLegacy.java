@@ -23,8 +23,6 @@ import android.car.media.CarAudioManager;
 import android.content.Context;
 import android.content.res.TypedArray;
 import android.content.res.XmlResourceParser;
-import android.hardware.automotive.audiocontrol.V1_0.IAudioControl;
-import android.os.RemoteException;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.util.SparseArray;
@@ -39,6 +37,7 @@ import org.xmlpull.v1.XmlPullParserException;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * A helper class loads volume groups from car_volume_groups.xml configuration into one zone.
@@ -57,15 +56,23 @@ class CarAudioZonesHelperLegacy {
     private final @XmlRes int mXmlConfiguration;
     private final SparseIntArray mLegacyAudioContextToBus;
     private final SparseArray<CarAudioDeviceInfo> mBusToCarAudioDeviceInfo;
+    private final CarAudioSettings mCarAudioSettings;
 
-    CarAudioZonesHelperLegacy(Context context, @XmlRes int xmlConfiguration,
+    CarAudioZonesHelperLegacy(@NonNull  Context context, @XmlRes int xmlConfiguration,
             @NonNull List<CarAudioDeviceInfo> carAudioDeviceInfos,
-            @NonNull IAudioControl audioControl) {
+            @NonNull AudioControlWrapper audioControlWrapper,
+            @NonNull CarAudioSettings carAudioSettings) {
+        Objects.requireNonNull(context);
+        Objects.requireNonNull(carAudioDeviceInfos);
+        Objects.requireNonNull(audioControlWrapper);
+        mCarAudioSettings = Objects.requireNonNull(carAudioSettings);
         mContext = context;
         mXmlConfiguration = xmlConfiguration;
-        mBusToCarAudioDeviceInfo = generateBusToCarAudioDeviceInfo(carAudioDeviceInfos);
+        mBusToCarAudioDeviceInfo =
+                generateBusToCarAudioDeviceInfo(carAudioDeviceInfos);
 
-        mLegacyAudioContextToBus = loadBusesForLegacyContexts(audioControl);
+        mLegacyAudioContextToBus =
+                loadBusesForLegacyContexts(audioControlWrapper);
     }
 
     /* Loads mapping from {@link CarAudioContext} values to bus numbers
@@ -74,23 +81,18 @@ class CarAudioZonesHelperLegacy {
      * contexts are those defined as part of
      * {@code android.hardware.automotive.audiocontrol.V1_0.ContextNumber}
      *
-     * @param audioControl handle for IAudioControl HAL to fetch bus numbers from
+     * @param audioControl wrapper for IAudioControl HAL interface.
      * @return SparseIntArray mapping from {@link CarAudioContext} to bus number.
      */
-    private static SparseIntArray loadBusesForLegacyContexts(@NonNull IAudioControl audioControl) {
+    private static SparseIntArray loadBusesForLegacyContexts(
+            @NonNull AudioControlWrapper audioControlWrapper) {
         SparseIntArray contextToBus = new SparseIntArray();
 
-        try {
-            for (int legacyContext : LEGACY_CONTEXTS) {
-                int bus = audioControl.getBusForContext(legacyContext);
-                validateBusNumber(legacyContext, bus);
-                contextToBus.put(legacyContext, bus);
-            }
-        } catch (RemoteException e) {
-            Log.e(CarLog.TAG_AUDIO, "Failed to query IAudioControl HAL", e);
-            e.rethrowAsRuntimeException();
+        for (int legacyContext : LEGACY_CONTEXTS) {
+            int bus = audioControlWrapper.getBusForContext(legacyContext);
+            validateBusNumber(legacyContext, bus);
+            contextToBus.put(legacyContext, bus);
         }
-
         return contextToBus;
     }
 
@@ -198,9 +200,7 @@ class CarAudioZonesHelperLegacy {
             }
         }
 
-        final CarVolumeSettings settings = new CarVolumeSettings(mContext);
-
-        return new CarVolumeGroup(settings, CarAudioManager.PRIMARY_AUDIO_ZONE, id,
+        return new CarVolumeGroup(mCarAudioSettings, CarAudioManager.PRIMARY_AUDIO_ZONE, id,
                 contexts.stream().mapToInt(i -> i).filter(i -> i >= 0).toArray());
     }
 

@@ -62,7 +62,8 @@ public:
     HalCamera(sp<IEvsCamera_1_1> hwCamera, std::string deviceId = "", Stream cfg = {})
         : mHwCamera(hwCamera),
           mId(deviceId),
-          mStreamConfig(cfg){
+          mStreamConfig(cfg),
+          mSyncSupported(UniqueTimeline::Supported()) {
         mCurrentRequests = &mFrameRequests[0];
         mNextRequests    = &mFrameRequests[1];
     }
@@ -78,6 +79,8 @@ public:
     std::string         getId()             { return mId; }
     Stream&             getStreamConfig()   { return mStreamConfig; }
     bool                changeFramesInFlight(int delta);
+    bool                changeFramesInFlight(const hardware::hidl_vec<BufferDesc_1_1>& buffers,
+                                             int* delta);
     UniqueFence         requestNewFrame(sp<VirtualCamera> virtualCamera,
                                         const int64_t timestamp);
 
@@ -91,6 +94,7 @@ public:
     Return<EvsResult>   setParameter(sp<VirtualCamera> virtualCamera,
                                      CameraParam id, int32_t& value);
     Return<EvsResult>   getParameter(CameraParam id, int32_t& value);
+    bool                isSyncSupported() const { return mSyncSupported; }
 
     // Methods from ::android::hardware::automotive::evs::V1_0::IEvsCameraStream follow.
     Return<void> deliverFrame(const BufferDesc_1_0& buffer) override;
@@ -131,6 +135,7 @@ private:
     std::deque<FrameRequest>* mNextRequests     PT_GUARDED_BY(mFrameMutex);
     std::unordered_map<uint64_t,
                        std::unique_ptr<UniqueTimeline>> mTimelines GUARDED_BY(mFrameMutex);
+    bool                      mSyncSupported;
 };
 
 } // namespace implementation

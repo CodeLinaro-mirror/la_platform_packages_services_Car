@@ -35,6 +35,7 @@ import android.content.pm.PackageManager;
 import android.os.Binder;
 import android.os.IBinder;
 import android.os.RemoteException;
+import android.os.SharedMemory;
 import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.Log;
@@ -46,6 +47,7 @@ import com.android.car.stats.CarStatsService;
 import com.android.car.stats.VmsClientLogger;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.util.FunctionalUtils.ThrowingConsumer;
 
 import java.io.PrintWriter;
 import java.util.ArrayList;
@@ -63,9 +65,9 @@ import java.util.stream.Collectors;
  * This service is also responsible for tracking VMS client connections and broadcasting
  * notifications to clients about layer offering or subscription state changes.
  */
-public class VmsNewBrokerService extends IVmsBrokerService.Stub implements CarServiceBase {
+public class VmsBrokerService extends IVmsBrokerService.Stub implements CarServiceBase {
     private static final boolean DBG = false;
-    private static final String TAG = VmsNewBrokerService.class.getSimpleName();
+    private static final String TAG = VmsBrokerService.class.getSimpleName();
 
     private final Context mContext;
     private final PackageManager mPackageManager;
@@ -84,12 +86,12 @@ public class VmsNewBrokerService extends IVmsBrokerService.Stub implements CarSe
     private VmsSubscriptionState mSubscriptionState = new VmsSubscriptionState(0,
             Collections.emptySet(), Collections.emptySet());
 
-    public VmsNewBrokerService(Context context, CarStatsService statsService) {
+    public VmsBrokerService(Context context, CarStatsService statsService) {
         this(context, statsService, Binder::getCallingUid);
     }
 
     @VisibleForTesting
-    VmsNewBrokerService(
+    VmsBrokerService(
             Context context,
             CarStatsService statsService,
             IntSupplier getCallingUid) {
@@ -195,13 +197,28 @@ public class VmsNewBrokerService extends IVmsBrokerService.Stub implements CarSe
     @Override
     public void publishPacket(IBinder clientToken, int providerId, VmsLayer layer, byte[] packet) {
         assertVmsPublisherPermission(mContext);
+        deliverToSubscribers(clientToken, providerId, layer, packet.length,
+                callback -> callback.onPacketReceived(providerId, layer, packet));
+    }
+
+    @Override
+    public void publishLargePacket(IBinder clientToken, int providerId, VmsLayer layer,
+            SharedMemory packet) {
+        try (SharedMemory largePacket = packet) {
+            assertVmsPublisherPermission(mContext);
+            deliverToSubscribers(clientToken, providerId, layer, packet.getSize(),
+                    callback -> callback.onLargePacketReceived(providerId, layer, largePacket));
+        }
+    }
+
+    private void deliverToSubscribers(IBinder clientToken, int providerId, VmsLayer layer,
+            int packetLength, ThrowingConsumer<IVmsClientCallback> callbackConsumer) {
         VmsClientInfo client = getClient(clientToken);
         if (!client.hasOffering(providerId, layer) && !client.isLegacyClient()) {
             throw new IllegalArgumentException("Client does not offer " + layer + " as "
                     + providerId);
         }
 
-        int packetLength = packet != null ? packet.length : 0;
         mStatsService.getVmsClientLogger(client.getUid())
                 .logPacketSent(layer, packetLength);
 
@@ -222,14 +239,14 @@ public class VmsNewBrokerService extends IVmsBrokerService.Stub implements CarSe
 
         for (VmsClientInfo subscriber : subscribers) {
             try {
-                subscriber.getCallback().onPacketReceived(providerId, layer, packet);
+                callbackConsumer.accept(subscriber.getCallback());
                 mStatsService.getVmsClientLogger(subscriber.getUid())
                         .logPacketReceived(layer, packetLength);
-            } catch (RemoteException ex) {
+            } catch (RuntimeException e) {
                 mStatsService.getVmsClientLogger(subscriber.getUid())
                         .logPacketDropped(layer, packetLength);
                 Log.e(TAG, String.format("Unable to publish to listener: %s",
-                        subscriber.getPackageName()));
+                        subscriber.getPackageName()), e);
             }
         }
     }

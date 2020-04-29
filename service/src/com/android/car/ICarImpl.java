@@ -19,23 +19,19 @@ package com.android.car;
 import android.annotation.MainThread;
 import android.annotation.Nullable;
 import android.app.ActivityManager;
-import android.app.ActivityOptions;
-import android.app.UiModeManager;
 import android.car.Car;
 import android.car.CarFeatures;
 import android.car.ICar;
 import android.car.cluster.renderer.IInstrumentClusterNavigation;
 import android.car.user.CarUserManager;
+import android.car.user.CarUserManager.UserLifecycleEvent;
 import android.car.userlib.CarUserManagerHelper;
-import android.content.ComponentName;
 import android.content.Context;
-import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.res.Resources;
 import android.hardware.automotive.vehicle.V2_0.IVehicle;
-import android.hardware.automotive.vehicle.V2_0.InitialUserInfoResponseAction;
-import android.hardware.automotive.vehicle.V2_0.UsersInfo;
-import android.hardware.automotive.vehicle.V2_0.VehicleArea;
+import android.hardware.automotive.vehicle.V2_0.VehiclePropValue;
+import android.hardware.automotive.vehicle.V2_0.VehicleProperty;
 import android.os.Binder;
 import android.os.Build;
 import android.os.IBinder;
@@ -43,23 +39,16 @@ import android.os.Process;
 import android.os.RemoteException;
 import android.os.ResultReceiver;
 import android.os.ShellCallback;
-import android.os.ShellCommand;
-import android.os.SystemClock;
 import android.os.Trace;
 import android.os.UserManager;
 import android.util.Log;
 import android.util.Slog;
 import android.util.TimingsTraceLog;
-import android.view.KeyEvent;
 
 import com.android.car.am.FixedActivityService;
 import com.android.car.audio.CarAudioService;
 import com.android.car.cluster.InstrumentClusterService;
 import com.android.car.garagemode.GarageModeService;
-import com.android.car.hal.InputHalService;
-import com.android.car.hal.UserHalHelper;
-import com.android.car.hal.UserHalService;
-import com.android.car.hal.UserHalService.HalCallback;
 import com.android.car.hal.VehicleHal;
 import com.android.car.pm.CarPackageManagerService;
 import com.android.car.stats.CarStatsService;
@@ -68,27 +57,26 @@ import com.android.car.trust.CarTrustedDeviceService;
 import com.android.car.user.CarUserNoticeService;
 import com.android.car.user.CarUserService;
 import com.android.car.user.UserMetrics;
-import com.android.car.vms.VmsNewBrokerService;
+import com.android.car.vms.VmsBrokerService;
 import com.android.car.watchdog.CarWatchdogService;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.car.ICarServiceHelper;
 import com.android.internal.os.IResultReceiver;
-import com.android.internal.util.ArrayUtils;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 
 public class ICarImpl extends ICar.Stub {
 
     public static final String INTERNAL_INPUT_SERVICE = "internal_input";
     public static final String INTERNAL_SYSTEM_ACTIVITY_MONITORING_SERVICE =
             "system_activity_monitoring";
+
+    private static final int INITIAL_VHAL_GET_RETRY = 2;
 
     private final Context mContext;
     private final VehicleHal mHal;
@@ -125,7 +113,7 @@ public class ICarImpl extends ICar.Stub {
     private final CarUserService mCarUserService;
     private final CarOccupantZoneService mCarOccupantZoneService;
     private final CarUserNoticeService mCarUserNoticeService;
-    private final VmsNewBrokerService mVmsBrokerService;
+    private final VmsBrokerService mVmsBrokerService;
     private final CarBugreportManagerService mCarBugreportManagerService;
     private final CarStatsService mCarStatsService;
     private final CarExperimentalFeatureServiceController mCarExperimentalFeatureServiceController;
@@ -135,14 +123,17 @@ public class ICarImpl extends ICar.Stub {
 
     private static final String TAG = "ICarImpl";
     private static final String VHAL_TIMING_TAG = "VehicleHalTiming";
+    private static final boolean DBG = true; // TODO(b/153104378): STOPSHIP if true
 
     private TimingsTraceLog mBootTiming;
 
+    private final Object mLock = new Object();
+
     /** Test only service. Populate it only when necessary. */
-    @GuardedBy("this")
+    @GuardedBy("mLock")
     private CarTestService mCarTestService;
 
-    @GuardedBy("this")
+    @GuardedBy("mLock")
     private ICarServiceHelper mICarServiceHelper;
 
     private final String mVehicleInterfaceName;
@@ -163,14 +154,25 @@ public class ICarImpl extends ICar.Stub {
         mContext = serviceContext;
         mSystemInterface = systemInterface;
         mHal = new VehicleHal(serviceContext, vehicle);
+        // Do this before any other service components to allow feature check. It should work
+        // even without init. For that, vhal get is retried as it can be too early.
+        VehiclePropValue disabledOptionalFeatureValue = mHal.getIfAvailableOrFailForEarlyStage(
+                    VehicleProperty.DISABLED_OPTIONAL_FEATURES, INITIAL_VHAL_GET_RETRY);
+        String[] disabledFeaturesFromVhal = null;
+        if (disabledOptionalFeatureValue != null) {
+            String disabledFeatures = disabledOptionalFeatureValue.value.stringValue;
+            if (disabledFeatures != null && !disabledFeatures.isEmpty()) {
+                disabledFeaturesFromVhal = disabledFeatures.split(",");
+            }
+        }
+        if (disabledFeaturesFromVhal == null) {
+            disabledFeaturesFromVhal = new String[0];
+        }
         Resources res = mContext.getResources();
         String[] defaultEnabledFeatures = res.getStringArray(
                 R.array.config_allowed_optional_car_features);
-        // Do this before any other service components to allow feature check. It should work
-        // even without init.
-        // TODO (b/144504820) Add vhal plumbing
         mFeatureController = new CarFeatureController(serviceContext, defaultEnabledFeatures,
-                /* disabledFeaturesFromVhal= */ new String[0], mSystemInterface.getSystemCarDir());
+                disabledFeaturesFromVhal , mSystemInterface.getSystemCarDir());
         CarLocalServices.addService(CarFeatureController.class, mFeatureController);
         mVehicleInterfaceName = vehicleInterfaceName;
         mUserManagerHelper = new CarUserManagerHelper(serviceContext);
@@ -187,7 +189,7 @@ public class ICarImpl extends ICar.Stub {
         mCarOccupantZoneService = new CarOccupantZoneService(serviceContext);
         mSystemActivityMonitoringService = new SystemActivityMonitoringService(serviceContext);
         mCarPowerManagementService = new CarPowerManagementService(mContext, mHal.getPowerHal(),
-                systemInterface, mUserManagerHelper);
+                systemInterface, mCarUserService);
         if (mFeatureController.isFeatureEnabled(CarFeatures.FEATURE_CAR_USER_NOTICE_SERVICE)) {
             mCarUserNoticeService = new CarUserNoticeService(serviceContext);
         } else {
@@ -222,9 +224,8 @@ public class ICarImpl extends ICar.Stub {
                 serviceContext, mCarAudioService, this);
         mCarStatsService = new CarStatsService(serviceContext);
         mCarStatsService.init();
-        if (mFeatureController.isFeatureEnabled(Car.VEHICLE_MAP_SERVICE)
-                || mFeatureController.isFeatureEnabled(Car.VMS_SUBSCRIBER_SERVICE)) {
-            mVmsBrokerService = new VmsNewBrokerService(mContext, mCarStatsService);
+        if (mFeatureController.isFeatureEnabled(Car.VEHICLE_MAP_SERVICE)) {
+            mVmsBrokerService = new VmsBrokerService(mContext, mCarStatsService);
         } else {
             mVmsBrokerService = null;
         }
@@ -267,7 +268,7 @@ public class ICarImpl extends ICar.Stub {
         CarLocalServices.addService(CarDrivingStateService.class, mCarDrivingStateService);
         CarLocalServices.addService(PerUserCarServiceHelper.class, mPerUserCarServiceHelper);
         CarLocalServices.addService(FixedActivityService.class, mFixedActivityService);
-        CarLocalServices.addService(VmsNewBrokerService.class, mVmsBrokerService);
+        CarLocalServices.addService(VmsBrokerService.class, mVmsBrokerService);
         CarLocalServices.addService(CarOccupantZoneService.class, mCarOccupantZoneService);
 
         // Be careful with order. Service depending on other service should be inited later.
@@ -345,35 +346,22 @@ public class ICarImpl extends ICar.Stub {
     @Override
     public void setCarServiceHelper(IBinder helper) {
         assertCallingFromSystemProcess();
-        synchronized (this) {
-            mICarServiceHelper = ICarServiceHelper.Stub.asInterface(helper);
-            mSystemInterface.setCarServiceHelper(mICarServiceHelper);
+        ICarServiceHelper carServiceHelper = ICarServiceHelper.Stub.asInterface(helper);
+        synchronized (mLock) {
+            mICarServiceHelper = carServiceHelper;
         }
+        mSystemInterface.setCarServiceHelper(carServiceHelper);
+        mCarOccupantZoneService.setCarServiceHelper(carServiceHelper);
     }
 
-    @Override
-    public void setUserLockStatus(int userId, int unlocked) {
-        assertCallingFromSystemProcess();
-        mCarUserService.setUserLockStatus(userId, unlocked == 1);
-        mCarMediaService.setUserLockStatus(userId, unlocked == 1);
-    }
-
-    @Override
-    public void onSwitchUser(int userId) {
-        assertCallingFromSystemProcess();
-
-        Log.i(TAG, "Foreground user switched to " + userId);
-        mCarUserService.onSwitchUser(userId);
-    }
-
-    // TODO(b/145689885): this method is currently used just for metrics logging purposes, but we
-    // should fold the other too (onSwitchUser() and setUserLockStatus()) onto it.
     @Override
     public void onUserLifecycleEvent(int eventType, long timestampMs, int fromUserId,
             int toUserId) {
         assertCallingFromSystemProcess();
-        Log.i(TAG, "onUserLifecycleEvent(" + CarUserManager.lifecycleEventTypeToString(eventType)
-                + ", " + toUserId + ")");
+        Log.i(TAG, "onUserLifecycleEvent("
+                + CarUserManager.lifecycleEventTypeToString(eventType) + ", " + toUserId + ")");
+        UserLifecycleEvent event = new UserLifecycleEvent(eventType, toUserId);
+        mCarUserService.onUserLifecycleEvent(event);
         mUserMetrics.onEvent(eventType, timestampMs, fromUserId, toUserId);
     }
 
@@ -386,6 +374,12 @@ public class ICarImpl extends ICar.Stub {
     public void getInitialUserInfo(int requestType, int timeoutMs, IBinder binder) {
         IResultReceiver receiver = IResultReceiver.Stub.asInterface(binder);
         mCarUserService.getInitialUserInfo(requestType, timeoutMs, receiver);
+    }
+
+    @Override
+    public void setInitialUser(int userId) {
+        if (DBG) Log.d(TAG, "setInitialUser(): " + userId);
+        mCarUserService.setInitialUser(userId);
     }
 
     @Override
@@ -495,7 +489,7 @@ public class ICarImpl extends ICar.Stub {
                 return mVmsBrokerService;
             case Car.TEST_SERVICE: {
                 assertPermission(mContext, Car.PERMISSION_CAR_TEST_SERVICE);
-                synchronized (this) {
+                synchronized (mLock) {
                     if (mCarTestService == null) {
                         mCarTestService = new CarTestService(mContext, this);
                     }
@@ -640,8 +634,8 @@ public class ICarImpl extends ICar.Stub {
 
     public static void assertAnyPermission(Context context, String... permissions) {
         for (String permission : permissions) {
-            if (context.checkCallingOrSelfPermission(permission) ==
-                    PackageManager.PERMISSION_GRANTED) {
+            if (context.checkCallingOrSelfPermission(permission)
+                    == PackageManager.PERMISSION_GRANTED) {
                 return;
             }
         }
@@ -753,7 +747,14 @@ public class ICarImpl extends ICar.Stub {
     public void onShellCommand(FileDescriptor in, FileDescriptor out, FileDescriptor err,
             String[] args, ShellCallback callback, ResultReceiver resultReceiver)
                     throws RemoteException {
-        new CarShellCommand().exec(this, in, out, err, args, callback, resultReceiver);
+        newCarShellCommand().exec(this, in, out, err, args, callback, resultReceiver);
+    }
+
+    private CarShellCommand newCarShellCommand() {
+        return new CarShellCommand(mContext, mHal, mCarAudioService, mCarPackageManagerService,
+                mCarProjectionService, mCarPowerManagementService, mCarTrustedDeviceService,
+                mFixedActivityService, mFeatureController, mCarInputService, mCarNightService,
+                mSystemInterface, mGarageModeService, mCarUserService);
     }
 
     private void dumpListOfServices(PrintWriter writer) {
@@ -802,7 +803,7 @@ public class ICarImpl extends ICar.Stub {
     }
 
     void execShellCmd(String[] args, PrintWriter writer) {
-        new CarShellCommand().exec(args, writer);
+        newCarShellCommand().exec(args, writer);
     }
 
     @MainThread
@@ -814,607 +815,5 @@ public class ICarImpl extends ICar.Stub {
     @MainThread
     private void traceEnd() {
         mBootTiming.traceEnd();
-    }
-
-    private final class CarShellCommand extends ShellCommand {
-        private static final String COMMAND_HELP = "-h";
-        private static final String COMMAND_DAY_NIGHT_MODE = "day-night-mode";
-        private static final String COMMAND_INJECT_VHAL_EVENT = "inject-vhal-event";
-        private static final String COMMAND_INJECT_ERROR_EVENT = "inject-error-event";
-        private static final String COMMAND_ENABLE_UXR = "enable-uxr";
-        private static final String COMMAND_GARAGE_MODE = "garage-mode";
-        private static final String COMMAND_GET_DO_ACTIVITIES = "get-do-activities";
-        private static final String COMMAND_GET_CARPROPERTYCONFIG = "get-carpropertyconfig";
-        private static final String COMMAND_GET_PROPERTY_VALUE = "get-property-value";
-        private static final String COMMAND_PROJECTION_AP_TETHERING = "projection-tethering";
-        private static final String COMMAND_PROJECTION_UI_MODE = "projection-ui-mode";
-        private static final String COMMAND_RESUME = "resume";
-        private static final String COMMAND_SUSPEND = "suspend";
-        private static final String COMMAND_ENABLE_TRUSTED_DEVICE = "enable-trusted-device";
-        private static final String COMMAND_REMOVE_TRUSTED_DEVICES = "remove-trusted-devices";
-        private static final String COMMAND_SET_UID_TO_ZONE = "set-zoneid-for-uid";
-        private static final String COMMAND_START_FIXED_ACTIVITY_MODE = "start-fixed-activity-mode";
-        private static final String COMMAND_STOP_FIXED_ACTIVITY_MODE = "stop-fixed-activity-mode";
-        private static final String COMMAND_ENABLE_FEATURE = "enable-feature";
-        private static final String COMMAND_DISABLE_FEATURE = "disable-feature";
-        private static final String COMMAND_INJECT_KEY = "inject-key";
-        private static final String COMMAND_GET_INITIAL_USER_INFO = "get-initial-user-info";
-
-        private static final String PARAM_DAY_MODE = "day";
-        private static final String PARAM_NIGHT_MODE = "night";
-        private static final String PARAM_SENSOR_MODE = "sensor";
-        private static final String PARAM_VEHICLE_PROPERTY_AREA_GLOBAL = "0";
-        private static final String PARAM_ON_MODE = "on";
-        private static final String PARAM_OFF_MODE = "off";
-        private static final String PARAM_QUERY_MODE = "query";
-        private static final String PARAM_REBOOT = "reboot";
-
-        private static final int RESULT_OK = 0;
-        private static final int RESULT_ERROR = -1; // Arbitrary value, any non-0 is fine
-
-
-        @Override
-        public int onCommand(String cmd) {
-            if (cmd == null) {
-                onHelp();
-                return RESULT_ERROR;
-            }
-            ArrayList<String> argsList = new ArrayList<>();
-            argsList.add(cmd);
-            String arg = null;
-            do {
-                arg = getNextArg();
-                if (arg != null) {
-                    argsList.add(arg);
-                }
-            } while (arg != null);
-            String[] args = new String[argsList.size()];
-            argsList.toArray(args);
-            return exec(args, getOutPrintWriter());
-        }
-
-        @Override
-        public void onHelp() {
-            dumpHelp(getOutPrintWriter());
-        }
-
-        private void dumpHelp(PrintWriter pw) {
-            pw.println("Car service commands:");
-            pw.println("\t-h");
-            pw.println("\t  Print this help text.");
-            pw.println("\tday-night-mode [day|night|sensor]");
-            pw.println("\t  Force into day/night mode or restore to auto.");
-            pw.println("\tinject-vhal-event property [zone] data(can be comma separated list)");
-            pw.println("\t  Inject a vehicle property for testing.");
-            pw.println("\tinject-error-event property zone errorCode");
-            pw.println("\t  Inject an error event from VHAL for testing.");
-            pw.println("\tenable-uxr true|false");
-            pw.println("\t  Enable/Disable UX restrictions and App blocking.");
-            pw.println("\tgarage-mode [on|off|query|reboot]");
-            pw.println("\t  Force into or out of garage mode, or check status.");
-            pw.println("\t  With 'reboot', enter garage mode, then reboot when it completes.");
-            pw.println("\tget-do-activities pkgname");
-            pw.println("\t  Get Distraction Optimized activities in given package.");
-            pw.println("\tget-carpropertyconfig [propertyId]");
-            pw.println("\t  Get a CarPropertyConfig by Id in Hex or list all CarPropertyConfigs");
-            pw.println("\tget-property-value [propertyId] [areaId]");
-            pw.println("\t  Get a vehicle property value by property id in Hex and areaId");
-            pw.println("\t  or list all property values for all areaId");
-            pw.println("\tsuspend");
-            pw.println("\t  Suspend the system to Deep Sleep.");
-            pw.println("\tresume");
-            pw.println("\t  Wake the system up after a 'suspend.'");
-            pw.println("\tenable-trusted-device true|false");
-            pw.println("\t  Enable/Disable Trusted device feature.");
-            pw.println("\tremove-trusted-devices");
-            pw.println("\t  Remove all trusted devices for the current foreground user.");
-            pw.println("\tprojection-tethering [true|false]");
-            pw.println("\t  Whether tethering should be used when creating access point for"
-                    + " wireless projection");
-            pw.println("\t--metrics");
-            pw.println("\t  When used with dumpsys, only metrics will be in the dumpsys output.");
-            pw.println("\tset-zoneid-for-uid [zoneid] [uid]");
-            pw.println("\t  Maps the audio zoneid to uid.");
-            pw.println("\tstart-fixed-activity displayId packageName activityName");
-            pw.println("\t  Start an Activity the specified display as fixed mode");
-            pw.println("\tstop-fixed-mode displayId");
-            pw.println("\t  Stop fixed Activity mode for the given display. "
-                    + "The Activity will not be restarted upon crash.");
-            pw.println("\tenable-feature featureName");
-            pw.println("\t  Enable the requested feature. Change will happen after reboot.");
-            pw.println("\t  This requires root/su.");
-            pw.println("\tdisable-feature featureName");
-            pw.println("\t  Disable the requested feature. Change will happen after reboot");
-            pw.println("\t  This requires root/su.");
-            pw.println("\tinject-key [-d display] [-t down_delay_ms] key_code");
-            pw.println("\t  inject key down / up event to car service");
-            pw.println("\t  display: 0 for main, 1 for cluster. If not specified, it will be 0.");
-            pw.println("\t  down_delay_ms: delay from down to up key event. If not specified,");
-            pw.println("\t                 it will be 0");
-            pw.println("\t  key_code: int key code defined in android KeyEvent");
-            pw.printf("\t%s <REQ_TYPE> [--timeout TIMEOUT_MS]\n", COMMAND_GET_INITIAL_USER_INFO);
-            pw.println("\t  Calls the Vehicle HAL to get the initial boot info, passing the given");
-            pw.println("\t  REQ_TYPE (which could be either FIRST_BOOT, FIRST_BOOT_AFTER_OTA, ");
-            pw.println("\t  COLD_BOOT, RESUME, or any numeric value that would be passed 'as-is')");
-            pw.println("\t  and an optional TIMEOUT_MS to wait for the HAL response (if not set,");
-            pw.println("\t  it will use a  default value).");
-        }
-
-        private int dumpInvalidArguments(PrintWriter pw) {
-            pw.println("Incorrect number of arguments.");
-            dumpHelp(pw);
-            return RESULT_ERROR;
-        }
-
-        private String runSetZoneIdForUid(String zoneString, String uidString) {
-            int uid = Integer.parseInt(uidString);
-            int zoneId = Integer.parseInt(zoneString);
-            if (!ArrayUtils.contains(mCarAudioService.getAudioZoneIds(), zoneId)) {
-                return  "zoneid " + zoneId + " not found";
-            }
-            mCarAudioService.setZoneIdForUid(zoneId, uid);
-            return null;
-        }
-
-        public int exec(String[] args, PrintWriter writer) {
-            String arg = args[0];
-            switch (arg) {
-                case COMMAND_HELP:
-                    dumpHelp(writer);
-                    break;
-                case COMMAND_DAY_NIGHT_MODE: {
-                    String value = args.length < 2 ? "" : args[1];
-                    forceDayNightMode(value, writer);
-                    break;
-                }
-                case COMMAND_GARAGE_MODE: {
-                    String value = args.length < 2 ? "" : args[1];
-                    forceGarageMode(value, writer);
-                    break;
-                }
-                case COMMAND_INJECT_VHAL_EVENT:
-                    String zone = PARAM_VEHICLE_PROPERTY_AREA_GLOBAL;
-                    String data;
-                    if (args.length != 3 && args.length != 4) {
-                        return dumpInvalidArguments(writer);
-                    } else if (args.length == 4) {
-                        // Zoned
-                        zone = args[2];
-                        data = args[3];
-                    } else {
-                        // Global
-                        data = args[2];
-                    }
-                    injectVhalEvent(args[1], zone, data, false, writer);
-                    break;
-                case COMMAND_INJECT_ERROR_EVENT:
-                    if (args.length != 4) {
-                        return dumpInvalidArguments(writer);
-                    }
-                    String errorAreaId = args[2];
-                    String errorCode = args[3];
-                    injectVhalEvent(args[1], errorAreaId, errorCode, true, writer);
-                    break;
-                case COMMAND_ENABLE_UXR:
-                    if (args.length != 2) {
-                        return dumpInvalidArguments(writer);
-                    }
-                    boolean enableBlocking = Boolean.valueOf(args[1]);
-                    if (mCarPackageManagerService != null) {
-                        mCarPackageManagerService.setEnableActivityBlocking(enableBlocking);
-                    }
-                    break;
-                case COMMAND_GET_DO_ACTIVITIES:
-                    if (args.length != 2) {
-                        return dumpInvalidArguments(writer);
-                    }
-                    String pkgName = args[1].toLowerCase();
-                    if (mCarPackageManagerService != null) {
-                        String[] doActivities =
-                                mCarPackageManagerService.getDistractionOptimizedActivities(
-                                        pkgName);
-                        if (doActivities != null) {
-                            writer.println("DO Activities for " + pkgName);
-                            for (String a : doActivities) {
-                                writer.println(a);
-                            }
-                        } else {
-                            writer.println("No DO Activities for " + pkgName);
-                        }
-                    }
-                    break;
-                case COMMAND_GET_CARPROPERTYCONFIG:
-                    String propertyId = args.length < 2 ? "" : args[1];
-                    mHal.dumpPropertyConfigs(writer, propertyId);
-                    break;
-                case COMMAND_GET_PROPERTY_VALUE:
-                    String propId = args.length < 2 ? "" : args[1];
-                    String areaId = args.length < 3 ? "" : args[2];
-                    mHal.dumpPropertyValueByCommend(writer, propId, areaId);
-                    break;
-                case COMMAND_PROJECTION_UI_MODE:
-                    if (args.length != 2) {
-                        return dumpInvalidArguments(writer);
-                    }
-                    mCarProjectionService.setUiMode(Integer.valueOf(args[1]));
-                    break;
-                case COMMAND_PROJECTION_AP_TETHERING:
-                    if (args.length != 2) {
-                        return dumpInvalidArguments(writer);
-                    }
-                    mCarProjectionService.setAccessPointTethering(Boolean.valueOf(args[1]));
-                    break;
-                case COMMAND_RESUME:
-                    mCarPowerManagementService.forceSimulatedResume();
-                    writer.println("Resume: Simulating resuming from Deep Sleep");
-                    break;
-                case COMMAND_SUSPEND:
-                    mCarPowerManagementService.forceSuspendAndMaybeReboot(false);
-                    writer.println("Resume: Simulating powering down to Deep Sleep");
-                    break;
-                case COMMAND_ENABLE_TRUSTED_DEVICE:
-                    if (args.length != 2) {
-                        return dumpInvalidArguments(writer);
-                    }
-                    mCarTrustedDeviceService.getCarTrustAgentEnrollmentService()
-                            .setTrustedDeviceEnrollmentEnabled(Boolean.valueOf(args[1]));
-                    mCarTrustedDeviceService.getCarTrustAgentUnlockService()
-                            .setTrustedDeviceUnlockEnabled(Boolean.valueOf(args[1]));
-                    break;
-                case COMMAND_REMOVE_TRUSTED_DEVICES:
-                    mCarTrustedDeviceService.getCarTrustAgentEnrollmentService()
-                            .removeAllTrustedDevices(ActivityManager.getCurrentUser());
-                    break;
-                case COMMAND_SET_UID_TO_ZONE:
-                    if (args.length != 3) {
-                        return dumpInvalidArguments(writer);
-                    }
-                    String results = runSetZoneIdForUid(args[1], args[2]);
-                    if (results != null) {
-                        writer.println(results);
-                        dumpHelp(writer);
-                    }
-                    break;
-                case COMMAND_START_FIXED_ACTIVITY_MODE:
-                    handleStartFixedActivity(args, writer);
-                    break;
-                case COMMAND_STOP_FIXED_ACTIVITY_MODE:
-                    handleStopFixedMode(args, writer);
-                    break;
-                case COMMAND_ENABLE_FEATURE:
-                    if (args.length != 2) {
-                        return dumpInvalidArguments(writer);
-                    }
-                    handleEnableDisableFeature(args, writer, /* enable= */ true);
-                    break;
-                case COMMAND_DISABLE_FEATURE:
-                    if (args.length != 2) {
-                        return dumpInvalidArguments(writer);
-                    }
-                    handleEnableDisableFeature(args, writer, /* enable= */ false);
-                    break;
-                case COMMAND_INJECT_KEY:
-                    if (args.length < 2) {
-                        return dumpInvalidArguments(writer);
-                    }
-                    handleInjectKey(args, writer);
-                    break;
-                case COMMAND_GET_INITIAL_USER_INFO:
-                    handleGetInitialUserInfo(args, writer);
-                    break;
-                default:
-                    writer.println("Unknown command: \"" + arg + "\"");
-                    dumpHelp(writer);
-                    return RESULT_ERROR;
-            }
-            return RESULT_OK;
-        }
-
-        private void handleStartFixedActivity(String[] args, PrintWriter writer) {
-            if (args.length != 4) {
-                writer.println("Incorrect number of arguments");
-                dumpHelp(writer);
-                return;
-            }
-            int displayId;
-            try {
-                displayId = Integer.parseInt(args[1]);
-            } catch (NumberFormatException e) {
-                writer.println("Wrong display id:" + args[1]);
-                return;
-            }
-            String packageName = args[2];
-            String activityName = args[3];
-            Intent intent = new Intent();
-            intent.setComponent(new ComponentName(packageName, activityName));
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-            ActivityOptions options = ActivityOptions.makeBasic();
-            options.setLaunchDisplayId(displayId);
-            if (!mFixedActivityService.startFixedActivityModeForDisplayAndUser(intent, options,
-                    displayId, ActivityManager.getCurrentUser())) {
-                writer.println("Failed to start");
-                return;
-            }
-            writer.println("Succeeded");
-        }
-
-        private void handleStopFixedMode(String[] args, PrintWriter writer) {
-            if (args.length != 2) {
-                writer.println("Incorrect number of arguments");
-                dumpHelp(writer);
-                return;
-            }
-            int displayId;
-            try {
-                displayId = Integer.parseInt(args[1]);
-            } catch (NumberFormatException e) {
-                writer.println("Wrong display id:" + args[1]);
-                return;
-            }
-            mFixedActivityService.stopFixedActivityMode(displayId);
-        }
-
-        private void handleEnableDisableFeature(String[] args, PrintWriter writer, boolean enable) {
-            if (Binder.getCallingUid() != Process.ROOT_UID) {
-                writer.println("Only allowed to root/su");
-                return;
-            }
-            String featureName = args[1];
-            long id = Binder.clearCallingIdentity();
-            // no permission check here
-            int r;
-            if (enable) {
-                r = mFeatureController.enableFeature(featureName);
-            } else {
-                r = mFeatureController.disableFeature(featureName);
-            }
-            switch (r) {
-                case Car.FEATURE_REQUEST_SUCCESS:
-                    if (enable) {
-                        writer.println("Enabled feature:" + featureName);
-                    } else {
-                        writer.println("Disabled feature:" + featureName);
-                    }
-                    break;
-                case Car.FEATURE_REQUEST_ALREADY_IN_THE_STATE:
-                    if (enable) {
-                        writer.println("Already enabled:" + featureName);
-                    } else {
-                        writer.println("Already disabled:" + featureName);
-                    }
-                    break;
-                case Car.FEATURE_REQUEST_MANDATORY:
-                    writer.println("Cannot change mandatory feature:" + featureName);
-                    break;
-                case Car.FEATURE_REQUEST_NOT_EXISTING:
-                    writer.println("Non-existing feature:" + featureName);
-                    break;
-                default:
-                    writer.println("Unknown error:" + r);
-                    break;
-            }
-            Binder.restoreCallingIdentity(id);
-        }
-
-        private void handleInjectKey(String[] args, PrintWriter writer) {
-            int i = 1; // 0 is command itself
-            int display = InputHalService.DISPLAY_MAIN;
-            int delayMs = 0;
-            int keyCode = KeyEvent.KEYCODE_UNKNOWN;
-            try {
-                while (i < args.length) {
-                    switch (args[i]) {
-                        case "-d":
-                            i++;
-                            display = Integer.parseInt(args[i]);
-                            break;
-                        case "-t":
-                            i++;
-                            delayMs = Integer.parseInt(args[i]);
-                            break;
-                        default:
-                            if (keyCode != KeyEvent.KEYCODE_UNKNOWN) {
-                                throw new IllegalArgumentException("key_code already set:"
-                                        + keyCode);
-                            }
-                            keyCode = Integer.parseInt(args[i]);
-                    }
-                    i++;
-                }
-            } catch (Exception e) {
-                writer.println("Invalid args:" + e);
-                dumpHelp(writer);
-                return;
-            }
-            if (keyCode == KeyEvent.KEYCODE_UNKNOWN) {
-                writer.println("Missing key code or invalid keycode");
-                dumpHelp(writer);
-                return;
-            }
-            if (display != InputHalService.DISPLAY_MAIN
-                    && display != InputHalService.DISPLAY_INSTRUMENT_CLUSTER) {
-                writer.println("Invalid display:" + display);
-                dumpHelp(writer);
-                return;
-            }
-            if (delayMs < 0) {
-                writer.println("Invalid delay:" + delayMs);
-                dumpHelp(writer);
-                return;
-            }
-            KeyEvent keyDown = new KeyEvent(KeyEvent.ACTION_DOWN, keyCode);
-            mCarInputService.onKeyEvent(keyDown, display);
-            SystemClock.sleep(delayMs);
-            KeyEvent keyUp = new KeyEvent(KeyEvent.ACTION_UP, keyCode);
-            mCarInputService.onKeyEvent(keyUp, display);
-            writer.println("Succeeded");
-        }
-
-        private void handleGetInitialUserInfo(String[] args, PrintWriter writer) {
-            if (args.length < 2) {
-                writer.println("Insufficient number of args");
-                return;
-            }
-
-            // Gets the request type
-            String typeArg = args[1];
-            int requestType = UserHalHelper.parseInitialUserInfoRequestType(typeArg);
-
-            int timeout = 1_000;
-            for (int i = 2; i < args.length; i++) {
-                String arg = args[i];
-                switch (arg) {
-                    case "--timeout":
-                        timeout = Integer.parseInt(args[++i]);
-                        break;
-                    default:
-                        writer.println("Invalid option at index " + i + ": " + arg);
-                        return;
-
-                }
-            }
-
-            Log.d(TAG, "handleGetInitialUserInfo(): type=" + requestType + " (" + typeArg
-                    + "), timeout=" + timeout);
-
-            UserHalService userHal = mHal.getUserHal();
-            // TODO(b/150413515): use UserHalHelper to populate it with current users
-            UsersInfo usersInfo = new UsersInfo();
-            CountDownLatch latch = new CountDownLatch(1);
-
-            userHal.getInitialUserInfo(requestType, timeout, usersInfo, (status, resp) -> {
-                try {
-                    Log.d(TAG, "GetUserInfoResponse: status=" + status + ", resp=" + resp);
-                    writer.printf("Status: %s\n", UserHalHelper.halCallbackStatusToString(status));
-                    if (status != HalCallback.STATUS_OK) {
-                        return;
-                    }
-                    writer.printf("Request id: %d\n", resp.requestId);
-                    writer.printf("Action: ");
-                    switch (resp.action) {
-                        case InitialUserInfoResponseAction.DEFAULT:
-                            writer.println("default");
-                            break;
-                        case InitialUserInfoResponseAction.SWITCH:
-                            writer.printf("switch to user %d\n", resp.userToSwitchOrCreate.userId);
-                            break;
-                        case InitialUserInfoResponseAction.CREATE:
-                            writer.printf("create user: name=%s, flags=%d\n", resp.userNameToCreate,
-                                    resp.userToSwitchOrCreate.flags);
-                            break;
-                        default:
-                            writer.printf("unknown (%d)\n", resp.action);
-                            break;
-                    }
-                } finally {
-                    latch.countDown();
-                }
-            });
-
-            try {
-                if (!latch.await(timeout, TimeUnit.MILLISECONDS)) {
-                    writer.printf("HAL didn't respond in %dms\n", timeout);
-                }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                writer.println("Interrupted waiting for HAL");
-            }
-            return;
-        }
-
-        private void forceDayNightMode(String arg, PrintWriter writer) {
-            int mode;
-            switch (arg) {
-                case PARAM_DAY_MODE:
-                    mode = CarNightService.FORCED_DAY_MODE;
-                    break;
-                case PARAM_NIGHT_MODE:
-                    mode = CarNightService.FORCED_NIGHT_MODE;
-                    break;
-                case PARAM_SENSOR_MODE:
-                    mode = CarNightService.FORCED_SENSOR_MODE;
-                    break;
-                default:
-                    writer.println("Unknown value. Valid argument: " + PARAM_DAY_MODE + "|"
-                            + PARAM_NIGHT_MODE + "|" + PARAM_SENSOR_MODE);
-                    return;
-            }
-            int current = mCarNightService.forceDayNightMode(mode);
-            String currentMode = null;
-            switch (current) {
-                case UiModeManager.MODE_NIGHT_AUTO:
-                    currentMode = PARAM_SENSOR_MODE;
-                    break;
-                case UiModeManager.MODE_NIGHT_YES:
-                    currentMode = PARAM_NIGHT_MODE;
-                    break;
-                case UiModeManager.MODE_NIGHT_NO:
-                    currentMode = PARAM_DAY_MODE;
-                    break;
-            }
-            writer.println("DayNightMode changed to: " + currentMode);
-        }
-
-        private void forceGarageMode(String arg, PrintWriter writer) {
-            switch (arg) {
-                case PARAM_ON_MODE:
-                    mSystemInterface.setDisplayState(false);
-                    mGarageModeService.forceStartGarageMode();
-                    writer.println("Garage mode: " + mGarageModeService.isGarageModeActive());
-                    break;
-                case PARAM_OFF_MODE:
-                    mSystemInterface.setDisplayState(true);
-                    mGarageModeService.stopAndResetGarageMode();
-                    writer.println("Garage mode: " + mGarageModeService.isGarageModeActive());
-                    break;
-                case PARAM_QUERY_MODE:
-                    mGarageModeService.dump(writer);
-                    break;
-                case PARAM_REBOOT:
-                    mCarPowerManagementService.forceSuspendAndMaybeReboot(true);
-                    writer.println("Entering Garage Mode. Will reboot when it completes.");
-                    break;
-                default:
-                    writer.println("Unknown value. Valid argument: " + PARAM_ON_MODE + "|"
-                            + PARAM_OFF_MODE + "|" + PARAM_QUERY_MODE + "|" + PARAM_REBOOT);
-            }
-        }
-
-        /**
-         * Inject a fake  VHAL event
-         *
-         * @param property the Vehicle property Id as defined in the HAL
-         * @param zone     Zone that this event services
-         * @param isErrorEvent indicates the type of event
-         * @param value    Data value of the event
-         * @param writer   PrintWriter
-         */
-        private void injectVhalEvent(String property, String zone, String value,
-                boolean isErrorEvent, PrintWriter writer) {
-            if (zone != null && (zone.equalsIgnoreCase(PARAM_VEHICLE_PROPERTY_AREA_GLOBAL))) {
-                if (!isPropertyAreaTypeGlobal(property)) {
-                    writer.println("Property area type inconsistent with given zone");
-                    return;
-                }
-            }
-            try {
-                if (isErrorEvent) {
-                    mHal.injectOnPropertySetError(property, zone, value);
-                } else {
-                    mHal.injectVhalEvent(property, zone, value);
-                }
-            } catch (NumberFormatException e) {
-                writer.println("Invalid property Id zone Id or value" + e);
-                dumpHelp(writer);
-            }
-        }
-
-        // Check if the given property is global
-        private boolean isPropertyAreaTypeGlobal(String property) {
-            if (property == null) {
-                return false;
-            }
-            return (Integer.decode(property) & VehicleArea.MASK) == VehicleArea.GLOBAL;
-        }
     }
 }

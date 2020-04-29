@@ -18,9 +18,8 @@ package android.automotive.watchdog;
 
 import android.automotive.watchdog.ICarWatchdogClient;
 import android.automotive.watchdog.ICarWatchdogMonitor;
-import android.automotive.watchdog.PowerCycle;
+import android.automotive.watchdog.StateType;
 import android.automotive.watchdog.TimeoutLength;
-import android.automotive.watchdog.UserState;
 
 /**
  * ICarWatchdog is an interface implemented by watchdog server.
@@ -116,19 +115,16 @@ interface ICarWatchdog {
   void tellDumpFinished(in ICarWatchdogMonitor monitor, in int pid);
 
   /**
-   * Notify watchdog server that the device goes into a new power cycle.
+   * Notify watchdog server about the system state change.
    * The caller should have system UID.
    *
-   * @param cycle                Power cycle of the device.
-   */
-  void notifyPowerCycleChange(in PowerCycle cycle);
-
-  /**
-   * Notify watchdog server that Android user is started or stopped.
-   * The caller should have system UID.
+   * @param type                 One of the change types defined in the StateType enum.
+   * @param arg1                 First state change information for the specified type.
+   * @param arg2                 Second state change information for the specified type.
    *
-   * @param userId               Android user id.
-   * @param state                User state.
+   * When type is POWER_CYCLE, arg1 should contain the current power cycle of the device.
+   * When type is USER_STATE, arg1 and arg2 should contain the user ID and the current user state.
+   * When type is BOOT_PHASE, arg1 should contain the current boot phase.
    */
-  void notifyUserStateChange(in int userId, in UserState state);
+  void notifySystemStateChange(in StateType type, in int arg1, in int arg2);
 }

@@ -49,7 +49,7 @@
     <uses-permission android:name="android.car.permission.CONTROL_CAR_CLIMATE"/>
     <uses-permission android:name="android.car.permission.READ_CAR_STEERING"/>
     <uses-permission android:name="android.car.permission.STORAGE_MONITORING"/>
-    <uses-permission android:name="android.car.permission.VEHICLE_DYNAMICS_STATE"/>
+    <uses-permission android:name="android.car.permission.CAR_DYNAMICS_STATE"/>
     <!-- use for CarServiceTest -->
     <uses-permission android:name="android.car.permission.VMS_PUBLISHER"/>
     <!-- use for CarServiceTest -->
@@ -82,6 +82,8 @@
     <uses-permission android:name="android.permission.MODIFY_PHONE_STATE"/>
     <uses-permission android:name="android.permission.OVERRIDE_WIFI_CONFIG"/>
     <uses-permission android:name="android.permission.PROVIDE_TRUST_AGENT"/>
+    <!-- Allow query of any normal app on the device in R+ -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
     <uses-permission android:name="android.permission.READ_LOGS"/>
     <uses-permission android:name="android.permission.READ_SMS"/>
     <uses-permission android:name="android.permission.REAL_GET_TASKS"/>

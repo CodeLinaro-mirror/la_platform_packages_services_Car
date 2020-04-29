@@ -148,6 +148,20 @@ bool VirtualCamera::deliverFrame(const BufferDesc_1_1& bufDesc) {
             frame_1_0.bufferId  = bufDesc.bufferId;
 
             mStream->deliverFrame(frame_1_0);
+        } else if (!mCaptureThread.joinable()) {
+            // A capture thread does not run only it failed to create a
+            // timeline.
+            if (mFramesHeld.size() > 0 && mStream_1_1 != nullptr) {
+                // Pass this buffer through to our client
+                hardware::hidl_vec<BufferDesc_1_1> frames;
+                frames.resize(1);
+                auto pHwCamera = mHalCamera.begin()->second.promote();
+                if (pHwCamera != nullptr) {
+                    frames[0] = mFramesHeld[mHalCamera.begin()->first].back();
+                }
+
+                mStream_1_1->deliverFrame_1_1(frames);
+            }
         }
 
         return true;
@@ -321,7 +335,11 @@ Return<EvsResult> VirtualCamera::startVideoStream(const ::android::sp<IEvsCamera
 
     // Start a thread that waits on the fence and forwards collected frames
     // to the v1.1 client.
-    if (mStream_1_1 != nullptr) {
+    // If the system does not support a sw sync, EVS does not support a logical
+    // camera device and, therefore, VirtualCamera will subscribe only to a
+    // single hw camera.
+    auto pHwCamera = mHalCamera.begin()->second.promote();
+    if (mStream_1_1 != nullptr && pHwCamera != nullptr && pHwCamera->isSyncSupported()) {
         mCaptureThread = std::thread([this]() {
             // TODO(b/145466570): With a proper camera hang handler, we may want
             // to reduce an amount of timeout.
@@ -846,6 +864,34 @@ Return<void> VirtualCamera::getExtendedInfo_1_1(uint32_t opaqueIdentifier,
     return Void();
 }
 
+
+Return<void>
+VirtualCamera::importExternalBuffers(const hidl_vec<BufferDesc_1_1>& buffers,
+                                     importExternalBuffers_cb _hidl_cb) {
+    if (mHalCamera.size() > 1) {
+        LOG(WARNING) << "Logical camera device does not support " << __FUNCTION__;
+        _hidl_cb(EvsResult::UNDERLYING_SERVICE_ERROR, 0);
+        return {};
+    }
+
+    auto pHwCamera = mHalCamera.begin()->second.promote();
+    if (pHwCamera == nullptr) {
+        LOG(WARNING) << "Camera device " << mHalCamera.begin()->first << " is not alive.";
+        _hidl_cb(EvsResult::UNDERLYING_SERVICE_ERROR, 0);
+        return {};
+    }
+
+    int delta = 0;
+    if (!pHwCamera->changeFramesInFlight(buffers, &delta)) {
+        LOG(ERROR) << "Failed to add extenral capture buffers.";
+        _hidl_cb(EvsResult::UNDERLYING_SERVICE_ERROR, 0);
+        return {};
+    }
+
+    mFramesAllowed += delta;
+    _hidl_cb(EvsResult::OK, delta);
+    return {};
+}
 
 } // namespace implementation
 } // namespace V1_1

@@ -56,23 +56,14 @@ interface ICar {
      */
     oneway void getInitialUserInfo(int requestType, int timeoutMs, in IBinder receiver) = 3;
 
-    // TODO(b/145689885): 2 method below are deprecated (onUserLifecycleEvent covers then) so
-    // they're have higher codes to make it easier to add other
-
     /**
-     * Notify lock / unlock of user id to car service.
-     * unlocked: 1 if unlocked 0 otherwise.
-     */
-    oneway void setUserLockStatus(in int userId, in int unlocked) = 9;
-
-    /**
-     * Notify of user switching.  This is called only for foreground users when the user is starting
-     * to boot.
+     * Sets the initial user after boot.
      *
-     * @param userId - user id of new user.
+     * @param userId - the id of the initial user
      */
-    oneway void onSwitchUser(in int userId) = 10;
-
+    // TODO(b/150413515): should pass UserInfo instead, but for some reason passing the whole
+    // UserInfo through a raw binder transaction on CarServiceHelper is not working.
+    oneway void setInitialUser(int userId) = 4;
 
     // Methods below start on 11 to make it easier to add more oneway methods above
     IBinder getCarService(in String serviceName) = 11;

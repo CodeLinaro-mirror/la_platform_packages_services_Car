@@ -86,11 +86,7 @@ public class CarTest {
         }
 
         @Override
-        public void setUserLockStatus(int userHandle, int unlocked) {
-        }
-
-        @Override
-        public void onSwitchUser(int userHandle) {
+        public void setInitialUser(int userId) {
         }
 
         @Override

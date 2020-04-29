@@ -177,12 +177,7 @@ public class FakeCar {
         }
 
         @Override
-        public void setUserLockStatus(int userHandle, int unlocked) throws RemoteException {
-            // Nothing to do yet.
-        }
-
-        @Override
-        public void onSwitchUser(int userHandle) throws RemoteException {
+        public void setInitialUser(int userId) {
             // Nothing to do yet.
         }
 

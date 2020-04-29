@@ -19,15 +19,20 @@ package android.car.userlib;
 import android.Manifest;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
+import android.annotation.UserIdInt;
 import android.app.ActivityManager;
+import android.app.IActivityManager;
 import android.content.Context;
 import android.content.pm.UserInfo;
 import android.graphics.Bitmap;
+import android.os.RemoteException;
+import android.os.Trace;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.provider.Settings;
 import android.sysprop.CarProperties;
 import android.util.Log;
+import android.util.TimingsTraceLog;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.UserIcons;
@@ -79,7 +84,6 @@ public final class CarUserManagerHelper {
     private final Context mContext;
     private final UserManager mUserManager;
     private final ActivityManager mActivityManager;
-    private final TestableFrameworkWrapper mTestableFrameworkWrapper;
 
     /**
      * Initializes with a default name for admin users.
@@ -87,33 +91,20 @@ public final class CarUserManagerHelper {
      * @param context Application Context
      */
     public CarUserManagerHelper(Context context) {
-        this(context, new TestableFrameworkWrapper());
-    }
-
-    @VisibleForTesting
-    CarUserManagerHelper(Context context, TestableFrameworkWrapper testableFrameworkWrapper) {
         mContext = context.getApplicationContext();
         mUserManager = (UserManager) mContext.getSystemService(Context.USER_SERVICE);
         mActivityManager = (ActivityManager) mContext.getSystemService(Context.ACTIVITY_SERVICE);
-        mTestableFrameworkWrapper = testableFrameworkWrapper;
     }
 
     /**
-     * Set last active user.
-     *
-     * @param userId last active user id.
+     * Sets the last active user.
      */
-    public void setLastActiveUser(int userId) {
+    public void setLastActiveUser(@UserIdInt int userId) {
         Settings.Global.putInt(
                 mContext.getContentResolver(), Settings.Global.LAST_ACTIVE_USER_ID, userId);
     }
 
-    /**
-     * Get user id for the last active user.
-     *
-     * @return user id of the last active user.
-     */
-    public int getLastActiveUser() {
+    private int getLastActiveUser() {
         return Settings.Global.getInt(
             mContext.getContentResolver(), Settings.Global.LAST_ACTIVE_USER_ID,
             /* default user id= */ UserHandle.USER_SYSTEM);
@@ -134,19 +125,35 @@ public final class CarUserManagerHelper {
      * If any step fails to retrieve the stored id or the retrieved id does not exist on device,
      * then it will move onto the next step.
      *
-     * @return user id of the initial user to boot into on the device.
+     * @return user id of the initial user to boot into on the device, or
+     * {@link UserHandle#USER_NULL} if there is no user available.
      */
     public int getInitialUser() {
+        return getInitialUser(/* usesOverrideUserIdProperty= */ true);
+    }
+
+    // TODO(b/151758646): get rid of the public one / add javadoc here once not used externally
+    // anymore
+    @VisibleForTesting
+    int getInitialUser(boolean usesOverrideUserIdProperty) {
+
         List<Integer> allUsers = userInfoListToUserIdList(getAllUsers());
 
-        int bootUserOverride = mTestableFrameworkWrapper.getBootUserOverrideId(BOOT_USER_NOT_FOUND);
+        if (allUsers.isEmpty()) {
+            return UserHandle.USER_NULL;
+        }
 
-        // If an override user is present and a real user, return it
-        if (bootUserOverride != BOOT_USER_NOT_FOUND
-                && allUsers.contains(bootUserOverride)) {
-            Log.i(TAG, "Boot user id override found for initial user, user id: "
-                    + bootUserOverride);
-            return bootUserOverride;
+        if (usesOverrideUserIdProperty) {
+            int bootUserOverride = CarProperties.boot_user_override_id()
+                    .orElse(BOOT_USER_NOT_FOUND);
+
+            // If an override user is present and a real user, return it
+            if (bootUserOverride != BOOT_USER_NOT_FOUND
+                    && allUsers.contains(bootUserOverride)) {
+                Log.i(TAG, "Boot user id override found for initial user, user id: "
+                        + bootUserOverride);
+                return bootUserOverride;
+            }
         }
 
         // If the last active user is not the SYSTEM user and is a real user, return it
@@ -165,7 +172,21 @@ public final class CarUserManagerHelper {
         return returnId;
     }
 
-    private List<Integer> userInfoListToUserIdList(List<UserInfo> allUsers) {
+    /**
+     * Checks whether the device has an initial user that can be switched to.
+     */
+    public boolean hasInitialUser() {
+        List<UserInfo> allUsers = getAllUsers();
+        for (int i = 0; i < allUsers.size(); i++) {
+            UserInfo user = allUsers.get(i);
+            if (user.isManagedProfile()) continue;
+
+            return true;
+        }
+        return false;
+    }
+
+    private static List<Integer> userInfoListToUserIdList(List<UserInfo> allUsers) {
         ArrayList<Integer> list = new ArrayList<>(allUsers.size());
         for (UserInfo userInfo : allUsers) {
             list.add(userInfo.id);
@@ -291,6 +312,54 @@ public final class CarUserManagerHelper {
             return false;
         }
         return mActivityManager.switchUser(id);
+    }
+
+    /**
+     * Streamlined version of {@code switchUser()} - should only be called on boot / resume.
+     */
+    public boolean startForegroundUser(@UserIdInt int userId) {
+        if (userId == UserHandle.USER_SYSTEM && UserManager.isHeadlessSystemUserMode()) {
+            // System User doesn't associate with real person, can not be switched to.
+            return false;
+        }
+        try {
+            return ActivityManager.getService().startUserInForegroundWithListener(userId, null);
+        } catch (RemoteException e) {
+            Log.w(TAG, "failed to start user " + userId, e);
+            return false;
+        }
+    }
+
+    @VisibleForTesting
+    void unlockSystemUser() {
+        Log.i(TAG, "unlocking system user");
+        IActivityManager am = ActivityManager.getService();
+
+        TimingsTraceLog t = new TimingsTraceLog(TAG, Trace.TRACE_TAG_SYSTEM_SERVER);
+        t.traceBegin("UnlockSystemUser");
+        try {
+            // This is for force changing state into RUNNING_LOCKED. Otherwise unlock does not
+            // update the state and USER_SYSTEM unlock happens twice.
+            t.traceBegin("am.startUser");
+            boolean started = am.startUserInBackground(UserHandle.USER_SYSTEM);
+            t.traceEnd();
+            if (!started) {
+                Log.w(TAG, "could not restart system user in foreground; trying unlock instead");
+                t.traceBegin("am.unlockUser");
+                boolean unlocked = am.unlockUser(UserHandle.USER_SYSTEM, /* token= */ null,
+                        /* secret= */ null, /* listener= */ null);
+                t.traceEnd();
+                if (!unlocked) {
+                    Log.w(TAG, "could not unlock system user neither");
+                    return;
+                }
+            }
+        } catch (RemoteException e) {
+            // should not happen for local call.
+            Log.wtf("RemoteException from AMS", e);
+        } finally {
+            t.traceEnd();
+        }
     }
 
     /**

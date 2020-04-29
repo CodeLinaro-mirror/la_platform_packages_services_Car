@@ -16,15 +16,20 @@
 
 package com.android.car.pm;
 
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.doReturn;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.mockitoSession;
 
 import static com.google.common.truth.Truth.assertThat;
+import static com.google.common.truth.Truth.assertWithMessage;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;
+import static org.junit.Assert.fail;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.when;
 
+import android.annotation.UserIdInt;
 import android.app.ActivityManager;
+import android.car.user.CarUserManager;
+import android.car.user.CarUserManager.UserLifecycleEvent;
 import android.car.userlib.CarUserManagerHelper;
 import android.content.ComponentName;
 import android.content.Context;
@@ -37,6 +42,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.UserHandle;
 import android.os.UserManager;
+import android.util.Log;
 
 import androidx.test.core.app.ApplicationProvider;
 
@@ -44,30 +50,36 @@ import com.android.car.CarLocalServices;
 import com.android.car.hal.UserHalService;
 import com.android.car.user.CarUserService;
 import com.android.internal.annotations.GuardedBy;
+import com.android.internal.util.Preconditions;
 
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
-import org.junit.runner.RunWith;
+import org.mockito.ArgumentMatcher;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.MockitoSession;
-import org.mockito.junit.MockitoJUnitRunner;
 import org.mockito.quality.Strictness;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
-@RunWith(MockitoJUnitRunner.class)
-public class VendorServiceControllerTest {
-    private VendorServiceController mController;
-    private static final Long DEFAULT_TIMEOUT_MS = 1000L;
+public final class VendorServiceControllerTest {
+    private static final String TAG = VendorServiceControllerTest.class.getSimpleName();
+
+    // TODO(b/152069895): decrease value once refactored. In fact, it should not even use
+    // runWithScissors(), but only rely on CountdownLatches
+    private static final long DEFAULT_TIMEOUT_MS = 5_000;
 
     private static final int FG_USER_ID = 13;
 
-    private static final String SERVICE_BIND_ALL_USERS_ASAP = "com.andorid.car/.AllUsersService";
-    private static final String SERVICE_BIND_FG_USER_UNLOCKED = "com.andorid.car/.ForegroundUsers";
-    private static final String SERVICE_START_SYSTEM_UNLOCKED = "com.andorid.car/.SystemUser";
+    private static final String SERVICE_BIND_ALL_USERS_ASAP = "com.android.car/.AllUsersService";
+    private static final String SERVICE_BIND_FG_USER_UNLOCKED = "com.android.car/.ForegroundUsers";
+    private static final String SERVICE_START_SYSTEM_UNLOCKED = "com.android.car/.SystemUser";
 
     private static final String[] FAKE_SERVICES = new String[] {
             SERVICE_BIND_ALL_USERS_ASAP + "#bind=bind,user=all,trigger=asap",
@@ -88,6 +100,7 @@ public class VendorServiceControllerTest {
     private ServiceLauncherContext mContext;
     private CarUserManagerHelper mUserManagerHelper;
     private CarUserService mCarUserService;
+    private VendorServiceController mController;
 
     @Before
     public void setUp() {
@@ -107,10 +120,6 @@ public class VendorServiceControllerTest {
         UserInfo persistentFgUser = new UserInfo(FG_USER_ID, "persistent user", 0);
         when(mUserManager.getUserInfo(FG_USER_ID)).thenReturn(persistentFgUser);
 
-        // Let's pretend system is not fully loaded, current user is system.
-        when(ActivityManager.getCurrentUser()).thenReturn(UserHandle.USER_SYSTEM);
-        // ..and by default all users are locked
-        mockUserUnlock(UserHandle.USER_ALL, false /* unlock */);
         when(mResources.getStringArray(com.android.car.R.array.config_earlyStartupServices))
                 .thenReturn(FAKE_SERVICES);
     }
@@ -132,74 +141,92 @@ public class VendorServiceControllerTest {
     }
 
     @Test
-    public void init_systemUser() throws InterruptedException {
+    public void init_systemUser() throws Exception {
+        mContext.expectServices(SERVICE_BIND_ALL_USERS_ASAP);
+        mockGetCurrentUser(UserHandle.USER_SYSTEM);
         mController.init();
-
-        Thread.sleep(100);
 
         mContext.assertBoundService(SERVICE_BIND_ALL_USERS_ASAP);
         mContext.verifyNoMoreServiceLaunches();
     }
 
     @Test
-    public void systemUserUnlocked() {
+    public void systemUserUnlocked() throws Exception {
+        // TODO(b/152069895): must refactor this test because
+        // SERVICE_BIND_ALL_USERS_ASAP is bound twice (users 0 and 10)
+        mContext.expectServices(SERVICE_START_SYSTEM_UNLOCKED);
         mController.init();
         mContext.reset();
 
         // Unlock system user
-        mockUserUnlock(UserHandle.USER_SYSTEM, true);
-        runOnMainThreadAndWaitForIdle(() -> mCarUserService.setUserLockStatus(
-                UserHandle.USER_SYSTEM, true));
+        mockUserUnlock(UserHandle.USER_SYSTEM);
+        runOnMainThreadAndWaitForIdle(() -> mCarUserService.onUserLifecycleEvent(
+                new UserLifecycleEvent(CarUserManager.USER_LIFECYCLE_EVENT_TYPE_UNLOCKING,
+                        UserHandle.USER_SYSTEM)));
 
         mContext.assertStartedService(SERVICE_START_SYSTEM_UNLOCKED);
         mContext.verifyNoMoreServiceLaunches();
     }
 
     @Test
-    public void fgUserUnlocked() {
+    public void fgUserUnlocked() throws Exception {
+        mContext.expectServices(SERVICE_BIND_ALL_USERS_ASAP, SERVICE_BIND_FG_USER_UNLOCKED);
+        mockGetCurrentUser(UserHandle.USER_SYSTEM);
         mController.init();
         mContext.reset();
 
         // Switch user to foreground
+        mockGetCurrentUser(FG_USER_ID);
         when(ActivityManager.getCurrentUser()).thenReturn(FG_USER_ID);
-        runOnMainThreadAndWaitForIdle(() -> mCarUserService.onSwitchUser(FG_USER_ID));
+        runOnMainThreadAndWaitForIdle(() -> mCarUserService.onUserLifecycleEvent(
+                new UserLifecycleEvent(CarUserManager.USER_LIFECYCLE_EVENT_TYPE_SWITCHING,
+                        FG_USER_ID)));
 
         // Expect only services with ASAP trigger to be started
         mContext.assertBoundService(SERVICE_BIND_ALL_USERS_ASAP);
         mContext.verifyNoMoreServiceLaunches();
 
         // Unlock foreground user
-        mockUserUnlock(FG_USER_ID, true);
-        runOnMainThreadAndWaitForIdle(() -> mCarUserService.setUserLockStatus(FG_USER_ID, true));
+        mockUserUnlock(FG_USER_ID);
+        runOnMainThreadAndWaitForIdle(() -> mCarUserService.onUserLifecycleEvent(
+                new UserLifecycleEvent(CarUserManager.USER_LIFECYCLE_EVENT_TYPE_UNLOCKING,
+                        FG_USER_ID)));
 
         mContext.assertBoundService(SERVICE_BIND_FG_USER_UNLOCKED);
         mContext.verifyNoMoreServiceLaunches();
     }
 
-    private void runOnMainThreadAndWaitForIdle(Runnable r) {
+    private static void runOnMainThreadAndWaitForIdle(Runnable r) {
         Handler.getMain().runWithScissors(r, DEFAULT_TIMEOUT_MS);
         // Run empty runnable to make sure that all posted handlers are done.
         Handler.getMain().runWithScissors(() -> { }, DEFAULT_TIMEOUT_MS);
     }
 
-    private void mockUserUnlock(int userId, boolean unlock) {
-        if (UserHandle.USER_ALL == userId) {
-            when(mUserManager.isUserUnlockingOrUnlocked(any())).thenReturn(unlock);
-            when(mUserManager.isUserUnlockingOrUnlocked(anyInt())).thenReturn(unlock);
-        } else {
-            when(mUserManager.isUserUnlockingOrUnlocked(userId)).thenReturn(unlock);
-            when(mUserManager.isUserUnlockingOrUnlocked(UserHandle.of(userId))).thenReturn(unlock);
-        }
+    private void mockUserUnlock(@UserIdInt int userId) {
+        when(mUserManager.isUserUnlockingOrUnlocked(isUser(userId))).thenReturn(true);
+        when(mUserManager.isUserUnlockingOrUnlocked(userId)).thenReturn(true);
+    }
+
+    private static void assertHasService(List<Intent> intents, String service, String action) {
+        assertWithMessage("Service %s not %s yet", service, action).that(intents)
+                .hasSize(1);
+        assertWithMessage("Wrong component %s", action).that(intents.get(0).getComponent())
+                .isEqualTo(ComponentName.unflattenFromString(service));
+        intents.clear();
     }
 
     /** Overrides framework behavior to succeed on binding/starting processes. */
-    public class ServiceLauncherContext extends ContextWrapper {
+    public final class ServiceLauncherContext extends ContextWrapper {
+
         private final Object mLock = new Object();
 
         @GuardedBy("mLock")
         private List<Intent> mBoundIntents = new ArrayList<>();
         @GuardedBy("mLock")
         private List<Intent> mStartedServicesIntents = new ArrayList<>();
+
+        private final Map<String, CountDownLatch> mBoundLatches = new HashMap<>();
+        private final Map<String, CountDownLatch> mStartedLatches = new HashMap<>();
 
         ServiceLauncherContext(Context base) {
             super(base);
@@ -210,6 +237,7 @@ public class VendorServiceControllerTest {
             synchronized (mLock) {
                 mStartedServicesIntents.add(service);
             }
+            countdown(mStartedLatches, service, "started");
             return service.getComponent();
         }
 
@@ -220,6 +248,7 @@ public class VendorServiceControllerTest {
                 mBoundIntents.add(service);
             }
             conn.onServiceConnected(service.getComponent(), null);
+            countdown(mBoundLatches, service, "bound");
             return true;
         }
 
@@ -234,21 +263,50 @@ public class VendorServiceControllerTest {
             return mResources;
         }
 
-        void assertBoundService(String service) {
-            synchronized (mLock) {
-                assertThat(mBoundIntents).hasSize(1);
-                assertThat(mBoundIntents.get(0).getComponent())
-                        .isEqualTo(ComponentName.unflattenFromString(service));
-                mBoundIntents.clear();
+        private void expectServices(String... services) {
+            for (String service : services) {
+                Log.v(TAG, "expecting service " + service);
+                mBoundLatches.put(service, new CountDownLatch(1));
+                mStartedLatches.put(service, new CountDownLatch(1));
             }
         }
 
-        void assertStartedService(String service) {
+        private void await(Map<String, CountDownLatch> latches, String service, String method)
+                throws InterruptedException {
+            CountDownLatch latch = latches.get(service);
+            Preconditions.checkArgument(latch != null,
+                    "no latch set for %s - did you call expectBoundServices()?", service);
+            Log.d(TAG, "waiting " + DEFAULT_TIMEOUT_MS + "ms for " + method);
+            if (!latch.await(DEFAULT_TIMEOUT_MS, TimeUnit.MICROSECONDS)) {
+                String errorMessage = method + " not called in " + DEFAULT_TIMEOUT_MS + "ms";
+                Log.e(TAG, errorMessage);
+                fail(errorMessage);
+            }
+            Log.v(TAG, "latch called fine");
+        }
+
+        private void countdown(Map<String, CountDownLatch> latches, Intent service, String action) {
+            String serviceName = service.getComponent().flattenToShortString();
+            CountDownLatch latch = latches.get(serviceName);
+            if (latch == null) {
+                Log.e(TAG, "unexpected service (" + serviceName + ") " + action + ". Expected only "
+                        + mBoundLatches.keySet());
+            } else {
+                latch.countDown();
+            }
+        }
+
+        void assertBoundService(String service) throws InterruptedException {
+            await(mBoundLatches, service, "bind()");
             synchronized (mLock) {
-                assertThat(mStartedServicesIntents).hasSize(1);
-                assertThat(mStartedServicesIntents.get(0).getComponent())
-                        .isEqualTo(ComponentName.unflattenFromString(service));
-                mStartedServicesIntents.clear();
+                assertHasService(mBoundIntents, service, "bound");
+            }
+        }
+
+        void assertStartedService(String service) throws InterruptedException {
+            await(mStartedLatches, service, "start()");
+            synchronized (mLock) {
+                assertHasService(mStartedServicesIntents, service, "started");
             }
         }
 
@@ -264,16 +322,42 @@ public class VendorServiceControllerTest {
                 mStartedServicesIntents.clear();
                 mBoundIntents.clear();
             }
-
         }
 
         @Override
         public Object getSystemService(String name) {
             if (Context.USER_SERVICE.equals(name)) {
                 return mUserManager;
-            } else {
-                return super.getSystemService(name);
             }
+            return super.getSystemService(name);
+        }
+    }
+
+    // TODO(b/149099817): move stuff below to common code
+
+    // TODO(b/152069895): should not need to mock it, but rather rely on userId passed on event
+    private static void mockGetCurrentUser(@UserIdInt int userId) {
+        doReturn(userId).when(() -> ActivityManager.getCurrentUser());
+    }
+
+    /**
+     * Custom Mockito matcher to check if a {@link UserHandle} has the given {@code userId}.
+     */
+    public static UserHandle isUser(@UserIdInt int userId) {
+        return argThat(new UserHandleMatcher(userId));
+    }
+
+    private static class UserHandleMatcher implements ArgumentMatcher<UserHandle> {
+
+        public final @UserIdInt int userId;
+
+        private UserHandleMatcher(@UserIdInt int userId) {
+            this.userId = userId;
+        }
+
+        @Override
+        public boolean matches(UserHandle argument) {
+            return argument != null && argument.getIdentifier() == userId;
         }
     }
 }

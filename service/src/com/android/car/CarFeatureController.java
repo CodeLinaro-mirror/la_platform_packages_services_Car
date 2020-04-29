@@ -26,8 +26,10 @@ import android.os.Handler;
 import android.os.HandlerThread;
 import android.util.AtomicFile;
 import android.util.Log;
+import android.util.Pair;
 
 import com.android.internal.annotations.GuardedBy;
+import com.android.internal.annotations.VisibleForTesting;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
@@ -42,6 +44,7 @@ import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -90,9 +93,15 @@ public final class CarFeatureController implements CarServiceBase {
             Car.DIAGNOSTIC_SERVICE,
             Car.OCCUPANT_AWARENESS_SERVICE,
             Car.STORAGE_MONITORING_SERVICE,
-            Car.VEHICLE_MAP_SERVICE,
-            Car.VMS_SUBSCRIBER_SERVICE
+            Car.VEHICLE_MAP_SERVICE
     ));
+
+    // Features that depend on another feature being enabled (i.e. legacy API support).
+    // For example, VMS_SUBSCRIBER_SERVICE will be enabled if VEHICLE_MAP_SERVICE is enabled
+    // and disabled if VEHICLE_MAP_SERVICE is disabled.
+    private static final List<Pair<String, String>> SUPPORT_FEATURES = Arrays.asList(
+            Pair.create(Car.VEHICLE_MAP_SERVICE, Car.VMS_SUBSCRIBER_SERVICE)
+    );
 
     private static final String FEATURE_CONFIG_FILE_NAME = "car_feature_config.txt";
 
@@ -125,16 +134,14 @@ public final class CarFeatureController implements CarServiceBase {
     @GuardedBy("mLock")
     private HashSet<String> mAvailableExperimentalFeatures = new HashSet<>();
 
-    private final Runnable mDefaultConfigWriter = () -> {
-        persistToFeatureConfigFile();
-    };
-
     public CarFeatureController(@NonNull Context context,
             @NonNull String[] defaultEnabledFeaturesFromConfig,
             @NonNull String[] disabledFeaturesFromVhal, @NonNull File dataDir) {
         mContext = context;
         mDefaultEnabledFeaturesFromConfig = Arrays.asList(defaultEnabledFeaturesFromConfig);
         mDisabledFeaturesFromVhal = Arrays.asList(disabledFeaturesFromVhal);
+        Log.i(TAG, "mDefaultEnabledFeaturesFromConfig:" + mDefaultEnabledFeaturesFromConfig
+                + ",mDisabledFeaturesFromVhal:" + mDisabledFeaturesFromVhal);
         mEnabledFeatures = new HashSet<>(MANDATORY_FEATURES);
         mFeatureConfigFile = new AtomicFile(new File(dataDir, FEATURE_CONFIG_FILE_NAME), TAG);
         boolean shouldLoadDefaultConfig = !mFeatureConfigFile.exists();
@@ -156,6 +163,12 @@ public final class CarFeatureController implements CarServiceBase {
             parseDefaultConfig();
             dispatchDefaultConfigUpdate();
         }
+        addSupportFeatures(mEnabledFeatures);
+    }
+
+    @VisibleForTesting
+    List<String> getDisabledFeaturesFromVhal() {
+        return mDisabledFeaturesFromVhal;
     }
 
     @Override
@@ -370,7 +383,7 @@ public final class CarFeatureController implements CarServiceBase {
                     if (line.startsWith(CONFIG_FILE_LAST_LINE_MARKER)) {
                         int numberOfFeatures;
                         try {
-                            numberOfFeatures = Integer.valueOf(line.substring(
+                            numberOfFeatures = Integer.parseInt(line.substring(
                                     CONFIG_FILE_LAST_LINE_MARKER.length()));
                         } catch (NumberFormatException e) {
                             handleCorruptConfigFileLocked(
@@ -400,8 +413,8 @@ public final class CarFeatureController implements CarServiceBase {
         return true;
     }
 
-    private void persistToFeatureConfigFile() {
-        HashSet<String> features = new HashSet<>(mEnabledFeatures);
+    private void persistToFeatureConfigFile(HashSet<String> features) {
+        removeSupportFeatures(features);
         synchronized (mLock) {
             features.removeAll(mPendingDisabledFeatures);
             features.addAll(mPendingEnabledFeatures);
@@ -434,8 +447,9 @@ public final class CarFeatureController implements CarServiceBase {
     }
 
     private void dispatchDefaultConfigUpdate() {
-        mHandler.removeCallbacks(mDefaultConfigWriter);
-        mHandler.post(mDefaultConfigWriter);
+        mHandler.removeCallbacksAndMessages(null);
+        HashSet<String> featuresToPersist = new HashSet<>(mEnabledFeatures);
+        mHandler.post(() -> persistToFeatureConfigFile(featuresToPersist));
     }
 
     private void parseDefaultConfig() {
@@ -451,5 +465,17 @@ public final class CarFeatureController implements CarServiceBase {
             mEnabledFeatures.add(feature);
         }
         Log.i(TAG, "Loaded default features:" + mEnabledFeatures);
+    }
+
+    private static void addSupportFeatures(Collection<String> features) {
+        SUPPORT_FEATURES.stream()
+                .filter(entry -> features.contains(entry.first))
+                .forEach(entry -> features.add(entry.second));
+    }
+
+    private static void removeSupportFeatures(Collection<String> features) {
+        SUPPORT_FEATURES.stream()
+                .filter(entry -> features.contains(entry.first))
+                .forEach(entry -> features.remove(entry.second));
     }
 }

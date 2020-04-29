@@ -26,6 +26,7 @@
 #include <utils/Errors.h>
 #include <utils/Looper.h>
 #include <utils/Mutex.h>
+#include <utils/String16.h>
 #include <utils/StrongPointer.h>
 #include <utils/Vector.h>
 
@@ -43,21 +44,6 @@
 namespace android {
 namespace automotive {
 namespace watchdog {
-
-// TODO(b/148489461): Replace the below constants (except kCustomCollection* and
-// kMinCollectionInterval constants) with read-only persistent properties.
-const int kTopNStatsPerCategory = 5;
-const std::chrono::nanoseconds kBoottimeCollectionInterval = 1s;
-const std::chrono::nanoseconds kPeriodicCollectionInterval = 10s;
-// Number of periodic collection perf data snapshots to cache in memory.
-const size_t kPeriodicCollectionBufferSize = 180;
-
-// Minimum collection interval between subsequent collections.
-const std::chrono::nanoseconds kMinCollectionInterval = 1s;
-
-// Default values for the custom collection interval and max_duration.
-const std::chrono::nanoseconds kCustomCollectionInterval = 10s;
-const std::chrono::nanoseconds kCustomCollectionDuration = 30min;
 
 constexpr const char* kStartCustomCollectionFlag = "--start_io";
 constexpr const char* kEndCustomCollectionFlag = "--stop_io";
@@ -162,7 +148,6 @@ static inline std::string toString(CollectionEvent event) {
 class IoPerfCollection : public MessageHandler {
 public:
     IoPerfCollection() :
-          mTopNStatsPerCategory(kTopNStatsPerCategory),
           mHandlerLooper(new LooperWrapper()),
           mBoottimeCollection({}),
           mPeriodicCollection({}),
@@ -185,14 +170,14 @@ public:
 
     // Ends the boot-time collection, caches boot-time perf records, sends message to the looper to
     // begin the periodic collection, and returns immediately.
-    android::base::Result<void> onBootFinished();
+    virtual android::base::Result<void> onBootFinished();
 
     // Depending the arguments, it either:
     // 1. Generates a dump from the boot-time and periodic collection events.
     // 2. Starts custom collection.
     // 3. Ends custom collection and dumps the collected data.
     // Returns any error observed during the dump generation.
-    status_t dump(int fd, const Vector<String16>& args);
+    virtual android::base::Result<void> dump(int fd, const Vector<String16>& args);
 
 private:
     // Generates a dump from the boot-time and periodic collection events.
@@ -207,9 +192,8 @@ private:
     // |maxDuration| is reached, the looper receives a message to end the collection, discards the
     // collected data, and starts the periodic collection. This is needed to ensure the custom
     // collection doesn't run forever when a subsequent |endCustomCollection| call is not received.
-    android::base::Result<void> startCustomCollection(
-            std::chrono::nanoseconds interval = kCustomCollectionInterval,
-            std::chrono::nanoseconds maxDuration = kCustomCollectionDuration);
+    android::base::Result<void> startCustomCollection(std::chrono::nanoseconds interval,
+                                                      std::chrono::nanoseconds maxDuration);
 
     // Ends the current custom collection, generates a dump, sends message to looper to start the
     // periodic collection, and returns immediately. Returns an error when there is no custom
@@ -243,7 +227,11 @@ private:
     // Retrieves package manager from the default service manager.
     android::base::Result<void> retrievePackageManager();
 
+    // Top N per-UID stats per category.
     int mTopNStatsPerCategory;
+
+    // Top N per-process stats per subcategory.
+    int mTopNStatsPerSubcategory;
 
     // Thread on which the actual collection happens.
     std::thread mCollectionThread;
@@ -259,7 +247,7 @@ private:
     CollectionInfo mBoottimeCollection GUARDED_BY(mMutex);
 
     // Info for the |CollectionEvent::PERIODIC| collection event. The cache size is limited by
-    // |kPeriodicCollectionBufferSize|.
+    // |ro.carwatchdog.periodic_collection_buffer_size|.
     CollectionInfo mPeriodicCollection GUARDED_BY(mMutex);
 
     // Info for the |CollectionEvent::CUSTOM| collection event. The info is cleared at the end of

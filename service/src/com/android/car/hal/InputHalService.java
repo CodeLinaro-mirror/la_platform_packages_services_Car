@@ -39,7 +39,6 @@ import com.android.internal.annotations.VisibleForTesting;
 
 import java.io.PrintWriter;
 import java.util.Collection;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.function.LongSupplier;
@@ -48,6 +47,11 @@ public class InputHalService extends HalServiceBase {
 
     public static final int DISPLAY_MAIN = VehicleDisplay.MAIN;
     public static final int DISPLAY_INSTRUMENT_CLUSTER = VehicleDisplay.INSTRUMENT_CLUSTER;
+
+    private static final int[] SUPPORTED_PROPERTIES = new int[] {
+            HW_KEY_INPUT,
+            HW_ROTARY_INPUT
+    };
 
     private final VehicleHal mHal;
 
@@ -146,26 +150,26 @@ public class InputHalService extends HalServiceBase {
     }
 
     @Override
-    public Collection<VehiclePropConfig> takeSupportedProperties(
-            Collection<VehiclePropConfig> allProperties) {
-        List<VehiclePropConfig> supported = new LinkedList<>();
-        for (VehiclePropConfig property : allProperties) {
+    public int[] getAllSupportedProperties() {
+        return SUPPORTED_PROPERTIES;
+    }
+
+    @Override
+    public void takeProperties(Collection<VehiclePropConfig> properties) {
+        for (VehiclePropConfig property : properties) {
             switch (property.prop) {
                 case HW_KEY_INPUT:
-                    supported.add(property);
                     synchronized (mLock) {
                         mKeyInputSupported = true;
                     }
                     break;
                 case HW_ROTARY_INPUT:
-                    supported.add(property);
                     synchronized (mLock) {
                         mRotaryInputSupported = true;
                     }
                     break;
             }
         }
-        return supported;
     }
 
     @Override
@@ -264,8 +268,8 @@ public class InputHalService extends HalServiceBase {
 
         long[] timestamps = new long[detentCount];
         // vhal returns elapsed time while rotary event is using uptime to be in line with KeyEvent.
-        long uptimeToelapsedTimeDelta = CarServiceUtils.getUptimeToElapsedTimeDeltaInMillis();
-        long startUptime = TimeUnit.NANOSECONDS.toMillis(timestamp) - uptimeToelapsedTimeDelta;
+        long uptimeToElapsedTimeDelta = CarServiceUtils.getUptimeToElapsedTimeDeltaInMillis();
+        long startUptime = TimeUnit.NANOSECONDS.toMillis(timestamp) - uptimeToElapsedTimeDelta;
         timestamps[0] = startUptime;
         for (int i = 0; i < timestamps.length - 1; i++) {
             timestamps[i + 1] = timestamps[i] + TimeUnit.NANOSECONDS.toMillis(

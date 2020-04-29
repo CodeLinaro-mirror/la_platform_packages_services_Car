@@ -16,6 +16,7 @@
 
 #include "IoPerfCollection.h"
 
+#include <WatchdogProperties.sysprop.h>
 #include <android-base/file.h>
 #include <cutils/android_filesystem_config.h>
 
@@ -172,6 +173,25 @@ TEST(IoPerfCollectionTest, TestCollectionStartAndTerminate) {
     ASSERT_TRUE(collector->mCollectionThread.joinable()) << "Collection thread not created";
     ASSERT_FALSE(collector->start())
             << "No error returned when collector was started more than once";
+    ASSERT_TRUE(sysprop::topNStatsPerCategory().has_value());
+    ASSERT_EQ(collector->mTopNStatsPerCategory, sysprop::topNStatsPerCategory().value());
+
+    ASSERT_TRUE(sysprop::boottimeCollectionInterval().has_value());
+    ASSERT_EQ(std::chrono::duration_cast<std::chrono::seconds>(
+                      collector->mBoottimeCollection.interval)
+                      .count(),
+              sysprop::boottimeCollectionInterval().value());
+
+    ASSERT_TRUE(sysprop::topNStatsPerCategory().has_value());
+    ASSERT_EQ(std::chrono::duration_cast<std::chrono::seconds>(
+                      collector->mPeriodicCollection.interval)
+                      .count(),
+              sysprop::periodicCollectionInterval().value());
+
+    ASSERT_TRUE(sysprop::periodicCollectionBufferSize().has_value());
+    ASSERT_EQ(collector->mPeriodicCollection.maxCacheSize,
+              sysprop::periodicCollectionBufferSize().value());
+
     collector->terminate();
     ASSERT_FALSE(collector->mCollectionThread.joinable()) << "Collection thread did not terminate";
 }
@@ -452,8 +472,8 @@ TEST(IoPerfCollectionTest, TestValidCollectionSequence) {
     args.push_back(String16(kMaxDurationFlag));
     args.push_back(String16(std::to_string(kTestCustomCollectionDuration.count()).c_str()));
 
-    status_t retCode = collector->dump(-1, args);
-    ASSERT_EQ(retCode, OK) << "Failed to start custom collection";
+    ret = collector->dump(-1, args);
+    ASSERT_TRUE(ret.ok()) << ret.error().message();
     uidIoStatsStub->push({
             {1009, {.uid = 1009, .ios = {0, 13000, 0, 15000, 0, 100}}},
     });
@@ -587,8 +607,8 @@ TEST(IoPerfCollectionTest, TestValidCollectionSequence) {
     args.clear();
     args.push_back(String16(kEndCustomCollectionFlag));
     TemporaryFile customDump;
-    retCode = collector->dump(customDump.fd, args);
-    ASSERT_EQ(retCode, OK) << "Failed to end custom collection and generate a dump";
+    ret = collector->dump(customDump.fd, args);
+    ASSERT_TRUE(ret.ok()) << ret.error().message();
     ret = looperStub->pollCache();
     ASSERT_TRUE(ret) << ret.error().message();
 
@@ -669,8 +689,8 @@ TEST(IoPerfCollectionTest, TestValidCollectionSequence) {
             << "Boot-time records not persisted until collector termination";
 
     TemporaryFile bugreportDump;
-    ASSERT_EQ(collector->dump(bugreportDump.fd, {}), OK)
-            << "Failed to generate a dump for bugreport";
+    ret = collector->dump(bugreportDump.fd, {});
+    ASSERT_TRUE(ret.ok()) << ret.error().message();
 
     collector->terminate();
 }
@@ -761,8 +781,8 @@ TEST(IoPerfCollectionTest, TestCustomCollectionTerminatesAfterMaxDuration) {
     args.push_back(String16(kMaxDurationFlag));
     args.push_back(String16(std::to_string(kTestCustomCollectionDuration.count()).c_str()));
 
-    status_t retCode = collector->dump(-1, args);
-    ASSERT_EQ(retCode, OK) << "Failed to start custom collection";
+    ret = collector->dump(-1, args);
+    ASSERT_TRUE(ret.ok()) << ret.error().message();
     // Maximum custom collection iterations during |kTestCustomCollectionDuration|.
     int maxIterations =
             static_cast<int>(kTestCustomCollectionDuration.count() / kTestCustomInterval.count());
@@ -952,33 +972,6 @@ TEST(IoPerfCollectionTest, TestUidIOStatsLessThanTopNStatsLimit) {
         << "Collected data doesn't match.\nExpected:\n"
         << toString(expectedUidIoPerfData) << "\nActual:\n"
         << toString(actualUidIoPerfData);
-}
-
-TEST(IoPerfCollectionTest, TestProcUidIoStatsContentsFromDevice) {
-    // TODO(b/148486340): Enable the test after appropriate SELinux privileges are available to
-    // read the proc file.
-    /*IoPerfCollection collector;
-    ASSERT_TRUE(collector.mUidIoStats->enabled()) << "/proc/uid_io/stats file is inaccessible";
-
-    struct UidIoPerfData perfData = {};
-    const auto& ret = collector.collectUidIoPerfDataLocked(&perfData);
-    ASSERT_RESULT_OK(ret);
-    // The below check should pass because the /proc/uid_io/stats file should have at least
-    // |mTopNStatsPerCategory| entries since bootup.
-    EXPECT_EQ(perfData.topNReads.size(), collector.mTopNStatsPerCategory);
-    EXPECT_EQ(perfData.topNWrites.size(), collector.mTopNStatsPerCategory);
-
-    int numMappedAppUid = 0;
-    int numMappedSysUid = 0;
-    for (const auto& it : collector.mUidToPackageNameMapping)  {
-        if (it.first >= AID_APP_START) {
-            ++numMappedAppUid;
-        } else {
-            ++numMappedSysUid;
-        }
-    }
-    EXPECT_GT(numMappedAppUid, 0);
-    EXPECT_GT(numMappedSysUid, 0);*/
 }
 
 TEST(IoPerfCollectionTest, TestValidProcStatFile) {
@@ -1225,6 +1218,7 @@ TEST(IoPerfCollectionTest, TestProcPidContentsLessThanTopNStatsLimit) {
     ASSERT_TRUE(ret) << "Failed to populate proc pid dir: " << ret.error();
 
     IoPerfCollection collector;
+    collector.mTopNStatsPerCategory = 5;
     collector.mProcPidStat = new ProcPidStat(prodDir.path);
     struct ProcessIoPerfData actualProcessIoPerfData = {};
     ret = collector.collectProcessIoPerfDataLocked(&actualProcessIoPerfData);
@@ -1242,29 +1236,29 @@ TEST(IoPerfCollectionTest, TestHandlesInvalidDumpArguments) {
     args.push_back(String16(kStartCustomCollectionFlag));
     args.push_back(String16("Invalid flag"));
     args.push_back(String16("Invalid value"));
-    ASSERT_NE(collector->dump(-1, args), OK);
+    ASSERT_FALSE(collector->dump(-1, args).ok());
 
     args.clear();
     args.push_back(String16(kStartCustomCollectionFlag));
     args.push_back(String16(kIntervalFlag));
     args.push_back(String16("Invalid interval"));
-    ASSERT_NE(collector->dump(-1, args), OK);
+    ASSERT_FALSE(collector->dump(-1, args).ok());
 
     args.clear();
     args.push_back(String16(kStartCustomCollectionFlag));
     args.push_back(String16(kMaxDurationFlag));
     args.push_back(String16("Invalid duration"));
-    ASSERT_NE(collector->dump(-1, args), OK);
+    ASSERT_FALSE(collector->dump(-1, args).ok());
 
     args.clear();
     args.push_back(String16(kEndCustomCollectionFlag));
     args.push_back(String16(kMaxDurationFlag));
     args.push_back(String16(std::to_string(kTestCustomCollectionDuration.count()).c_str()));
-    ASSERT_NE(collector->dump(-1, args), OK);
+    ASSERT_FALSE(collector->dump(-1, args).ok());
 
     args.clear();
     args.push_back(String16("Invalid flag"));
-    ASSERT_NE(collector->dump(-1, args), OK);
+    ASSERT_FALSE(collector->dump(-1, args).ok());
     collector->terminate();
 }
 
