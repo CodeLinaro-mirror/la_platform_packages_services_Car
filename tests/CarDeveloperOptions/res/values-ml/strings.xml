@@ -128,7 +128,7 @@
     <string name="bluetooth_notif_title" msgid="5090288898529286011">"ജോടിയാക്കൽ അഭ്യർത്ഥന"</string>
     <string name="bluetooth_notif_message" msgid="6612367890895077938">"<xliff:g id="DEVICE_NAME">%1$s</xliff:g> എന്ന ഉപകരണവുമായി ജോടിയാക്കാൻ ടാപ്പുചെയ്യുക."</string>
     <string name="bluetooth_show_received_files" msgid="5060846395852236652">"സ്വീകരിച്ച ഫയലുകള്‍"</string>
-    <string name="bluetooth_show_files_received_via_bluetooth" msgid="1699095577431389560">"Bluetooth വഴി ഫയലുകൾ സ്വീകരിച്ചു"</string>
+    <string name="bluetooth_show_files_received_via_bluetooth" msgid="1699095577431389560">"Bluetooth വഴി സ്വീകരിച്ച ഫയലുകൾ"</string>
     <string name="device_picker" msgid="8345264486071697705">"ബ്ലൂടൂത്തുപകരണം തിരഞ്ഞെടുക്കൂ"</string>
     <string name="bluetooth_ask_enablement" msgid="8716802066127746062">"Bluetooth ഓണാക്കാൻ <xliff:g id="APP_NAME">%1$s</xliff:g> താൽപ്പര്യപ്പെടുന്നു"</string>
     <string name="bluetooth_ask_disablement" msgid="7125319551097350783">"Bluetooth ഓഫാക്കാൻ <xliff:g id="APP_NAME">%1$s</xliff:g> താൽപ്പര്യപ്പെടുന്നു"</string>
@@ -481,8 +481,7 @@
     <string name="face_lock_screen_setup_skip_dialog_text" product="tablet" msgid="2998863111689476550">"നിങ്ങളുടെ ടാബ്‌ലെറ്റ് സ്‌ക്രീൻ ലോക്ക് ഓപ്‌ഷൻ ഉപയോഗിച്ച്  പരിരക്ഷിച്ചാൽ, അത് നഷ്‌ടപ്പെട്ടാലോ മോഷ്‌ടിക്കപ്പെട്ടാലോ മറ്റാർക്കും ഉപയോഗിക്കാനാവില്ല. മുഖം പരിശോധിച്ചുറപ്പിക്കൽ സജ്ജീകരിക്കാൻ നിങ്ങൾക്ക് സ്‌ക്രീൻ ലോക്ക് ഓപ്‌ഷനും ആവശ്യമാണ്. \'റദ്ദാക്കുക\' ടാപ്പ് ചെയ്‌ത ശേഷം പിൻ സജ്ജീകരിക്കുകയോ മറ്റൊരു സ്‌ക്രീൻ ലോക്ക് ഓപ്‌ഷൻ തിരഞ്ഞെടുക്കുകയോ ചെയ്യുക."</string>
     <string name="face_lock_screen_setup_skip_dialog_text" product="device" msgid="6780557259734235952">"നിങ്ങളുടെ ഉപകരണം സ്‌ക്രീൻ ലോക്ക് ഓപ്‌ഷൻ ഉപയോഗിച്ച് പരിരക്ഷിച്ചാൽ, അത് നഷ്‌ടപ്പെട്ടാലോ മോഷ്‌ടിക്കപ്പെട്ടാലോ മറ്റാർക്കും ഉപയോഗിക്കാനാവില്ല. മുഖം പരിശോധിച്ചുറപ്പിക്കൽ സജ്ജീകരിക്കാൻ നിങ്ങൾക്ക് സ്‌ക്രീൻ ലോക്ക് ഓപ്‌ഷനും ആവശ്യമാണ്. \'റദ്ദാക്കുക\' ടാപ്പ് ചെയ്‌ത ശേഷം പിൻ സജ്ജീകരിക്കുകയോ മറ്റൊരു സ്‌ക്രീൻ ലോക്ക് ഓപ്‌ഷൻ തിരഞ്ഞെടുക്കുകയോ ചെയ്യുക."</string>
     <string name="face_lock_screen_setup_skip_dialog_text" product="default" msgid="8541640018478926775">"നിങ്ങളുടെ ഫോൺ സ്‌ക്രീൻ ലോക്ക് ഓപ്‌ഷൻ ഉപയോഗിച്ച്  പരിരക്ഷിച്ചാൽ, അത് നഷ്‌ടപ്പെട്ടാലോ മോഷ്‌ടിക്കപ്പെട്ടാലോ മറ്റാർക്കും ഉപയോഗിക്കാനാവില്ല. മുഖം പരിശോധിച്ചുറപ്പിക്കൽ സജ്ജീകരിക്കാൻ നിങ്ങൾക്ക് സ്‌ക്രീൻ ലോക്ക് ഓപ്‌ഷനും ആവശ്യമാണ്. \'റദ്ദാക്കുക\' ടാപ്പ് ചെയ്‌ത ശേഷം പിൻ സജ്ജീകരിക്കുകയോ മറ്റൊരു സ്‌ക്രീൻ ലോക്ക് ഓപ്‌ഷൻ തിരഞ്ഞെടുക്കുകയോ ചെയ്യുക."</string>
-    <!-- no translation found for lock_screen_pin_skip_title (8217519439213393785) -->
-    <skip />
+    <string name="lock_screen_pin_skip_title" msgid="8217519439213393785">"പിൻ സജ്ജീകരണം ഒഴിവാക്കണോ?"</string>
     <string name="lock_screen_password_skip_title" msgid="3725788215672959827">"പാസ്‌വേഡ് സജ്ജീകരണം ഒഴിവാക്കണോ?"</string>
     <string name="lock_screen_pattern_skip_title" msgid="4237030500353932005">"പാറ്റേൺ സജ്ജീകരണം ഒഴിവാക്കണോ?"</string>
     <string name="security_settings_fingerprint_enroll_setup_screen_lock" msgid="9036983528330627756">"സ്‌ക്രീൻ ലോക്ക് സജ്ജമാക്കുക"</string>
@@ -1092,8 +1091,11 @@
     <item msgid="2552412793005571845">"@*android:string/wfc_mode_cellular_preferred_summary"</item>
     <item msgid="742811521969300868">"@*android:string/wfc_mode_wifi_only_summary"</item>
   </string-array>
-    <!-- no translation found for wifi_calling_mode_choices_v2:0 (9149346657812979257) -->
-    <!-- no translation found for wifi_calling_mode_choices_v2:2 (6007360612667098926) -->
+  <string-array name="wifi_calling_mode_choices_v2">
+    <item msgid="9149346657812979257">"വൈ-ഫൈ"</item>
+    <item msgid="4421333712484542489">"മൊബൈൽ"</item>
+    <item msgid="6007360612667098926">"വൈ-ഫൈ മാത്രം"</item>
+  </string-array>
   <string-array name="wifi_calling_mode_choices_without_wifi_only">
     <item msgid="3658897985297386665">"@*android:string/wfc_mode_wifi_preferred_summary"</item>
     <item msgid="4191802193352447215">"@*android:string/wfc_mode_cellular_preferred_summary"</item>
@@ -1220,7 +1222,7 @@
     <string name="night_display_summary_on" msgid="6580571388791426596">"ഓൺ / <xliff:g id="ID_1">%1$s</xliff:g>"</string>
     <string name="night_display_summary_on_auto_mode_never" msgid="5461580863060506687">"ഒരിക്കലും സ്വമേധയാ ഓഫാകില്ല"</string>
     <string name="night_display_summary_on_auto_mode_custom" msgid="2200631112239399233">"<xliff:g id="ID_1">%1$s</xliff:g>-ന് സ്വമേധയാ ഓഫാകും"</string>
-    <string name="night_display_summary_on_auto_mode_twilight" msgid="8386769601369289561">"സൂര്യോദയ സമയത്ത് സ്വമേധയാ ഓഫാകും"</string>
+    <string name="night_display_summary_on_auto_mode_twilight" msgid="8386769601369289561">"സൂര്യോദയ സമയത്ത് സ്വയമേവ ഓഫാകും"</string>
     <string name="night_display_activation_on_manual" msgid="8379477527072027346">"ഇപ്പോൾ ഓണാക്കുക"</string>
     <string name="night_display_activation_off_manual" msgid="7776082151269794201">"ഇപ്പോൾ ഓഫാക്കുക"</string>
     <string name="night_display_activation_on_twilight" msgid="5610294051700287249">"സൂര്യോദയം വരെ ഓണാക്കുക"</string>
