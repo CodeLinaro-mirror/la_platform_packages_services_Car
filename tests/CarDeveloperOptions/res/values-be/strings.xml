@@ -489,8 +489,7 @@
     <string name="face_lock_screen_setup_skip_dialog_text" product="tablet" msgid="2998863111689476550">"Абараніце планшэт з дапамогай опцыі блакіроўкі экрана, каб ніхто не змог ім карыстацца ў выпадку прапажы ці крадзяжу. Опцыя блакіроўкі экрана таксама спатрэбіцца вам, каб наладзіць распазнаванне твару. Націсніце \"Скасаваць\", а потым задайце PIN-код ці выберыце іншую опцыю блакіроўкі экрана."</string>
     <string name="face_lock_screen_setup_skip_dialog_text" product="device" msgid="6780557259734235952">"Абараніце прыладу з дапамогай опцыі блакіроўкі экрана, каб ніхто не змог ёю карыстацца ў выпадку прапажы ці крадзяжу. Опцыя блакіроўкі экрана таксама спатрэбіцца вам, каб наладзіць распазнаванне твару. Націсніце \"Скасаваць\", а потым задайце PIN-код ці выберыце іншую опцыю блакіроўкі экрана."</string>
     <string name="face_lock_screen_setup_skip_dialog_text" product="default" msgid="8541640018478926775">"Абараніце тэлефон з дапамогай опцыі блакіроўкі экрана, каб ніхто не змог ім карыстацца ў выпадку прапажы ці крадзяжу. Опцыя блакіроўкі экрана таксама спатрэбіцца вам, каб наладзіць распазнаванне твару. Націсніце \"Скасаваць\", а потым задайце PIN-код ці выберыце іншую опцыю блакіроўкі экрана."</string>
-    <!-- no translation found for lock_screen_pin_skip_title (8217519439213393785) -->
-    <skip />
+    <string name="lock_screen_pin_skip_title" msgid="8217519439213393785">"Прапусціць наладку PIN-кода?"</string>
     <string name="lock_screen_password_skip_title" msgid="3725788215672959827">"Прапусціць наладку пароля?"</string>
     <string name="lock_screen_pattern_skip_title" msgid="4237030500353932005">"Прапусціць наладку ўзору?"</string>
     <string name="security_settings_fingerprint_enroll_setup_screen_lock" msgid="9036983528330627756">"Наладзіць блакіроўку экрана"</string>
@@ -1126,8 +1125,11 @@
     <item msgid="2552412793005571845">"@*android:string/wfc_mode_cellular_preferred_summary"</item>
     <item msgid="742811521969300868">"@*android:string/wfc_mode_wifi_only_summary"</item>
   </string-array>
-    <!-- no translation found for wifi_calling_mode_choices_v2:0 (9149346657812979257) -->
-    <!-- no translation found for wifi_calling_mode_choices_v2:2 (6007360612667098926) -->
+  <string-array name="wifi_calling_mode_choices_v2">
+    <item msgid="9149346657812979257">"Wi-Fi"</item>
+    <item msgid="4421333712484542489">"Мабільны інтэрнэт"</item>
+    <item msgid="6007360612667098926">"Толькі Wi-Fi"</item>
+  </string-array>
   <string-array name="wifi_calling_mode_choices_without_wifi_only">
     <item msgid="3658897985297386665">"@*android:string/wfc_mode_wifi_preferred_summary"</item>
     <item msgid="4191802193352447215">"@*android:string/wfc_mode_cellular_preferred_summary"</item>
@@ -4417,8 +4419,8 @@
     <string name="install_type_instant" msgid="6248487669862821874">"Імгненная праграма"</string>
     <string name="automatic_storage_manager_deactivation_warning" msgid="7867793739491286374">"Выключыць менеджар сховішча?"</string>
     <string name="storage_movies_tv" msgid="7282484273991655296">"Праграмы для фільмаў і ТБ"</string>
-    <string name="carrier_provisioning" msgid="3309125279191534469">"Інфармацыя аператара"</string>
-    <string name="trigger_carrier_provisioning" msgid="6284005970057901477">"Уключыць/выключыць забеспячэнне аператарам"</string>
+    <string name="carrier_provisioning" msgid="3309125279191534469">"Звесткі аб аператары"</string>
+    <string name="trigger_carrier_provisioning" msgid="6284005970057901477">"Запусціць сінхранізацыю з аператарам"</string>
     <string name="zen_suggestion_title" msgid="2134699720214231950">"Абнавіце рэжым \"Не турбаваць\""</string>
     <string name="zen_suggestion_summary" msgid="4041062903237952737">"Прыпыніце апавяшчэнні, каб яны не адцягвалі ўвагу"</string>
     <string name="disabled_low_ram_device" msgid="4958060232123741721">"Гэта функцыя недаступная на гэтай прыладзе"</string>
