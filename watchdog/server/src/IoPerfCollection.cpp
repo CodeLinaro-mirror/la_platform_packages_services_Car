@@ -18,6 +18,7 @@
 
 #include "IoPerfCollection.h"
 
+#include <WatchdogProperties.sysprop.h>
 #include <android-base/file.h>
 #include <android-base/parseint.h>
 #include <android-base/stringprintf.h>
@@ -53,6 +54,20 @@ using android::base::WriteStringToFd;
 using android::content::pm::IPackageManagerNative;
 
 namespace {
+
+const int32_t kDefaultTopNStatsPerCategory = 5;
+const int32_t kDefaultTopNStatsPerSubcategory = 3;
+const std::chrono::seconds kDefaultBoottimeCollectionInterval = 1s;
+const std::chrono::seconds kDefaultPeriodicCollectionInterval = 10s;
+// Number of periodic collection perf data snapshots to cache in memory.
+const int32_t kDefaultPeriodicCollectionBufferSize = 180;
+
+// Minimum collection interval between subsequent collections.
+const std::chrono::nanoseconds kMinCollectionInterval = 1s;
+
+// Default values for the custom collection interval and max_duration.
+const std::chrono::nanoseconds kCustomCollectionInterval = 10s;
+const std::chrono::nanoseconds kCustomCollectionDuration = 30min;
 
 const std::string kDumpMajorDelimiter = std::string(100, '-') + "\n";
 
@@ -219,20 +234,30 @@ Result<void> IoPerfCollection::start() {
             return Error(INVALID_OPERATION)
                     << "Cannot start I/O performance collection more than once";
         }
-
-        // TODO(b/148489461): Once |kTopNStatsPerCategory|, |kBoottimeCollectionInterval| and
-        // |kPeriodicCollectionInterval| constants are moved to read-only persistent properties,
-        // read and store them in the collection infos.
-
+        mTopNStatsPerCategory = static_cast<int>(
+                sysprop::topNStatsPerCategory().value_or(kDefaultTopNStatsPerCategory));
+        mTopNStatsPerSubcategory = static_cast<int>(
+                sysprop::topNStatsPerSubcategory().value_or(kDefaultTopNStatsPerSubcategory));
+        std::chrono::nanoseconds boottimeCollectionInterval =
+                std::chrono::duration_cast<std::chrono::nanoseconds>(
+                        std::chrono::seconds(sysprop::boottimeCollectionInterval().value_or(
+                                kDefaultBoottimeCollectionInterval.count())));
+        std::chrono::nanoseconds periodicCollectionInterval =
+                std::chrono::duration_cast<std::chrono::nanoseconds>(
+                        std::chrono::seconds(sysprop::periodicCollectionInterval().value_or(
+                                kDefaultPeriodicCollectionInterval.count())));
+        size_t periodicCollectionBufferSize =
+                static_cast<size_t>(sysprop::periodicCollectionBufferSize().value_or(
+                        kDefaultPeriodicCollectionBufferSize));
         mBoottimeCollection = {
-                .interval = kBoottimeCollectionInterval,
+                .interval = boottimeCollectionInterval,
                 .maxCacheSize = std::numeric_limits<std::size_t>::max(),
                 .lastCollectionUptime = 0,
                 .records = {},
         };
         mPeriodicCollection = {
-                .interval = kPeriodicCollectionInterval,
-                .maxCacheSize = kPeriodicCollectionBufferSize,
+                .interval = periodicCollectionInterval,
+                .maxCacheSize = periodicCollectionBufferSize,
                 .lastCollectionUptime = 0,
                 .records = {},
         };
@@ -289,9 +314,14 @@ void IoPerfCollection::terminate() {
 Result<void> IoPerfCollection::onBootFinished() {
     Mutex::Autolock lock(mMutex);
     if (mCurrCollectionEvent != CollectionEvent::BOOT_TIME) {
-        return Error() << "Current I/O performance data collection event "
-                       << toString(mCurrCollectionEvent)
-                       << " != " << toString(CollectionEvent::BOOT_TIME) << " collection event";
+        // This case happens when either the I/O perf collection has prematurely terminated before
+        // boot complete notification is received or multiple boot complete notifications are
+        // received. In either case don't return error as this will lead to runtime exception and
+        // cause system to boot loop.
+        ALOGE("Current I/O performance data collection event %s != %s",
+                toString(mCurrCollectionEvent).c_str(),
+                toString(CollectionEvent::BOOT_TIME).c_str());
+        return {};
     }
     mHandlerLooper->removeMessages(this);
     mCurrCollectionEvent = CollectionEvent::PERIODIC;
@@ -300,21 +330,19 @@ Result<void> IoPerfCollection::onBootFinished() {
     return {};
 }
 
-status_t IoPerfCollection::dump(int fd, const Vector<String16>& args) {
+Result<void> IoPerfCollection::dump(int fd, const Vector<String16>& args) {
     if (args.empty()) {
         const auto& ret = dumpCollection(fd);
         if (!ret) {
-            ALOGW("%s", ret.error().message().c_str());
-            return ret.error().code();
+            return ret;
         }
-        return OK;
+        return {};
     }
 
     if (args[0] == String16(kStartCustomCollectionFlag)) {
         if (args.size() > 5) {
-            ALOGW("Number of arguments to start custom I/O performance data collection cannot "
-                  "exceed 5");
-            return INVALID_OPERATION;
+            return Error(INVALID_OPERATION) << "Number of arguments to start custom "
+                                            << "I/O performance data collection cannot exceed 5";
         }
         std::chrono::nanoseconds interval = kCustomCollectionInterval;
         std::chrono::nanoseconds maxDuration = kCustomCollectionDuration;
@@ -322,9 +350,8 @@ status_t IoPerfCollection::dump(int fd, const Vector<String16>& args) {
             if (args[i] == String16(kIntervalFlag)) {
                 const auto& ret = parseSecondsFlag(args, i + 1);
                 if (!ret) {
-                    ALOGW("Failed to parse %s flag: %s", kIntervalFlag,
-                          ret.error().message().c_str());
-                    return FAILED_TRANSACTION;
+                    return Error(FAILED_TRANSACTION)
+                            << "Failed to parse " << kIntervalFlag << ": " << ret.error();
                 }
                 interval = std::chrono::duration_cast<std::chrono::nanoseconds>(*ret);
                 ++i;
@@ -333,9 +360,8 @@ status_t IoPerfCollection::dump(int fd, const Vector<String16>& args) {
             if (args[i] == String16(kMaxDurationFlag)) {
                 const auto& ret = parseSecondsFlag(args, i + 1);
                 if (!ret) {
-                    ALOGW("Failed to parse %su flag: %s", kMaxDurationFlag,
-                          ret.error().message().c_str());
-                    return FAILED_TRANSACTION;
+                    return Error(FAILED_TRANSACTION)
+                            << "Failed to parse " << kMaxDurationFlag << ": " << ret.error();
                 }
                 maxDuration = std::chrono::duration_cast<std::chrono::nanoseconds>(*ret);
                 ++i;
@@ -343,14 +369,15 @@ status_t IoPerfCollection::dump(int fd, const Vector<String16>& args) {
             }
             ALOGW("Unknown flag %s provided to start custom I/O performance data collection",
                   String8(args[i]).string());
-            return INVALID_OPERATION;
+            return Error(INVALID_OPERATION) << "Unknown flag " << String8(args[i]).string()
+                                            << " provided to start custom I/O performance data "
+                                            << "collection";
         }
         const auto& ret = startCustomCollection(interval, maxDuration);
         if (!ret) {
-            ALOGW("%s", ret.error().message().c_str());
-            return ret.error().code();
+            return ret;
         }
-        return OK;
+        return {};
     }
 
     if (args[0] == String16(kEndCustomCollectionFlag)) {
@@ -360,15 +387,14 @@ status_t IoPerfCollection::dump(int fd, const Vector<String16>& args) {
         }
         const auto& ret = endCustomCollection(fd);
         if (!ret) {
-            ALOGW("%s", ret.error().message().c_str());
-            return ret.error().code();
+            return ret;
         }
-        return OK;
+        return {};
     }
 
-    ALOGW("Dump arguments start neither with %s nor with %s flags", kStartCustomCollectionFlag,
-          kEndCustomCollectionFlag);
-    return INVALID_OPERATION;
+    return Error(INVALID_OPERATION)
+            << "Dump arguments start neither with " << kStartCustomCollectionFlag << " nor with "
+            << kEndCustomCollectionFlag << " flags";
 }
 
 Result<void> IoPerfCollection::dumpCollection(int fd) {
@@ -649,7 +675,7 @@ Result<void> IoPerfCollection::collectUidIoPerfDataLocked(UidIoPerfData* uidIoPe
     for (const auto& usage : topNReads) {
         if (usage->ios.isZero()) {
             // End of non-zero usage records. This case occurs when the number of UIDs with active
-            // I/O operations is < |kTopNStatsPerCategory|.
+            // I/O operations is < |ro.carwatchdog.top_n_stats_per_category|.
             break;
         }
         UidIoPerfData::Stats stats = {
@@ -669,7 +695,7 @@ Result<void> IoPerfCollection::collectUidIoPerfDataLocked(UidIoPerfData* uidIoPe
     for (const auto& usage : topNWrites) {
         if (usage->ios.isZero()) {
             // End of non-zero usage records. This case occurs when the number of UIDs with active
-            // I/O operations is < |kTopNStatsPerCategory|.
+            // I/O operations is < |ro.carwatchdog.top_n_stats_per_category|.
             break;
         }
         UidIoPerfData::Stats stats = {
@@ -763,7 +789,7 @@ Result<void> IoPerfCollection::collectProcessIoPerfDataLocked(
     for (const auto& it : topNIoBlockedUids) {
         if (it->ioBlockedTasksCnt == 0) {
             // End of non-zero elements. This case occurs when the number of UIDs with I/O blocked
-            // processes is < |kTopNStatsPerCategory|.
+            // processes is < |ro.carwatchdog.top_n_stats_per_category|.
             break;
         }
         ProcessIoPerfData::Stats stats = {
@@ -780,7 +806,7 @@ Result<void> IoPerfCollection::collectProcessIoPerfDataLocked(
     for (const auto& it : topNMajorFaults) {
         if (it->majorFaults == 0) {
             // End of non-zero elements. This case occurs when the number of UIDs with major faults
-            // is < |kTopNStatsPerCategory|.
+            // is < |ro.carwatchdog.top_n_stats_per_category|.
             break;
         }
         ProcessIoPerfData::Stats stats = {

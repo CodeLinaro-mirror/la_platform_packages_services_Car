@@ -16,6 +16,7 @@
 package com.android.car.hal;
 
 import static android.car.VehiclePropertyIds.INITIAL_USER_INFO;
+import static android.car.VehiclePropertyIds.SWITCH_USER;
 
 import static com.android.internal.util.function.pooled.PooledLambda.obtainMessage;
 
@@ -23,8 +24,12 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.car.hardware.property.CarPropertyManager;
 import android.car.userlib.HalCallback;
+import android.car.userlib.UserHalHelper;
 import android.hardware.automotive.vehicle.V2_0.InitialUserInfoResponse;
 import android.hardware.automotive.vehicle.V2_0.InitialUserInfoResponseAction;
+import android.hardware.automotive.vehicle.V2_0.SwitchUserMessageType;
+import android.hardware.automotive.vehicle.V2_0.SwitchUserResponse;
+import android.hardware.automotive.vehicle.V2_0.SwitchUserStatus;
 import android.hardware.automotive.vehicle.V2_0.UserFlags;
 import android.hardware.automotive.vehicle.V2_0.UserInfo;
 import android.hardware.automotive.vehicle.V2_0.UsersInfo;
@@ -33,7 +38,6 @@ import android.hardware.automotive.vehicle.V2_0.VehiclePropValue;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.ServiceSpecificException;
-import android.os.SystemClock;
 import android.os.UserHandle;
 import android.sysprop.CarProperties;
 import android.util.Log;
@@ -60,7 +64,8 @@ public final class UserHalService extends HalServiceBase {
     private static final String TAG = UserHalService.class.getSimpleName();
 
     private static final int[] SUPPORTED_PROPERTIES = new int[]{
-            INITIAL_USER_INFO
+            INITIAL_USER_INFO,
+            SWITCH_USER
     };
 
     // TODO(b/150413515): STOPSHIP - change to false before R is launched
@@ -129,6 +134,10 @@ public final class UserHalService extends HalServiceBase {
                     mHandler.sendMessage(obtainMessage(
                             UserHalService::handleOnInitialUserInfoResponse, this, value));
                     break;
+                case SWITCH_USER:
+                    mHandler.sendMessage(obtainMessage(
+                            UserHalService::handleOnSwicthUserResponse, this, value));
+                    break;
                 default:
                     Slog.w(TAG, "received unsupported event from HAL: " + value);
             }
@@ -152,8 +161,8 @@ public final class UserHalService extends HalServiceBase {
             Log.w(TAG, UNSUPPORTED_MSG);
             return;
         }
-        // TODO(b/150413515): increase capacity once it supports more
-        SparseArray<VehiclePropConfig> supportedProperties = new SparseArray<>(1);
+        // TODO(b/150413515): increase capacity as more properties are added
+        SparseArray<VehiclePropConfig> supportedProperties = new SparseArray<>(2);
         for (VehiclePropConfig config : properties) {
             supportedProperties.put(config.prop, config);
         }
@@ -183,7 +192,7 @@ public final class UserHalService extends HalServiceBase {
      * {@link android.hardware.automotive.vehicle.V2_0.InitialUserInfoRequestType}).
      * @param timeoutMs how long to wait (in ms) for the property change event.
      * @param usersInfo current state of Android users.
-     * @param callback callback to handle the response.
+     * @param callback to handle the response.
      *
      * @throws IllegalStateException if the HAL does not support user management (callers should
      * call {@link #isSupported()} first to avoid this exception).
@@ -193,29 +202,18 @@ public final class UserHalService extends HalServiceBase {
         if (DBG) Log.d(TAG, "getInitialInfo(" + requestType + ")");
         Preconditions.checkArgumentPositive(timeoutMs, "timeout must be positive");
         Objects.requireNonNull(usersInfo);
-        // TODO(b/150413515): use helper method to convert request to prop value and check usersInfo
-        // is valid
+        // TODO(b/150413515): use helper method to check usersInfo is valid
         Objects.requireNonNull(callback);
 
-        VehiclePropValue propRequest = new VehiclePropValue();
-        propRequest.prop = INITIAL_USER_INFO;
+        VehiclePropValue propRequest;
         int requestId;
         synchronized (mLock) {
             checkSupportedLocked();
             if (hasPendingRequestLocked(InitialUserInfoResponse.class, callback)) return;
             requestId = mNextRequestId++;
-            // TODO(b/150413515): use helper method to convert request to prop value
-            propRequest.value.int32Values.add(requestId);
-            propRequest.value.int32Values.add(requestType);
-            propRequest.value.int32Values.add(usersInfo.currentUser.userId);
-            propRequest.value.int32Values.add(usersInfo.currentUser.flags);
-            propRequest.value.int32Values.add(usersInfo.numberUsers);
-            for (int i = 0; i < usersInfo.numberUsers; i++) {
-                UserInfo userInfo = usersInfo.existingUsers.get(i);
-                propRequest.value.int32Values.add(userInfo.userId);
-                propRequest.value.int32Values.add(userInfo.flags);
-            }
-            setTimestamp(propRequest);
+            propRequest = UserHalHelper.createPropRequest(requestId, requestType,
+                    INITIAL_USER_INFO);
+            UserHalHelper.addUsersInfo(propRequest, usersInfo);
             addPendingRequestLocked(requestId, InitialUserInfoResponse.class, callback);
         }
 
@@ -226,7 +224,56 @@ public final class UserHalService extends HalServiceBase {
             if (DBG) Log.d(TAG, "Calling hal.set(): " + propRequest);
             mHal.set(propRequest);
         } catch (ServiceSpecificException e) {
+            handleRemovePendingRequest(requestId);
             Log.w(TAG, "Failed to set INITIAL_USER_INFO", e);
+            callback.onResponse(HalCallback.STATUS_HAL_SET_TIMEOUT, null);
+        }
+    }
+
+    /**
+     * Calls HAL to asynchronously switch user.
+     *
+     * @param targetInfo target user for user switching
+     * @param timeoutMs how long to wait (in ms) for the property change event.
+     * @param usersInfo current state of Android users.
+     * @param callback to handle the response.
+     *
+     * @throws IllegalStateException if the HAL does not support user management (callers should
+     * call {@link #isSupported()} first to avoid this exception).
+     */
+    public void switchUser(@NonNull UserInfo targetInfo, int timeoutMs,
+            @NonNull UsersInfo usersInfo, @NonNull HalCallback<SwitchUserResponse> callback) {
+        if (DBG) Log.d(TAG, "switchUser(" + targetInfo + ")");
+        Preconditions.checkArgumentPositive(timeoutMs, "timeout must be positive");
+        Objects.requireNonNull(usersInfo);
+        // TODO(b/150413515): use helper method to check usersInfo is valid
+        Objects.requireNonNull(callback);
+
+        VehiclePropValue propRequest;
+        int requestId;
+        synchronized (mLock) {
+            checkSupportedLocked();
+            if (hasPendingRequestLocked(SwitchUserResponse.class, callback)) return;
+            requestId = mNextRequestId++;
+            propRequest = UserHalHelper.createPropRequest(requestId,
+                        SwitchUserMessageType.ANDROID_SWITCH, SWITCH_USER);
+            propRequest.value.int32Values.add(targetInfo.userId);
+            propRequest.value.int32Values.add(targetInfo.flags);
+            UserHalHelper.addUsersInfo(propRequest, usersInfo);
+            addPendingRequestLocked(requestId, SwitchUserResponse.class, callback);
+        }
+
+        mHandler.sendMessageDelayed(
+                obtainMessage(UserHalService::handleCheckIfRequestTimedOut, this, requestId)
+                        .setWhat(requestId),
+                timeoutMs);
+
+        try {
+            if (DBG) Log.d(TAG, "Calling hal.set(): " + propRequest);
+            mHal.set(propRequest);
+        } catch (ServiceSpecificException e) {
+            handleRemovePendingRequest(requestId);
+            Log.w(TAG, "Failed to set ANDROID SWITCH", e);
             callback.onResponse(HalCallback.STATUS_HAL_SET_TIMEOUT, null);
         }
     }
@@ -324,6 +371,36 @@ public final class UserHalService extends HalServiceBase {
         callback.onResponse(HalCallback.STATUS_OK, response);
     }
 
+    private void handleOnSwicthUserResponse(VehiclePropValue value) {
+        int requestId = value.value.int32Values.get(0);
+        HalCallback<SwitchUserResponse> callback =
+                handleGetPendingCallback(requestId, SwitchUserResponse.class);
+        if (callback == null) {
+            Log.w(TAG, "no callback for requestId " + requestId + ": " + value);
+            return;
+        }
+        handleRemovePendingRequest(requestId);
+        SwitchUserResponse response = new SwitchUserResponse();
+        response.requestId = requestId;
+        response.messageType = value.value.int32Values.get(1);
+        if (response.messageType != SwitchUserMessageType.VEHICLE_RESPONSE) {
+            Log.e(TAG, "invalid message type (" + response.messageType + ") from HAL: " + value);
+            callback.onResponse(HalCallback.STATUS_WRONG_HAL_RESPONSE, null);
+            return;
+        }
+        response.status = value.value.int32Values.get(2);
+        if (response.status == SwitchUserStatus.SUCCESS
+                || response.status == SwitchUserStatus.FAILURE) {
+            if (DBG) {
+                Log.d(TAG, "replying to request " + requestId + " with " + response);
+            }
+            callback.onResponse(HalCallback.STATUS_OK, response);
+        } else {
+            Log.e(TAG, "invalid status (" + response.status + ") from HAL: " + value);
+            callback.onResponse(HalCallback.STATUS_WRONG_HAL_RESPONSE, null);
+        }
+    }
+
     private <T> HalCallback<T> handleGetPendingCallback(int requestId, Class<T> clazz) {
         Pair<Class<?>, HalCallback<?>> pair = getPendingCallback(requestId);
         if (pair == null) return null;
@@ -337,10 +414,6 @@ public final class UserHalService extends HalServiceBase {
         @SuppressWarnings("unchecked")
         HalCallback<T> callback = (HalCallback<T>) pair.second;
         return callback;
-    }
-
-    private void setTimestamp(@NonNull VehiclePropValue propRequest) {
-        propRequest.timestamp = SystemClock.elapsedRealtime();
     }
 
     @Override

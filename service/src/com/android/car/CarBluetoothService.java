@@ -224,6 +224,8 @@ public class CarBluetoothService extends ICarBluetooth.Stub implements CarServic
             } catch (RemoteException e) {
                 Log.e(TAG, "Remote Service Exception on ServiceConnection Callback: "
                         + e.getMessage());
+            } catch (java.lang.NullPointerException e) {
+                Log.e(TAG, "Initialization Failed: " + e.getMessage());
             }
         } else {
             logd("PerUserCarService not connected. Cannot get bluetooth user proxy objects");
@@ -362,6 +364,7 @@ public class CarBluetoothService extends ICarBluetooth.Stub implements CarServic
      * Initiate automatated connecting of devices based on the prioritized device lists for each
      * profile.
      */
+    @Override
     public void connectDevices() {
         enforceBluetoothAdminPermission();
         logd("Connect devices for each profile");
