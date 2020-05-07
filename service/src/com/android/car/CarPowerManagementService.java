@@ -112,7 +112,7 @@ public class CarPowerManagementService extends ICarPower.Stub implements
     private static final int SHUTDOWN_POLLING_INTERVAL_MS = 2000;
     private static final int SHUTDOWN_EXTEND_MAX_MS = 5000;
 
-    private static final int DEEP_SLEEP_RETRY_INTERVAL_MS = 3000;
+    private static final int DEEP_SLEEP_RETRY_INTERVAL_MS = 1000;
     private static final int DEEP_SLEEP_RETRY_MAX_MS = 60000;
 
     // maxGarageModeRunningDurationInSecs should be equal or greater than this. 15 min for now.
@@ -123,6 +123,9 @@ public class CarPowerManagementService extends ICarPower.Stub implements
     // in secs
     private static final String PROP_MAX_GARAGE_MODE_DURATION_OVERRIDE =
             "android.car.garagemodeduration";
+
+    private static final String PROP_ENABLE_CPMS_POLLING =
+            "android.car.enable_cpms_polling";
 
     private class PowerManagerCallbackList extends RemoteCallbackList<ICarPowerStateListener> {
         /**
@@ -449,6 +452,7 @@ public class CarPowerManagementService extends ICarPower.Stub implements
     }
 
     private void doHandlePreprocessing() {
+        boolean enablePolling = SystemProperties.getBoolean(PROP_ENABLE_CPMS_POLLING, true);
         int pollingCount = (sShutdownPrepareTimeMs / SHUTDOWN_POLLING_INTERVAL_MS) + 1;
         if (Build.IS_USERDEBUG || Build.IS_ENG) {
             int shutdownPrepareTimeOverrideInSecs =
@@ -467,12 +471,16 @@ public class CarPowerManagementService extends ICarPower.Stub implements
         synchronized (mLock) {
             mProcessingStartTime = SystemClock.elapsedRealtime();
             releaseTimerLocked();
-            mTimer = new Timer();
-            mTimerActive = true;
-            mTimer.scheduleAtFixedRate(
-                    new ShutdownProcessingTimerTask(pollingCount),
-                    0 /*delay*/,
-                    SHUTDOWN_POLLING_INTERVAL_MS);
+            if (enablePolling) {
+                mTimer = new Timer();
+                mTimerActive = true;
+                mTimer.scheduleAtFixedRate(
+                        new ShutdownProcessingTimerTask(pollingCount),
+                        0 /*delay*/,
+                        SHUTDOWN_POLLING_INTERVAL_MS);
+            } else {
+                Log.w(CarLog.TAG_POWER, "Disable shutdown polling");
+            }
         }
     }
 
