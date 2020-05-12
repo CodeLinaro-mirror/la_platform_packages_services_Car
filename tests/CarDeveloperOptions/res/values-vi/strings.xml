@@ -355,7 +355,7 @@
     <string name="owner_info_settings_title" msgid="2537966178998339896">"Thông điệp trên màn hình khóa"</string>
     <string name="security_enable_widgets_title" msgid="1701510007926738088">"Bật tiện ích"</string>
     <string name="security_enable_widgets_disabled_summary" msgid="4408176087132339331">"Bị quản trị viên vô hiệu hóa"</string>
-    <string name="lockdown_settings_title" msgid="4534779922580115990">"Hiển thị tùy chọn khóa"</string>
+    <string name="lockdown_settings_title" msgid="4534779922580115990">"Hiện tùy chọn khóa"</string>
     <string name="lockdown_settings_summary" msgid="7270756909878256174">"Hiển thị tùy chọn nút nguồn để tắt tính năng Smart Lock, mở khóa bằng vân tay, và thông báo trên màn hình khóa"</string>
     <string name="trust_agents_extend_unlock_title" msgid="3582017561316089951">"Tác nhân tin cậy chỉ kéo dài thời gian mở khóa"</string>
     <string name="trust_agents_extend_unlock_summary" msgid="3543997596586078084">"Nếu bạn bật, các tác nhân tin cậy sẽ kéo dài thời gian mở khóa, nhưng không thể mở khóa thiết bị bị khóa nữa."</string>
@@ -481,8 +481,7 @@
     <string name="face_lock_screen_setup_skip_dialog_text" product="tablet" msgid="2998863111689476550">"Bảo vệ máy tính bảng của bạn bằng tùy chọn khóa màn hình để không ai có thể sử dụng được nếu máy tính bảng này bị mất hoặc bị đánh cắp. Bạn cũng cần có tùy chọn khóa màn hình để thiết lập tính năng xác thực khuôn mặt. Nhấn vào Hủy rồi đặt mã PIN hoặc chọn tùy chọn khóa màn hình khác."</string>
     <string name="face_lock_screen_setup_skip_dialog_text" product="device" msgid="6780557259734235952">"Bảo vệ thiết bị của bạn bằng tùy chọn khóa màn hình để không ai có thể sử dụng được nếu thiết bị này bị mất hoặc bị đánh cắp. Bạn cũng cần có tùy chọn khóa màn hình để thiết lập tính năng xác thực khuôn mặt. Nhấn vào Hủy rồi đặt mã PIN hoặc chọn tùy chọn khóa màn hình khác."</string>
     <string name="face_lock_screen_setup_skip_dialog_text" product="default" msgid="8541640018478926775">"Bảo vệ điện thoại của bạn bằng tùy chọn khóa màn hình để không ai có thể sử dụng được nếu điện thoại này bị mất hoặc bị đánh cắp. Bạn cũng cần có tùy chọn khóa màn hình để thiết lập tính năng xác thực khuôn mặt. Nhấn vào Hủy rồi đặt mã PIN hoặc chọn tùy chọn khóa màn hình khác."</string>
-    <!-- no translation found for lock_screen_pin_skip_title (8217519439213393785) -->
-    <skip />
+    <string name="lock_screen_pin_skip_title" msgid="8217519439213393785">"Bỏ qua thiết lập mã PIN?"</string>
     <string name="lock_screen_password_skip_title" msgid="3725788215672959827">"Bỏ qua thiết lập mật khẩu?"</string>
     <string name="lock_screen_pattern_skip_title" msgid="4237030500353932005">"Bỏ qua thiết lập hình mở khóa?"</string>
     <string name="security_settings_fingerprint_enroll_setup_screen_lock" msgid="9036983528330627756">"Thiết lập phương thức khóa màn hình"</string>
@@ -1092,8 +1091,11 @@
     <item msgid="2552412793005571845">"@*android:string/wfc_mode_cellular_preferred_summary"</item>
     <item msgid="742811521969300868">"@*android:string/wfc_mode_wifi_only_summary"</item>
   </string-array>
-    <!-- no translation found for wifi_calling_mode_choices_v2:0 (9149346657812979257) -->
-    <!-- no translation found for wifi_calling_mode_choices_v2:2 (6007360612667098926) -->
+  <string-array name="wifi_calling_mode_choices_v2">
+    <item msgid="9149346657812979257">"Wi-Fi"</item>
+    <item msgid="4421333712484542489">"Di động"</item>
+    <item msgid="6007360612667098926">"Chỉ Wi-Fi"</item>
+  </string-array>
   <string-array name="wifi_calling_mode_choices_without_wifi_only">
     <item msgid="3658897985297386665">"@*android:string/wfc_mode_wifi_preferred_summary"</item>
     <item msgid="4191802193352447215">"@*android:string/wfc_mode_cellular_preferred_summary"</item>
@@ -3181,7 +3183,7 @@
     <string name="zen_mode_automation_suggestion_summary" msgid="2709837472884371037">"Đặt quy tắc Không làm phiền"</string>
     <string name="zen_mode_schedule_title" msgid="5275268813192802631">"Lên lịch"</string>
     <string name="zen_mode_use_automatic_rule" msgid="446326253915861824">"Sử dụng lịch biểu"</string>
-    <string name="zen_mode_option_important_interruptions" msgid="5173944276846940149">"Chỉ ưu tiên"</string>
+    <string name="zen_mode_option_important_interruptions" msgid="5173944276846940149">"Chỉ cho các mục ưu tiên"</string>
     <string name="zen_mode_option_alarms" msgid="4843278125235203076">"Chỉ chuông báo"</string>
     <string name="zen_mode_option_no_interruptions" msgid="4723700274519260852">"Hoàn toàn tắt tiếng"</string>
     <string name="zen_mode_summary_combination" msgid="6960111215170691605">"<xliff:g id="MODE">%1$s</xliff:g>: <xliff:g id="EXIT_CONDITION">%2$s</xliff:g>"</string>
@@ -3231,7 +3233,7 @@
     <string name="zen_mode_settings_dnd_automatic_rule_app" msgid="5103454923160912313">"Chế độ Không làm phiền đã được một ứng dụng (<xliff:g id="APP_NAME">%s</xliff:g>) bật tự động"</string>
     <string name="zen_mode_settings_dnd_custom_settings_footer" msgid="6335108298640066560">"Chế độ Không làm phiền đang bật đối với <xliff:g id="RULE_NAMES">%s</xliff:g> với các mục cài đặt tùy chỉnh."</string>
     <string name="zen_mode_settings_dnd_custom_settings_footer_link" msgid="4007974052885089379"><annotation id="link">" Xem mục cài đặt tùy chỉnh"</annotation></string>
-    <string name="zen_interruption_level_priority" msgid="9178419297408319234">"Chỉ ưu tiên"</string>
+    <string name="zen_interruption_level_priority" msgid="9178419297408319234">"Chỉ cho các mục ưu tiên"</string>
     <string name="zen_mode_and_condition" msgid="4123722186007123567">"<xliff:g id="ZEN_MODE">%1$s</xliff:g>. <xliff:g id="EXIT_CONDITION">%2$s</xliff:g>"</string>
     <string name="zen_mode_sound_summary_on_with_info" msgid="2539952366467518398">"Đang bật / <xliff:g id="ID_1">%1$s</xliff:g>"</string>
     <string name="zen_mode_sound_summary_off_with_info" msgid="3910718455243440265">"Đang tắt / <xliff:g id="ID_1">%1$s</xliff:g>"</string>
