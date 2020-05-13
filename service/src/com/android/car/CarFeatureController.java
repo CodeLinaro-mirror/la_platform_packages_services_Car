@@ -68,7 +68,6 @@ public final class CarFeatureController implements CarServiceBase {
             Car.CAR_DRIVING_STATE_SERVICE,
             Car.CAR_INPUT_SERVICE,
             Car.CAR_MEDIA_SERVICE,
-            Car.CAR_NAVIGATION_SERVICE,
             Car.CAR_OCCUPANT_ZONE_SERVICE,
             Car.CAR_TRUST_AGENT_ENROLLMENT_SERVICE,
             Car.CAR_USER_SERVICE,
@@ -90,6 +89,7 @@ public final class CarFeatureController implements CarServiceBase {
 
     private static final HashSet<String> OPTIONAL_FEATURES = new HashSet<>(Arrays.asList(
             CarFeatures.FEATURE_CAR_USER_NOTICE_SERVICE,
+            Car.CAR_NAVIGATION_SERVICE,
             Car.DIAGNOSTIC_SERVICE,
             Car.OCCUPANT_AWARENESS_SERVICE,
             Car.STORAGE_MONITORING_SERVICE,
@@ -117,9 +117,9 @@ public final class CarFeatureController implements CarServiceBase {
     private final List<String> mDefaultEnabledFeaturesFromConfig;
     private final List<String> mDisabledFeaturesFromVhal;
 
-    private final HandlerThread mHandlerThread;
-    private final Handler mHandler;
-
+    private final HandlerThread mHandlerThread = CarServiceUtils.getHandlerThread(
+            getClass().getSimpleName());
+    private final Handler mHandler = new Handler(mHandlerThread.getLooper());
     private final Object mLock = new Object();
 
     @GuardedBy("mLock")
@@ -150,9 +150,6 @@ public final class CarFeatureController implements CarServiceBase {
                 shouldLoadDefaultConfig = true;
             }
         }
-        mHandlerThread = new HandlerThread(TAG);
-        mHandlerThread.start();
-        mHandler = new Handler(mHandlerThread.getLooper());
         if (!checkMandatoryFeaturesLocked()) { // mandatory feature missing, force default config
             mEnabledFeatures.clear();
             mEnabledFeatures.addAll(MANDATORY_FEATURES);

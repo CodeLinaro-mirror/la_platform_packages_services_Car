@@ -57,6 +57,9 @@ void DefaultEngine::setClientInterface(std::unique_ptr<ClientInterface>&& client
 void DefaultEngine::setPrebuiltGraph(std::unique_ptr<PrebuiltGraph>&& graph) {
     mGraph = std::move(graph);
     mGraphDescriptor = mGraph->GetSupportedGraphConfigs();
+    if (mGraph->GetGraphType() == graph::PrebuiltGraphType::REMOTE) {
+        mIgnoreInputManager = true;
+    }
 }
 
 Status DefaultEngine::setArgs(std::string engine_args) {
@@ -100,6 +103,9 @@ Status DefaultEngine::processClientConfigUpdate(const proto::ConfigurationComman
     } else if (command.has_set_offload_offload()) {
         mConfigBuilder =
             mConfigBuilder.updateOffloadOption(command.set_offload_offload().offload_option_id());
+    } else if (command.has_set_profile_options()) {
+        mConfigBuilder =
+            mConfigBuilder.updateProfilingType(command.set_profile_options().profile_type());
     } else {
         return SUCCESS;
     }
@@ -146,6 +152,41 @@ Status DefaultEngine::processClientCommand(const proto::ControlCommand& command)
         mWakeLooper.notify_all();
         return Status::SUCCESS;
     }
+    if (command.has_reset_configs()) {
+        if (mCurrentPhase != kConfigPhase) {
+            return Status::ILLEGAL_STATE;
+        }
+        queueCommand("ClientInterface", EngineCommand::Type::RESET_CONFIG);
+        return Status::SUCCESS;
+    }
+    if (command.has_start_pipe_profile()) {
+        if (mCurrentPhase != kRunPhase) {
+            return Status::ILLEGAL_STATE;
+        }
+        if (mGraph) {
+            return mGraph->StartGraphProfiling();
+        }
+        return Status::SUCCESS;
+    }
+    if (command.has_stop_pipe_profile()) {
+        if (mCurrentPhase != kRunPhase) {
+            return Status::SUCCESS;
+        }
+        if (mGraph) {
+            return mGraph->StopGraphProfiling();
+        }
+        return Status::SUCCESS;
+    }
+    if (command.has_release_debugger()) {
+        if (mCurrentPhase != kConfigPhase && mCurrentPhase != kResetPhase) {
+            return Status::ILLEGAL_STATE;
+        }
+        queueCommand("ClientInterface", EngineCommand::Type::RELEASE_DEBUGGER);
+    }
+    if (command.has_read_debug_data()) {
+        queueCommand("ClientInterface", EngineCommand::Type::READ_PROFILING);
+        return Status::SUCCESS;
+    }
     return Status::SUCCESS;
 }
 
@@ -172,7 +213,8 @@ void DefaultEngine::DispatchPixelData(int streamId, int64_t timestamp, const Inp
 }
 
 void DefaultEngine::DispatchSerializedData(int streamId, int64_t timestamp, std::string&& output) {
-    LOG(DEBUG) << "Engine::Received data for stream  " << streamId << " with timestamp " << timestamp;
+    LOG(DEBUG) << "Engine::Received data for stream  " << streamId << " with timestamp "
+            << timestamp;
     if (mStreamManagers.find(streamId) == mStreamManagers.end()) {
         LOG(ERROR) << "Engine::Received bad stream id from prebuilt graph";
         return;
@@ -519,8 +561,7 @@ Status DefaultEngine::forwardOutputDataToClient(int streamId,
     if (mConfigBuilder.clientConfigEnablesDisplayStream()) {
         if (mStreamManagers.find(streamId) == mStreamManagers.end()) {
             displayMgrPacket = nullptr;
-        }
-        else {
+        } else {
             displayMgrPacket = mStreamManagers[streamId]->clonePacket(dataHandle);
         }
         Status status = mClient->dispatchPacketToClient(streamId, dataHandle);
@@ -595,34 +636,62 @@ void DefaultEngine::processCommands() {
         mCommandQueue.pop();
         switch (ec.cmdType) {
             case EngineCommand::Type::BROADCAST_CONFIG:
-                LOG(INFO) << "Engine::Received broacast config request";
+                LOG(INFO) << "Engine::Received broadcast config request";
                 (void)broadcastClientConfig();
                 break;
             case EngineCommand::Type::BROADCAST_START_RUN:
-                LOG(INFO) << "Engine::Received broacast run request";
+                LOG(INFO) << "Engine::Received broadcast run request";
                 (void)broadcastStartRun();
                 break;
             case EngineCommand::Type::BROADCAST_INITIATE_STOP:
                 if (ec.source.find("ClientInterface") != std::string::npos) {
                     mStopFromClient = true;
                 }
-                LOG(INFO) << "Engine::Received broacast stop with flush request";
+                LOG(INFO) << "Engine::Received broadcast stop with flush request";
                 broadcastStopWithFlush();
                 break;
             case EngineCommand::Type::POLL_COMPLETE:
                 LOG(INFO) << "Engine::Received Poll stream managers for completion request";
-                int id = getStreamIdFromSource(ec.source);
-                bool all_done = true;
-                for (auto& it : mStreamManagers) {
-                    if (it.first == id) {
-                        continue;
+                {
+                    int id = getStreamIdFromSource(ec.source);
+                    bool all_done = true;
+                    for (auto& it : mStreamManagers) {
+                        if (it.first == id) {
+                            continue;
+                        }
+                        if (it.second->getState() != StreamManager::State::STOPPED) {
+                            all_done = false;
+                        }
                     }
-                    if (it.second->getState() != StreamManager::State::STOPPED) {
-                        all_done = false;
+                    if (all_done) {
+                        broadcastStopComplete();
                     }
                 }
-                if (all_done) {
-                    broadcastStopComplete();
+                break;
+            case EngineCommand::Type::RESET_CONFIG:
+                (void)broadcastReset();
+                break;
+            case EngineCommand::Type::RELEASE_DEBUGGER:
+                {
+                    // broadcastReset() resets the previous copy, so save a copy of the old config.
+                    ConfigBuilder previousConfig = mConfigBuilder;
+                    (void)broadcastReset();
+                    mConfigBuilder =
+                            previousConfig.updateProfilingType(proto::ProfilingType::DISABLED);
+                    (void)broadcastClientConfig();
+                }
+                break;
+            case EngineCommand::Type::READ_PROFILING:
+                std::string debugData;
+                if (mGraph && (mCurrentPhase == kConfigPhase || mCurrentPhase == kRunPhase
+                                || mCurrentPhase == kStopPhase)) {
+                    debugData = mGraph->GetDebugInfo();
+                }
+                if (mClient) {
+                    Status status = mClient->deliverGraphDebugInfo(debugData);
+                    if (status != Status::SUCCESS) {
+                        LOG(ERROR) << "Failed to deliver graph debug info to client.";
+                    }
                 }
                 break;
         }

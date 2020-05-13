@@ -15,6 +15,13 @@
  */
 package com.android.car;
 
+import static android.hardware.automotive.vehicle.V2_0.UserIdentificationAssociationType.CUSTOM_1;
+import static android.hardware.automotive.vehicle.V2_0.UserIdentificationAssociationType.CUSTOM_2;
+import static android.hardware.automotive.vehicle.V2_0.UserIdentificationAssociationType.CUSTOM_3;
+import static android.hardware.automotive.vehicle.V2_0.UserIdentificationAssociationType.CUSTOM_4;
+import static android.hardware.automotive.vehicle.V2_0.UserIdentificationAssociationType.KEY_FOB;
+
+import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.ActivityManager;
 import android.app.ActivityOptions;
@@ -23,7 +30,8 @@ import android.car.Car;
 import android.car.input.CarInputManager;
 import android.car.input.RotaryEvent;
 import android.car.user.CarUserManager;
-import android.car.user.CarUserManager.UserSwitchResult;
+import android.car.user.GetUserIdentificationAssociationResponse;
+import android.car.user.UserSwitchResult;
 import android.car.userlib.HalCallback;
 import android.car.userlib.UserHalHelper;
 import android.content.ComponentName;
@@ -32,15 +40,24 @@ import android.content.Intent;
 import android.hardware.automotive.vehicle.V2_0.InitialUserInfoResponseAction;
 import android.hardware.automotive.vehicle.V2_0.SwitchUserMessageType;
 import android.hardware.automotive.vehicle.V2_0.SwitchUserStatus;
+import android.hardware.automotive.vehicle.V2_0.UserIdentificationAssociation;
+import android.hardware.automotive.vehicle.V2_0.UserIdentificationAssociationType;
+import android.hardware.automotive.vehicle.V2_0.UserIdentificationAssociationValue;
+import android.hardware.automotive.vehicle.V2_0.UserIdentificationGetRequest;
+import android.hardware.automotive.vehicle.V2_0.UserIdentificationResponse;
 import android.hardware.automotive.vehicle.V2_0.UserInfo;
 import android.hardware.automotive.vehicle.V2_0.UsersInfo;
 import android.hardware.automotive.vehicle.V2_0.VehicleArea;
 import android.os.Binder;
+import android.os.Build;
 import android.os.Process;
 import android.os.ShellCommand;
 import android.os.SystemClock;
+import android.os.UserHandle;
 import android.text.TextUtils;
+import android.util.ArrayMap;
 import android.util.Log;
+import android.util.SparseArray;
 import android.view.KeyEvent;
 
 import com.android.car.am.FixedActivityService;
@@ -53,10 +70,11 @@ import com.android.car.pm.CarPackageManagerService;
 import com.android.car.systeminterface.SystemInterface;
 import com.android.car.trust.CarTrustedDeviceService;
 import com.android.car.user.CarUserService;
-import com.android.internal.util.ArrayUtils;
+import com.android.internal.infra.AndroidFuture;
 
 import java.io.PrintWriter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -66,6 +84,7 @@ final class CarShellCommand extends ShellCommand {
     private static final String NO_INITIAL_USER = "N/A";
 
     private static final String TAG = CarShellCommand.class.getSimpleName();
+    private static final boolean VERBOSE = false;
 
     private static final String COMMAND_HELP = "-h";
     private static final String COMMAND_DAY_NIGHT_MODE = "day-night-mode";
@@ -82,7 +101,7 @@ final class CarShellCommand extends ShellCommand {
     private static final String COMMAND_SUSPEND = "suspend";
     private static final String COMMAND_ENABLE_TRUSTED_DEVICE = "enable-trusted-device";
     private static final String COMMAND_REMOVE_TRUSTED_DEVICES = "remove-trusted-devices";
-    private static final String COMMAND_SET_UID_TO_ZONE = "set-zoneid-for-uid";
+    private static final String COMMAND_SET_UID_TO_ZONE = "set-audio-zone-for-uid";
     private static final String COMMAND_START_FIXED_ACTIVITY_MODE = "start-fixed-activity-mode";
     private static final String COMMAND_STOP_FIXED_ACTIVITY_MODE = "stop-fixed-activity-mode";
     private static final String COMMAND_ENABLE_FEATURE = "enable-feature";
@@ -92,6 +111,37 @@ final class CarShellCommand extends ShellCommand {
     private static final String COMMAND_GET_INITIAL_USER_INFO = "get-initial-user-info";
     private static final String COMMAND_SWITCH_USER = "switch-user";
     private static final String COMMAND_GET_INITIAL_USER = "get-initial-user";
+    private static final String COMMAND_SET_USER_ID_TO_OCCUPANT_ZONE =
+            "set-occupant-zone-for-user";
+    private static final String COMMAND_RESET_USER_ID_IN_OCCUPANT_ZONE =
+            "reset-user-in-occupant-zone";
+    private static final String COMMAND_GET_USER_AUTH_ASSOCIATION =
+            "get-user-auth-association";
+
+    // Whitelist of commands allowed in user build. All these command should be protected with
+    // a permission. K: command, V: required permission.
+    // Only commands with permission already granted to shell user should be allowed.
+    // Commands that can affect safety should be never allowed in user build.
+    private static final ArrayMap<String, String> USER_BUILD_COMMAND_TO_PERMISSION_MAP;
+    static {
+        USER_BUILD_COMMAND_TO_PERMISSION_MAP = new ArrayMap<>();
+        USER_BUILD_COMMAND_TO_PERMISSION_MAP.put(COMMAND_GARAGE_MODE,
+                android.Manifest.permission.DEVICE_POWER);
+        USER_BUILD_COMMAND_TO_PERMISSION_MAP.put(COMMAND_RESUME,
+                android.Manifest.permission.DEVICE_POWER);
+        USER_BUILD_COMMAND_TO_PERMISSION_MAP.put(COMMAND_SUSPEND,
+                android.Manifest.permission.DEVICE_POWER);
+        USER_BUILD_COMMAND_TO_PERMISSION_MAP.put(COMMAND_GET_INITIAL_USER,
+                android.Manifest.permission.INTERACT_ACROSS_USERS_FULL);
+        USER_BUILD_COMMAND_TO_PERMISSION_MAP.put(COMMAND_GET_INITIAL_USER_INFO,
+                android.Manifest.permission.MANAGE_USERS);
+        USER_BUILD_COMMAND_TO_PERMISSION_MAP.put(COMMAND_SWITCH_USER,
+                android.Manifest.permission.MANAGE_USERS);
+        USER_BUILD_COMMAND_TO_PERMISSION_MAP.put(COMMAND_GET_USER_AUTH_ASSOCIATION,
+                android.Manifest.permission.MANAGE_USERS);
+    }
+
+    private static final String DEVICE_POWER_PERMISSION = "android.permission.DEVICE_POWER";
 
     private static final String PARAM_DAY_MODE = "day";
     private static final String PARAM_NIGHT_MODE = "night";
@@ -104,6 +154,29 @@ final class CarShellCommand extends ShellCommand {
 
     private static final int RESULT_OK = 0;
     private static final int RESULT_ERROR = -1; // Arbitrary value, any non-0 is fine
+
+    private static final SparseArray<String> VALID_USER_AUTH_TYPES;
+    private static final int INVALID_USER_AUTH_TYPE = -1;
+    private static final String VALID_USER_AUTH_TYPES_HELP;
+
+    static {
+        VALID_USER_AUTH_TYPES = new SparseArray<String>(5);
+        VALID_USER_AUTH_TYPES.put(KEY_FOB, UserIdentificationAssociationType.toString(KEY_FOB));
+        VALID_USER_AUTH_TYPES.put(CUSTOM_1, UserIdentificationAssociationType.toString(CUSTOM_1));
+        VALID_USER_AUTH_TYPES.put(CUSTOM_2, UserIdentificationAssociationType.toString(CUSTOM_2));
+        VALID_USER_AUTH_TYPES.put(CUSTOM_3, UserIdentificationAssociationType.toString(CUSTOM_3));
+        VALID_USER_AUTH_TYPES.put(CUSTOM_4, UserIdentificationAssociationType.toString(CUSTOM_4));
+
+        StringBuilder help = new StringBuilder("Valid types are: ");
+        int size = VALID_USER_AUTH_TYPES.size();
+        for (int i = 0; i < size; i++) {
+            help.append(VALID_USER_AUTH_TYPES.valueAt(i));
+            if (i != size - 1) {
+                help.append(", ");
+            }
+        }
+        VALID_USER_AUTH_TYPES_HELP = help.append('.').toString();
+    }
 
     private final Context mContext;
     private final VehicleHal mHal;
@@ -119,6 +192,7 @@ final class CarShellCommand extends ShellCommand {
     private final SystemInterface mSystemInterface;
     private final GarageModeService mGarageModeService;
     private final CarUserService mCarUserService;
+    private final CarOccupantZoneService mCarOccupantZoneService;
 
     CarShellCommand(Context context,
             VehicleHal hal,
@@ -133,7 +207,8 @@ final class CarShellCommand extends ShellCommand {
             CarNightService carNightService,
             SystemInterface systemInterface,
             GarageModeService garageModeService,
-            CarUserService carUserService) {
+            CarUserService carUserService,
+            CarOccupantZoneService carOccupantZoneService) {
         mContext = context;
         mHal = hal;
         mCarAudioService = carAudioService;
@@ -148,6 +223,7 @@ final class CarShellCommand extends ShellCommand {
         mSystemInterface = systemInterface;
         mGarageModeService = garageModeService;
         mCarUserService = carUserService;
+        mCarOccupantZoneService = carOccupantZoneService;
     }
 
     @Override
@@ -210,7 +286,7 @@ final class CarShellCommand extends ShellCommand {
                 + " wireless projection");
         pw.println("\t--metrics");
         pw.println("\t  When used with dumpsys, only metrics will be in the dumpsys output.");
-        pw.println("\tset-zoneid-for-uid [zoneid] [uid]");
+        pw.printf("\t%s [zoneid] [uid]\n", COMMAND_SET_UID_TO_ZONE);
         pw.println("\t  Maps the audio zoneid to uid.");
         pw.println("\tstart-fixed-activity displayId packageName activityName");
         pw.println("\t  Start an Activity the specified display as fixed mode");
@@ -247,14 +323,27 @@ final class CarShellCommand extends ShellCommand {
         pw.println("\t  and an optional TIMEOUT_MS to wait for the HAL response (if not set,");
         pw.println("\t  it will use a  default value).");
 
-        pw.printf("\t%s <USER_ID> [--dry-run] [--timeout TIMEOUT_MS]\n", COMMAND_SWITCH_USER);
+        pw.printf("\t%s <USER_ID> [--hal-only] [--timeout TIMEOUT_MS]\n", COMMAND_SWITCH_USER);
         pw.println("\t  Switches to user USER_ID using the HAL integration.");
-        pw.println("\t  The --dry-run option only calls HAL, without switching the user,");
+        pw.println("\t  The --hal-only option only calls HAL, without switching the user,");
         pw.println("\t  while the --timeout defines how long to wait for the HAL response");
 
         pw.printf("\t%s\n", COMMAND_GET_INITIAL_USER);
         pw.printf("\t  Gets the id of the initial user (or %s when it's not available)\n",
                 NO_INITIAL_USER);
+
+        pw.printf("\t%s [occupantZoneId] [userId]\n", COMMAND_SET_USER_ID_TO_OCCUPANT_ZONE);
+        pw.println("\t  Maps the occupant zone id to user id.");
+        pw.printf("\t%s [occupantZoneId]\n", COMMAND_RESET_USER_ID_IN_OCCUPANT_ZONE);
+        pw.println("\t  Unmaps the user assigned to occupant zone id.");
+
+        pw.printf("\t%s [--hal-only] [--user USER_ID] (TYPE1) [...TYPE_N]\n",
+                COMMAND_GET_USER_AUTH_ASSOCIATION);
+        pw.println("\t  Checks whether the given user authentication types are associated with ");
+        pw.println("\t  the given user (or current user when not specified).");
+        pw.println("\t  By defalut it calls CarUserManager, but using --hal-only will call just "
+                + "UserHalService.");
+        pw.printf("\t  %s\n", VALID_USER_AUTH_TYPES_HELP);
     }
 
     private static int showInvalidArguments(PrintWriter pw) {
@@ -263,19 +352,47 @@ final class CarShellCommand extends ShellCommand {
         return RESULT_ERROR;
     }
 
-    private String runSetZoneIdForUid(String zoneString, String uidString) {
+    private void runSetZoneIdForUid(String zoneString, String uidString) {
         int uid = Integer.parseInt(uidString);
         int zoneId = Integer.parseInt(zoneString);
-        if (!ArrayUtils.contains(mCarAudioService.getAudioZoneIds(), zoneId)) {
-            return  "zoneid " + zoneId + " not found";
-        }
         mCarAudioService.setZoneIdForUid(zoneId, uid);
-        return null;
+    }
+
+    private void runSetOccupantZoneIdForUserId(String occupantZoneIdString,
+            String userIdString) {
+        int userId = Integer.parseInt(userIdString);
+        int occupantZoneId = Integer.parseInt(occupantZoneIdString);
+        if (!mCarOccupantZoneService.assignProfileUserToOccupantZone(occupantZoneId, userId)) {
+            throw new IllegalStateException("Failed to set userId " + userId + " to occupantZoneId "
+                    + occupantZoneIdString);
+        }
+    }
+
+    private void runResetOccupantZoneId(String occupantZoneIdString) {
+        int occupantZoneId = Integer.parseInt(occupantZoneIdString);
+        if (!mCarOccupantZoneService
+                .assignProfileUserToOccupantZone(occupantZoneId, UserHandle.USER_NULL)) {
+            throw new IllegalStateException("Failed to reset occupantZoneId "
+                    + occupantZoneIdString);
+        }
     }
 
     int exec(String[] args, PrintWriter writer) {
-        String arg = args[0];
-        switch (arg) {
+        String cmd = args[0];
+        String requiredPermission = USER_BUILD_COMMAND_TO_PERMISSION_MAP.get(cmd);
+        if (VERBOSE) {
+            Log.v(TAG, "cmd: " + cmd + ", requiredPermission: " + requiredPermission);
+        }
+        if (Build.IS_USER && requiredPermission == null) {
+            throw new SecurityException("The command " + cmd + "requires non-user build");
+        }
+        if (requiredPermission != null) {
+            if (!ICarImpl.hasPermission(mContext, requiredPermission)) {
+                throw new SecurityException("The command " + cmd + "requires permission:"
+                        + requiredPermission);
+            }
+        }
+        switch (cmd) {
             case COMMAND_HELP:
                 showHelp(writer);
                 break;
@@ -386,11 +503,19 @@ final class CarShellCommand extends ShellCommand {
                 if (args.length != 3) {
                     return showInvalidArguments(writer);
                 }
-                String results = runSetZoneIdForUid(args[1], args[2]);
-                if (results != null) {
-                    writer.println(results);
-                    showHelp(writer);
+                runSetZoneIdForUid(args[1], args[2]);
+                break;
+            case COMMAND_SET_USER_ID_TO_OCCUPANT_ZONE:
+                if (args.length != 3) {
+                    return showInvalidArguments(writer);
                 }
+                runSetOccupantZoneIdForUserId(args[1], args[2]);
+                break;
+            case COMMAND_RESET_USER_ID_IN_OCCUPANT_ZONE:
+                if (args.length != 2) {
+                    return showInvalidArguments(writer);
+                }
+                runResetOccupantZoneId(args[1]);
                 break;
             case COMMAND_START_FIXED_ACTIVITY_MODE:
                 startFixedActivity(args, writer);
@@ -431,9 +556,11 @@ final class CarShellCommand extends ShellCommand {
             case COMMAND_GET_INITIAL_USER:
                 getInitialUser(writer);
                 break;
-
+            case COMMAND_GET_USER_AUTH_ASSOCIATION:
+                getUserAuthAssociation(args, writer);
+                break;
             default:
-                writer.println("Unknown command: \"" + arg + "\"");
+                writer.println("Unknown command: \"" + cmd + "\"");
                 showHelp(writer);
                 return RESULT_ERROR;
         }
@@ -715,7 +842,7 @@ final class CarShellCommand extends ShellCommand {
 
         int targetUserId = Integer.parseInt(args[1]);
         int timeout = 1_000;
-        boolean dryRun = false;
+        boolean halOnly = false;
 
         for (int i = 2; i < args.length; i++) {
             String arg = args[i];
@@ -723,8 +850,8 @@ final class CarShellCommand extends ShellCommand {
                 case "--timeout":
                     timeout = Integer.parseInt(args[++i]);
                     break;
-                case "--dry-run":
-                    dryRun = true;
+                case "--hal-only":
+                    halOnly = true;
                     break;
                 default:
                     writer.println("Invalid option at index " + i + ": " + arg);
@@ -732,12 +859,11 @@ final class CarShellCommand extends ShellCommand {
             }
         }
 
-        Log.d(TAG, "handleSwitchUser(): target=" + targetUserId + ", dryRun=" + dryRun
+        Log.d(TAG, "handleSwitchUser(): target=" + targetUserId + ", halOnly=" + halOnly
                 + ", timeout=" + timeout);
 
-        CountDownLatch latch = new CountDownLatch(1);
-
-        if (dryRun) {
+        if (halOnly) {
+            CountDownLatch latch = new CountDownLatch(1);
             UserHalService userHal = mHal.getUserHal();
             // TODO(b/150413515): use UserHalHelper to populate it with current users
             UsersInfo usersInfo = new UsersInfo();
@@ -761,39 +887,150 @@ final class CarShellCommand extends ShellCommand {
                     if (!TextUtils.isEmpty(errorMessage)) {
                         writer.printf("Error message: %s", errorMessage);
                     }
-                    // TODO: If HAL returned OK, make a "post-switch" call to the HAL indicating an
-                    // Android error. This is to "rollback" the HAL switch.
+                    // TODO(b/150409110): If HAL returned OK, make a "post-switch" call to the HAL
+                    // indicating an Android error. This is to "rollback" the HAL switch.
                 } finally {
                     latch.countDown();
                 }
             });
-        } else {
-            Car car = Car.createCar(mContext);
-            CarUserManager carUserManager =
-                    (CarUserManager) car.getCarManager(Car.CAR_USER_SERVICE);
-            carUserManager.switchUser(targetUserId, new CarUserManager.UserSwitchListener() {
-                @Override
-                public void onResult(UserSwitchResult result) {
-                    try {
-                        writer.printf("UserSwitchResult: status = %s\n",
-                                CarUserManager.userSwitchStatusToString(result.getStatus()));
-                        String msg = result.getErrorMessage();
-                        if (msg != null && !msg.isEmpty()) {
-                            writer.printf("UserSwitchResult: Message = %s\n", msg);
-                        }
-                    } finally {
-                        latch.countDown();
-                    }
-                }
-            });
+            waitForHal(writer, latch, timeout);
+            return;
         }
-
-        waitForHal(writer, latch, timeout);
+        Car car = Car.createCar(mContext);
+        CarUserManager carUserManager =
+                (CarUserManager) car.getCarManager(Car.CAR_USER_SERVICE);
+        AndroidFuture<UserSwitchResult> future = carUserManager.switchUser(targetUserId);
+        UserSwitchResult result = null;
+        try {
+            result = future.get(timeout, TimeUnit.MILLISECONDS);
+        } catch (Exception e) {
+            Log.e(TAG, "exception calling CarUserManager.switchUser(" + targetUserId + ")", e);
+        }
+        if (result == null) {
+            writer.printf("Service didn't respond in %d ms", timeout);
+            return;
+        }
+        writer.printf("UserSwitchResult: status = %s\n",
+                UserSwitchResult.statusToString(result.getStatus()));
+        String msg = result.getErrorMessage();
+        if (msg != null && !msg.isEmpty()) {
+            writer.printf("UserSwitchResult: Message = %s\n", msg);
+        }
     }
 
     private void getInitialUser(PrintWriter writer) {
         android.content.pm.UserInfo user = mCarUserService.getInitialUser();
         writer.println(user == null ? NO_INITIAL_USER : user.id);
+    }
+
+    private void getUserAuthAssociation(String[] args, PrintWriter writer) {
+        if (args.length < 2) {
+            writer.println("invalid usage, must pass at least 1 argument");
+            return;
+        }
+
+        boolean halOnly = false;
+        int userId = UserHandle.USER_CURRENT;
+
+        UserIdentificationGetRequest request = new UserIdentificationGetRequest();
+        for (int i = 1; i < args.length; i++) {
+            String arg = args[i];
+            switch (arg) {
+                case "--user":
+                    try {
+                        userId = Integer.parseInt(args[++i]);
+                    } catch (Exception e) {
+                        writer.printf("Invalid user id at index %d (from %s): %s\n", i + 1,
+                                Arrays.toString(args), arg);
+                    }
+                    break;
+                case "--hal-only":
+                    halOnly = true;
+                    break;
+                default:
+                    int type = parseAuthType(arg);
+                    if (type == INVALID_USER_AUTH_TYPE) {
+                        writer.printf("Invalid type at index %d (from %s): %s. %s\n", i + 1,
+                                Arrays.toString(args), arg, VALID_USER_AUTH_TYPES_HELP);
+                        return;
+                    }
+                    request.associationTypes.add(type);
+            }
+
+        }
+        if (userId == UserHandle.USER_CURRENT) {
+            userId = ActivityManager.getCurrentUser();
+        }
+        int requestSize = request.associationTypes.size();
+        if (halOnly) {
+            request.numberAssociationTypes = requestSize;
+            // TODO(b/150413515): use UserHalHelper to set user flags
+            request.userInfo.userId = userId;
+
+            Log.d(TAG, "getUserAuthAssociation(): user=" + userId + ", halOnly=" + halOnly
+                    + ", request=" + request);
+            UserIdentificationResponse response = mHal.getUserHal().getUserAssociation(request);
+            Log.d(TAG, "getUserAuthAssociation(): response=" + response);
+
+            if (response == null) {
+                writer.println("null response");
+                return;
+            }
+
+            if (!TextUtils.isEmpty(response.errorMessage)) {
+                writer.printf("Error message: %s\n", response.errorMessage);
+            }
+            int numberAssociations = response.associations.size();
+            writer.printf("%d associations:\n", numberAssociations);
+            for (int i = 0; i < numberAssociations; i++) {
+                UserIdentificationAssociation association = response.associations.get(i);
+                writer.printf("  %s\n", association);
+            }
+            return;
+        }
+
+        Context context;
+        if (userId == mContext.getUserId()) {
+            context = mContext;
+        } else {
+            context = mContext.createContextAsUser(UserHandle.of(userId), /* flags= */ 0);
+        }
+        int actualUserId = Binder.getCallingUid();
+        if (actualUserId != userId) {
+            writer.printf("Emulating call for user id %d, but caller's user id is %d, so that's "
+                    + "what CarUserService will use when calling HAL.\n", userId, actualUserId);
+        }
+
+        Car car = Car.createCar(context);
+        CarUserManager carUserManager = (CarUserManager) car.getCarManager(Car.CAR_USER_SERVICE);
+        int[] types = new int[requestSize];
+        for (int i = 0; i < types.length; i++) {
+            types[i] = request.associationTypes.get(i);
+        }
+        GetUserIdentificationAssociationResponse response = carUserManager
+                .getUserIdentificationAssociation(types);
+        if (response == null) {
+            writer.println("null response");
+            return;
+        }
+        String errorMessage = response.getErrorMessage();
+        if (!TextUtils.isEmpty(errorMessage)) {
+            writer.printf("Error message: %s\n", errorMessage);
+        }
+        int[] values = response.getValues();
+        writer.printf("%d associations:\n", values.length);
+        for (int i = 0; i < values.length; i++) {
+            writer.printf("  %s\n", UserIdentificationAssociationValue.toString(values[i]));
+        }
+    }
+
+    private static int parseAuthType(@NonNull String type) {
+        for (int i = 0; i < VALID_USER_AUTH_TYPES.size(); i++) {
+            if (VALID_USER_AUTH_TYPES.valueAt(i).equals(type)) {
+                return VALID_USER_AUTH_TYPES.keyAt(i);
+            }
+        }
+        return INVALID_USER_AUTH_TYPE;
     }
 
     private void forceDayNightMode(String arg, PrintWriter writer) {

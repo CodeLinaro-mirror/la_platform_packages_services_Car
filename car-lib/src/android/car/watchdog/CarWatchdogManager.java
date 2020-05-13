@@ -16,6 +16,8 @@
 
 package android.car.watchdog;
 
+import static com.android.internal.util.function.pooled.PooledLambda.obtainMessage;
+
 import android.annotation.CallbackExecutor;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
@@ -52,6 +54,8 @@ public final class CarWatchdogManager extends CarManagerBase {
     private static final boolean DEBUG = true; // STOPSHIP if true (b/151474489)
     private static final int INVALID_SESSION_ID = -1;
     private static final int NUMBER_OF_CONDITIONS_TO_BE_MET = 2;
+    // Message ID representing main thread activeness checking.
+    private static final int WHAT_CHECK_MAIN_THREAD = 1;
 
     /** Timeout for services which should be responsive. The length is 3,000 milliseconds. */
     public static final int TIMEOUT_CRITICAL = 0;
@@ -86,27 +90,14 @@ public final class CarWatchdogManager extends CarManagerBase {
     @GuardedBy("mLock")
     private int mRemainingConditions;
 
-    private Runnable mMainThreadCheck = () -> {
-        int sessionId;
-        boolean shouldReport;
-        synchronized (mLock) {
-            mRemainingConditions--;
-            sessionId = mSession.currentId;
-            shouldReport = checkConditionLocked();
-        }
-        if (shouldReport) {
-            reportToService(sessionId);
-        }
-    };
-
     /**
      * CarWatchdogClientCallback is implemented by the clients which want to be health-checked by
      * car watchdog server. Every time onCheckHealthStatus is called, they are expected to
      * respond by calling {@link CarWatchdogManager.tellClientAlive} within timeout. If they don't
      * respond, car watchdog server reports the current state and kills them.
      *
-     * <p>Before car watchdog server kills the client, it calls onPrepareProcessKill to allow them
-     * to prepare the termination. They will be killed in 1 second.
+     * <p>Before car watchdog server kills the client, it calls onPrepareProcessTermination to allow
+     * them to prepare the termination. They will be killed in 1 second.
      */
     public abstract static class CarWatchdogClientCallback {
         /**
@@ -133,8 +124,6 @@ public final class CarWatchdogManager extends CarManagerBase {
          * <p>The callback method is called at the Executor which is specifed in {@link
          * #registerClient}.
          */
-        // TODO(b/150006093): After adding a callback to ICarWatchdogClient, subsequent
-        // implementation should be done in CarWatchdogService and CarWatchdogManager.
         public void onPrepareProcessTermination() {}
     }
 
@@ -250,7 +239,7 @@ public final class CarWatchdogManager extends CarManagerBase {
     private void checkClientStatus(int sessionId, int timeout) {
         CarWatchdogClientCallback client;
         Executor executor;
-        mMainHandler.removeCallbacks(mMainThreadCheck);
+        mMainHandler.removeMessages(WHAT_CHECK_MAIN_THREAD);
         synchronized (mLock) {
             if (mRegisteredClient == null) {
                 Log.w(TAG, "Cannot check client status. The client has not been registered.");
@@ -264,8 +253,8 @@ public final class CarWatchdogManager extends CarManagerBase {
         // For a car watchdog client to be active, 1) its main thread is active and 2) the client
         // responds within timeout. When each condition is met, the remaining task counter is
         // decreased. If the remaining task counter is zero, the client is considered active.
-        // TODO(ericjeong): use a pooled-lambda.
-        mMainHandler.post(mMainThreadCheck);
+        mMainHandler.sendMessage(obtainMessage(CarWatchdogManager::checkMainThread, this)
+                .setWhat(WHAT_CHECK_MAIN_THREAD));
         // Call the client callback to check if the client is active.
         executor.execute(() -> {
             boolean checkDone = client.onCheckHealthStatus(sessionId, timeout);
@@ -286,6 +275,19 @@ public final class CarWatchdogManager extends CarManagerBase {
         });
     }
 
+    private void checkMainThread() {
+        int sessionId;
+        boolean shouldReport;
+        synchronized (mLock) {
+            mRemainingConditions--;
+            sessionId = mSession.currentId;
+            shouldReport = checkConditionLocked();
+        }
+        if (shouldReport) {
+            reportToService(sessionId);
+        }
+    }
+
     private boolean checkConditionLocked() {
         if (mRemainingConditions < 0) {
             Log.wtf(TAG, "Remaining condition is less than zero: should not happen");
@@ -299,6 +301,20 @@ public final class CarWatchdogManager extends CarManagerBase {
         } catch (RemoteException e) {
             handleRemoteExceptionFromCarService(e);
         }
+    }
+
+    private void notifyProcessTermination() {
+        CarWatchdogClientCallback client;
+        Executor executor;
+        synchronized (mLock) {
+            if (mRegisteredClient == null) {
+                Log.w(TAG, "Cannot notify the client. The client has not been registered.");
+                return;
+            }
+            client = mRegisteredClient;
+            executor = mCallbackExecutor;
+        }
+        executor.execute(() -> client.onPrepareProcessTermination());
     }
 
     /** @hide */
@@ -315,6 +331,24 @@ public final class CarWatchdogManager extends CarManagerBase {
             if (manager != null) {
                 manager.checkClientStatus(sessionId, timeout);
             }
+        }
+
+        @Override
+        public void prepareProcessTermination() {
+            CarWatchdogManager manager = mManager.get();
+            if (manager != null) {
+                manager.notifyProcessTermination();
+            }
+        }
+
+        @Override
+        public int getInterfaceVersion() {
+            return this.VERSION;
+        }
+
+        @Override
+        public String getInterfaceHash() {
+            return this.HASH;
         }
     }
 

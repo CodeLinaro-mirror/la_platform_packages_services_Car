@@ -16,42 +16,38 @@
 
 package android.car.userlib;
 
+import static android.car.test.mocks.AndroidMockitoHelper.mockUmGetUsers;
+import static android.car.test.util.UserTestingHelper.newUser;
+import static android.os.UserHandle.USER_SYSTEM;
+
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doReturn;
-import static com.android.dx.mockito.inline.extended.ExtendedMockito.mockitoSession;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.verify;
 
 import static com.google.common.truth.Truth.assertThat;
 
-import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
+import android.annotation.NonNull;
+import android.annotation.UserIdInt;
 import android.app.ActivityManager;
-import android.app.IActivityManager;
+import android.car.test.mocks.AbstractExtendedMockitoTestCase;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.pm.UserInfo;
 import android.content.res.Resources;
-import android.os.RemoteException;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.provider.Settings;
 import android.sysprop.CarProperties;
 
 import androidx.test.InstrumentationRegistry;
-import androidx.test.filters.FlakyTest;
 import androidx.test.filters.SmallTest;
 
-import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.Mock;
-import org.mockito.MockitoSession;
-import org.mockito.quality.Strictness;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Optional;
 
 /**
@@ -64,11 +60,10 @@ import java.util.Optional;
  * 3. {@link ActivityManager} to verify user switch is invoked.
  */
 @SmallTest
-public class CarUserManagerHelperTest {
+public class CarUserManagerHelperTest extends AbstractExtendedMockitoTestCase {
     @Mock private Context mContext;
     @Mock private UserManager mUserManager;
     @Mock private ActivityManager mActivityManager;
-    @Mock private IActivityManager mIActivityManager;
     @Mock private ContentResolver mContentResolver;
 
     // Not worth to mock because it would need to mock a Drawable used by UserIcons.
@@ -77,22 +72,20 @@ public class CarUserManagerHelperTest {
     private static final String TEST_USER_NAME = "testUser";
     private static final int NO_FLAGS = 0;
 
-    private MockitoSession mSession;
     private CarUserManagerHelper mCarUserManagerHelper;
-    private UserInfo mSystemUser;
     private final int mForegroundUserId = 42;
+
+    @Override
+    protected void onSessionBuilder(CustomMockitoSessionBuilder session) {
+        session
+            .spyStatic(ActivityManager.class)
+            .spyStatic(CarProperties.class)
+            .spyStatic(UserManager.class)
+            .spyStatic(Settings.Global.class);
+    }
 
     @Before
     public void setUpMocksAndVariables() {
-        mSession = mockitoSession()
-                .strictness(Strictness.LENIENT)
-                .spyStatic(ActivityManager.class)
-                .spyStatic(CarProperties.class)
-                .spyStatic(Settings.Global.class)
-                .spyStatic(UserManager.class)
-                .initMocks(this)
-                .startMocking();
-
         doReturn(mUserManager).when(mContext).getSystemService(Context.USER_SERVICE);
         doReturn(mActivityManager).when(mContext).getSystemService(Context.ACTIVITY_SERVICE);
         doReturn(mResources).when(mContext).getResources();
@@ -100,15 +93,7 @@ public class CarUserManagerHelperTest {
         doReturn(mContext).when(mContext).getApplicationContext();
         mCarUserManagerHelper = new CarUserManagerHelper(mContext);
 
-        mSystemUser = createUserInfoForId(UserHandle.USER_SYSTEM);
-
-        doReturn(mIActivityManager).when(() -> ActivityManager.getService());
-        doReturn(mForegroundUserId).when(() -> ActivityManager.getCurrentUser());
-    }
-
-    @After
-    public void finishSession() throws Exception {
-        mSession.finishMocking();
+        mockGetCurrentUser(mForegroundUserId);
     }
 
     @Test
@@ -154,70 +139,9 @@ public class CarUserManagerHelperTest {
     }
 
     @Test
-    public void testStartForegroundUser_ok() throws Exception {
-        doReturn(true).when(mIActivityManager).startUserInForegroundWithListener(10, null);
-
-        assertThat(mCarUserManagerHelper.startForegroundUser(10)).isTrue();
-    }
-
-    @Test
-    public void testStartForegroundUser_fail() {
-        // startUserInForegroundWithListener will return false by default
-
-        assertThat(mCarUserManagerHelper.startForegroundUser(10)).isFalse();
-    }
-
-    @Test
-    public void testStartForegroundUser_remoteException() throws Exception {
-        doThrow(new RemoteException("DOH!")).when(mIActivityManager)
-                .startUserInForegroundWithListener(10, null);
-
-        assertThat(mCarUserManagerHelper.startForegroundUser(10)).isFalse();
-    }
-
-    @Test
-    public void testStartForegroundUser_nonHeadlessSystemUser() throws Exception {
-        setHeadlessSystemUserMode(false);
-        doReturn(true).when(mIActivityManager)
-                .startUserInForegroundWithListener(UserHandle.USER_SYSTEM, null);
-
-        assertThat(mCarUserManagerHelper.startForegroundUser(UserHandle.USER_SYSTEM)).isTrue();
-    }
-
-    @Test
-    public void testStartForegroundUser_headlessSystemUser() throws Exception {
-        setHeadlessSystemUserMode(true);
-
-        assertThat(mCarUserManagerHelper.startForegroundUser(UserHandle.USER_SYSTEM)).isFalse();
-
-        verify(mIActivityManager, never()).startUserInForegroundWithListener(UserHandle.USER_SYSTEM,
-                null);
-    }
-
-    @Test
-    public void testUnlockSystemUser_startedOk() throws Exception {
-        when(mIActivityManager.startUserInBackground(UserHandle.USER_SYSTEM)).thenReturn(true);
-
-        mCarUserManagerHelper.unlockSystemUser();
-
-        verify(mIActivityManager, never()).unlockUser(UserHandle.USER_SYSTEM, /* token= */ null,
-                /* secret= */ null, /* listener= */ null);
-    }
-
-    @Test
-    public void testUnlockSystemUser_startFailUnlockedInstead() throws Exception {
-        // No need to set startUserInBackground() expectation as it will return false by default
-
-        mCarUserManagerHelper.unlockSystemUser();
-
-        verify(mIActivityManager).unlockUser(UserHandle.USER_SYSTEM, /* token= */ null,
-                /* secret= */ null, /* listener= */ null);
-    }
-
-    @Test
     public void testGrantAdminPermissions() {
         int userId = 30;
-        UserInfo testInfo = createUserInfoForId(userId);
+        UserInfo testInfo = newUser(userId);
 
         // Test that non-admins cannot grant admin permissions.
         doReturn(false).when(mUserManager).isAdminUser(); // Current user non-admin.
@@ -234,7 +158,7 @@ public class CarUserManagerHelperTest {
     public void testDefaultNonAdminRestrictions() {
         String testUserName = "Test User";
         int userId = 20;
-        UserInfo newNonAdmin = createUserInfoForId(userId);
+        UserInfo newNonAdmin = newUser(userId);
 
         doReturn(newNonAdmin).when(mUserManager).createUser(testUserName, NO_FLAGS);
 
@@ -248,7 +172,7 @@ public class CarUserManagerHelperTest {
     public void testGrantingAdminPermissionsRemovesNonAdminRestrictions() {
         int testUserId = 30;
         boolean restrictionEnabled = false;
-        UserInfo testInfo = createUserInfoForId(testUserId);
+        UserInfo testInfo = newUser(testUserId);
 
         // Only admins can grant permissions.
         doReturn(true).when(mUserManager).isAdminUser();
@@ -261,63 +185,40 @@ public class CarUserManagerHelperTest {
 
     @Test
     public void testGetInitialUser_WithValidLastActiveUser_ReturnsLastActiveUser() {
-        int lastActiveUserId = 12;
+        setLastActiveUser(12);
+        mockGetUsers(USER_SYSTEM, 10, 11, 12);
 
-        UserInfo user10 = createUserInfoForId(10);
-        UserInfo user11 = createUserInfoForId(11);
-        UserInfo user12 = createUserInfoForId(12);
-
-        setLastActiveUser(lastActiveUserId);
-        mockGetUsers(mSystemUser, user10, user11, user12);
-
-        assertThat(mCarUserManagerHelper.getInitialUser()).isEqualTo(lastActiveUserId);
+        assertThat(mCarUserManagerHelper.getInitialUser(/* usesOverrideUserIdProperty= */ true))
+                .isEqualTo(12);
     }
 
     @Test
     public void testGetInitialUser_WithNonExistLastActiveUser_ReturnsSmallestUserId() {
-        int lastActiveUserId = 12;
-        int minimumUserId = 10;
+        setLastActiveUser(12);
+        mockGetUsers(USER_SYSTEM, 10, 10 + 1);
 
-        UserInfo smallestUser = createUserInfoForId(minimumUserId);
-        UserInfo notSmallestUser = createUserInfoForId(minimumUserId + 1);
-
-        setLastActiveUser(lastActiveUserId);
-        mockGetUsers(mSystemUser, smallestUser, notSmallestUser);
-
-        assertThat(mCarUserManagerHelper.getInitialUser()).isEqualTo(minimumUserId);
+        assertThat(mCarUserManagerHelper.getInitialUser(/* usesOverrideUserIdProperty= */ true))
+                .isEqualTo(10);
     }
 
     @Test
-    @FlakyTest
     public void testGetInitialUser_WithOverrideId_ReturnsOverrideId() {
-        int lastActiveUserId = 12;
-        int overrideUserId = 11;
+        setDefaultBootUserOverride(11);
+        setLastActiveUser(12);
+        mockGetUsers(USER_SYSTEM, 10, 11, 12);
 
-        UserInfo user10 = createUserInfoForId(10);
-        UserInfo user11 = createUserInfoForId(11);
-        UserInfo user12 = createUserInfoForId(12);
-
-        setDefaultBootUserOverride(overrideUserId);
-        setLastActiveUser(lastActiveUserId);
-        mockGetUsers(mSystemUser, user10, user11, user12);
-
-        assertThat(mCarUserManagerHelper.getInitialUser()).isEqualTo(overrideUserId);
+        assertThat(mCarUserManagerHelper.getInitialUser(/* usesOverrideUserIdProperty= */ true))
+                .isEqualTo(11);
     }
 
     @Test
     public void testGetInitialUser_WithInvalidOverrideId_ReturnsLastActiveUserId() {
-        int lastActiveUserId = 12;
-        int overrideUserId = 15;
+        setDefaultBootUserOverride(15);
+        setLastActiveUser(12);
+        mockGetUsers(USER_SYSTEM, 10, 11, 12);
 
-        UserInfo user10 = createUserInfoForId(10);
-        UserInfo user11 = createUserInfoForId(11);
-        UserInfo user12 = createUserInfoForId(12);
-
-        setDefaultBootUserOverride(overrideUserId);
-        setLastActiveUser(lastActiveUserId);
-        mockGetUsers(mSystemUser, user10, user11, user12);
-
-        assertThat(mCarUserManagerHelper.getInitialUser()).isEqualTo(lastActiveUserId);
+        assertThat(mCarUserManagerHelper.getInitialUser(/* usesOverrideUserIdProperty= */ true))
+                .isEqualTo(12);
     }
 
     @Test
@@ -326,99 +227,83 @@ public class CarUserManagerHelperTest {
         int invalidLastActiveUserId = 14;
         int invalidOverrideUserId = 15;
 
-        UserInfo minimumUser = createUserInfoForId(minimumUserId);
-        UserInfo user11 = createUserInfoForId(minimumUserId + 1);
-        UserInfo user12 = createUserInfoForId(minimumUserId + 2);
-
         setDefaultBootUserOverride(invalidOverrideUserId);
         setLastActiveUser(invalidLastActiveUserId);
-        mockGetUsers(mSystemUser, minimumUser, user11, user12);
+        mockGetUsers(USER_SYSTEM, minimumUserId, minimumUserId + 1, minimumUserId + 2);
 
-        assertThat(mCarUserManagerHelper.getInitialUser()).isEqualTo(minimumUserId);
+        assertThat(mCarUserManagerHelper.getInitialUser(/* usesOverrideUserIdProperty= */ true))
+                .isEqualTo(minimumUserId);
     }
 
     @Test
     public void testGetInitialUser_WhenOverrideIdIsIgnored() {
-        int lastActiveUserId = 12;
-        int overrideUserId = 11;
-
-        UserInfo user10 = createUserInfoForId(10);
-        UserInfo user11 = createUserInfoForId(11);
-        UserInfo user12 = createUserInfoForId(12);
-
-        setDefaultBootUserOverride(overrideUserId);
-        setLastActiveUser(lastActiveUserId);
-        mockGetUsers(mSystemUser, user10, user11, user12);
+        setDefaultBootUserOverride(11);
+        setLastActiveUser(12);
+        mockGetUsers(USER_SYSTEM, 10, 11, 12);
 
         assertThat(mCarUserManagerHelper.getInitialUser(/* usesOverrideUserIdProperty= */ false))
-                .isEqualTo(lastActiveUserId);
+                .isEqualTo(12);
     }
 
     @Test
     public void testGetInitialUser_WithEmptyReturnNull() {
-        assertThat(mCarUserManagerHelper.getInitialUser()).isEqualTo(UserHandle.USER_NULL);
+        assertThat(mCarUserManagerHelper.getInitialUser(/* usesOverrideUserIdProperty= */ true))
+                .isEqualTo(UserHandle.USER_NULL);
     }
 
     @Test
     public void testHasInitialUser_onlyHeadlessSystemUser() {
-        setHeadlessSystemUserMode(true);
-        mockGetUsers(mSystemUser);
+        mockIsHeadlessSystemUserMode(true);
+        mockGetUsers(USER_SYSTEM);
 
         assertThat(mCarUserManagerHelper.hasInitialUser()).isFalse();
     }
 
     @Test
     public void testHasInitialUser_onlyNonHeadlessSystemUser() {
-        setHeadlessSystemUserMode(false);
-        mockGetUsers(mSystemUser);
+        mockIsHeadlessSystemUserMode(false);
+        mockGetUsers(USER_SYSTEM);
 
         assertThat(mCarUserManagerHelper.hasInitialUser()).isTrue();
     }
 
     @Test
     public void testHasInitialUser_hasNormalUser() {
-        setHeadlessSystemUserMode(true);
-        UserInfo normalUser = createUserInfoForId(10);
-        mockGetUsers(mSystemUser, normalUser);
+        mockIsHeadlessSystemUserMode(true);
+        mockGetUsers(USER_SYSTEM, 10);
 
         assertThat(mCarUserManagerHelper.hasInitialUser()).isTrue();
     }
 
     @Test
     public void testHasInitialUser_hasOnlyWorkProfile() {
-        setHeadlessSystemUserMode(true);
-        UserInfo workProfile = createUserInfoForId(10);
+        mockIsHeadlessSystemUserMode(true);
+
+        UserInfo systemUser = newUser(UserHandle.USER_SYSTEM);
+
+        UserInfo workProfile = newUser(10);
         workProfile.userType = UserManager.USER_TYPE_PROFILE_MANAGED;
         assertThat(workProfile.isManagedProfile()).isTrue(); // Sanity check
-        mockGetUsers(mSystemUser, workProfile);
+
+        mockGetUsers(systemUser, workProfile);
 
         assertThat(mCarUserManagerHelper.hasInitialUser()).isFalse();
     }
 
-    private UserInfo createUserInfoForId(int id) {
-        UserInfo userInfo = new UserInfo();
-        userInfo.id = id;
-        return userInfo;
+    private void mockGetUsers(@NonNull @UserIdInt int... userIds) {
+        mockUmGetUsers(mUserManager, userIds);
     }
 
-    private void mockGetUsers(UserInfo... users) {
-        List<UserInfo> testUsers = new ArrayList<>();
-        for (UserInfo user : users) {
-            testUsers.add(user);
-        }
-        doReturn(testUsers).when(mUserManager).getUsers(true);
+    private void mockGetUsers(@NonNull UserInfo... users) {
+        mockUmGetUsers(mUserManager, users);
     }
 
-    private void setLastActiveUser(int userId) {
+    private void setLastActiveUser(@UserIdInt int userId) {
         doReturn(userId).when(() -> Settings.Global.getInt(mContentResolver,
                 Settings.Global.LAST_ACTIVE_USER_ID, UserHandle.USER_SYSTEM));
     }
 
-    private void setDefaultBootUserOverride(int userId) {
+    private void setDefaultBootUserOverride(@UserIdInt int userId) {
         doReturn(Optional.of(userId)).when(() -> CarProperties.boot_user_override_id());
-    }
-
-    private void setHeadlessSystemUserMode(boolean mode) {
-        doReturn(mode).when(() -> UserManager.isHeadlessSystemUserMode());
     }
 }

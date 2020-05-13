@@ -161,7 +161,7 @@ public final class Car {
     public static final String AUDIO_SERVICE = "audio";
 
     /** Service name for {@link CarNavigationStatusManager} */
-    @MandatoryFeature
+    @OptionalFeature
     public static final String CAR_NAVIGATION_SERVICE = "car_navigation_service";
 
     /** Service name for {@link CarOccupantZoneManager} */
@@ -1565,12 +1565,14 @@ public final class Car {
     }
 
     /** @hide */
-    Handler getEventHandler() {
+    @VisibleForTesting
+    public Handler getEventHandler() {
         return mEventHandler;
     }
 
     /** @hide */
-    <T> T handleRemoteExceptionFromCarService(RemoteException e, T returnValue) {
+    @VisibleForTesting
+    public <T> T handleRemoteExceptionFromCarService(RemoteException e, T returnValue) {
         handleRemoteExceptionFromCarService(e);
         return returnValue;
     }

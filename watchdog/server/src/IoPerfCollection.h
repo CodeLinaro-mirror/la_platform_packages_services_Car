@@ -77,15 +77,20 @@ std::string toString(const SystemIoPerfData& perfData);
 
 // Performance data collected from the `/proc/[pid]/stat` and `/proc/[pid]/task/[tid]/stat` files.
 struct ProcessIoPerfData {
-    struct Stats {
+    struct UidStats {
         userid_t userId = 0;
         std::string packageName;
         uint64_t count = 0;
+        struct ProcessStats {
+            std::string comm = "";
+            uint64_t count = 0;
+        };
+        std::vector<ProcessStats> topNProcesses = {};
     };
-    std::vector<Stats> topNIoBlockedUids = {};
+    std::vector<UidStats> topNIoBlockedUids = {};
     // Total # of tasks owned by each UID in |topNIoBlockedUids|.
     std::vector<uint64_t> topNIoBlockedUidsTotalTaskCnt = {};
-    std::vector<Stats> topNMajorFaults = {};
+    std::vector<UidStats> topNMajorFaultUids = {};
     uint64_t totalMajorFaults = 0;
     // Percentage of increase/decrease in the major page faults since last collection.
     double majorFaultsPercentChange = 0.0;
@@ -121,8 +126,11 @@ enum CollectionEvent {
 };
 
 enum SwitchEvent {
+    // Ends boot-time collection by collecting the last boot-time record and switching the
+    // collection event to periodic collection.
+    END_BOOTTIME_COLLECTION = CollectionEvent::LAST_EVENT + 1,
     // Ends custom collection, discards collected data and starts periodic collection.
-    END_CUSTOM_COLLECTION = CollectionEvent::LAST_EVENT + 1,
+    END_CUSTOM_COLLECTION
 };
 
 static inline std::string toString(CollectionEvent event) {
