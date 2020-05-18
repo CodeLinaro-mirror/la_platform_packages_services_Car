@@ -16,6 +16,7 @@
 
 package com.android.car.user;
 
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.doReturn;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.mockitoSession;
 
 import static com.google.common.truth.Truth.assertThat;
@@ -35,6 +36,9 @@ import android.app.AppOpsManager;
 import android.car.hardware.power.CarPowerManager;
 import android.car.hardware.power.CarPowerManager.CarPowerStateListener;
 import android.car.settings.CarSettings;
+import android.car.user.CarUserManager;
+import android.car.user.CarUserManager.UserLifecycleEvent;
+import android.car.user.CarUserManager.UserLifecycleListener;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -56,18 +60,15 @@ import com.android.car.R;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
-import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.MockitoSession;
-import org.mockito.junit.MockitoJUnitRunner;
 import org.mockito.quality.Strictness;
 
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
-@RunWith(MockitoJUnitRunner.class)
 public class CarUserNoticeServiceTest {
 
     @Mock
@@ -91,7 +92,7 @@ public class CarUserNoticeServiceTest {
     private ArgumentCaptor<BroadcastReceiver> mDisplayBroadcastReceiver;
 
     @Captor
-    private ArgumentCaptor<CarUserService.UserCallback> mUserCallback;
+    private ArgumentCaptor<UserLifecycleListener> mUserLifecycleListenerArgumentCaptor;
 
     @Captor
     private ArgumentCaptor<CarPowerStateListener> mPowerStateListener;
@@ -113,26 +114,30 @@ public class CarUserNoticeServiceTest {
                 .strictness(Strictness.LENIENT)
                 .startMocking();
 
-        when(CarLocalServices.createCarPowerManager(mMockContext)).thenReturn(mCarPowerManager);
-        when(Settings.Secure.getIntForUser(any(),
+        doReturn(mCarPowerManager).when(() -> CarLocalServices.createCarPowerManager(mMockContext));
+        doReturn(mMockCarPowerManagementService)
+                .when(() -> CarLocalServices.getService(CarPowerManagementService.class));
+        doReturn(mCarPowerManager).when(() -> CarLocalServices.createCarPowerManager(mMockContext));
+        doReturn(mMockCarUserService)
+                .when(() -> CarLocalServices.getService(CarUserService.class));
+
+        doReturn(1).when(() -> Settings.Secure.getIntForUser(any(),
                 eq(CarSettings.Secure.KEY_ENABLE_INITIAL_NOTICE_SCREEN_TO_USER), anyInt(),
-                anyInt())).thenReturn(1);
+                anyInt()));
 
         doReturn(mMockedResources).when(mMockContext).getResources();
         doReturn(InstrumentationRegistry.getInstrumentation().getTargetContext()
                 .getContentResolver())
                         .when(mMockContext).getContentResolver();
         doReturn("com.foo/.Blah").when(mMockedResources).getString(anyInt());
-        when(CarLocalServices.getService(CarPowerManagementService.class))
-                .thenReturn(mMockCarPowerManagementService);
-        when(CarLocalServices.getService(CarUserService.class)).thenReturn(mMockCarUserService);
         doReturn(mMockPowerManager).when(mMockContext).getSystemService(PowerManager.class);
         doReturn(mMockAppOpsManager).when(mMockContext).getSystemService(AppOpsManager.class);
         doReturn(mMockPackageManager).when(mMockContext).getPackageManager();
         doReturn(1).when(mMockPackageManager).getPackageUidAsUser(any(), anyInt());
         mCarUserNoticeService = new CarUserNoticeService(mMockContext, mHandler);
         mCarUserNoticeService.init();
-        verify(mMockCarUserService).addUserCallback(mUserCallback.capture());
+        verify(mMockCarUserService).addUserLifecycleListener(
+                mUserLifecycleListenerArgumentCaptor.capture());
         verify(mMockContext).registerReceiver(mDisplayBroadcastReceiver.capture(),
                 any(IntentFilter.class));
         verify(mCarPowerManager).setListener(mPowerStateListener.capture());
@@ -230,9 +235,10 @@ public class CarUserNoticeServiceTest {
         assertThat(latch.await(10, TimeUnit.SECONDS)).isTrue();
     }
 
-    private void switchUser(int usrId) throws Exception {
-        // Switch User callback
-        mUserCallback.getValue().onSwitchUser(usrId);
+    private void switchUser(int userId) throws Exception {
+        // Notify listeners about user switch.
+        mUserLifecycleListenerArgumentCaptor.getValue().onEvent(new UserLifecycleEvent(
+                CarUserManager.USER_LIFECYCLE_EVENT_TYPE_SWITCHING, userId));
     }
 
     private CountDownLatch mockBindService() {

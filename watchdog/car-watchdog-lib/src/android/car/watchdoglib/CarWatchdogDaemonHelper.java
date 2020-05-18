@@ -53,6 +53,7 @@ public final class CarWatchdogDaemonHelper {
     private final Handler mHandler = new Handler(Looper.getMainLooper());
     private final CopyOnWriteArrayList<OnConnectionChangeListener> mConnectionListeners =
             new CopyOnWriteArrayList<>();
+    private final String mTag;
     private final Object mLock = new Object();
     @GuardedBy("mLock")
     private @Nullable ICarWatchdog mCarWatchdogDaemon;
@@ -62,7 +63,7 @@ public final class CarWatchdogDaemonHelper {
     private final IBinder.DeathRecipient mDeathRecipient = new IBinder.DeathRecipient() {
         @Override
         public void binderDied() {
-            Log.w(TAG, "Car watchdog daemon died: reconnecting");
+            Log.w(mTag, "Car watchdog daemon died: reconnecting");
             unlinkToDeath();
             synchronized (mLock) {
                 mCarWatchdogDaemon = null;
@@ -86,6 +87,14 @@ public final class CarWatchdogDaemonHelper {
     public interface OnConnectionChangeListener {
         /** Gets called when car watchdog daemon is connected or disconnected. */
         void onConnectionChange(boolean connected);
+    }
+
+    public CarWatchdogDaemonHelper() {
+        mTag = TAG;
+    }
+
+    public CarWatchdogDaemonHelper(@NonNull String requestor) {
+        mTag = TAG + "[" + requestor + "]";
     }
 
     /**
@@ -145,9 +154,9 @@ public final class CarWatchdogDaemonHelper {
      * @param client Car watchdog client to be registered.
      * @param timeout Time within which the client should respond.
      * @throws IllegalArgumentException If the client is already registered.
+     * @throws RemoteException
      */
-    public void registerClient(ICarWatchdogClient client, int timeout)
-            throws IllegalArgumentException, RemoteException {
+    public void registerClient(ICarWatchdogClient client, int timeout) throws RemoteException {
         invokeDaemonMethod((daemon) -> daemon.registerClient(client, timeout));
     }
 
@@ -156,9 +165,9 @@ public final class CarWatchdogDaemonHelper {
      *
      * @param client Car watchdog client to be unregistered.
      * @throws IllegalArgumentException If the client is not registered.
+     * @throws RemoteException
      */
-    public void unregisterClient(ICarWatchdogClient client)
-            throws IllegalArgumentException, RemoteException {
+    public void unregisterClient(ICarWatchdogClient client) throws RemoteException {
         invokeDaemonMethod((daemon) -> daemon.unregisterClient(client));
     }
 
@@ -167,9 +176,9 @@ public final class CarWatchdogDaemonHelper {
      *
      * @param mediator Car watchdog client to be registered.
      * @throws IllegalArgumentException If the mediator is already registered.
+     * @throws RemoteException
      */
-    public void registerMediator(ICarWatchdogClient mediator)
-            throws IllegalArgumentException, RemoteException {
+    public void registerMediator(ICarWatchdogClient mediator) throws RemoteException {
         invokeDaemonMethod((daemon) -> daemon.registerMediator(mediator));
     }
 
@@ -178,9 +187,9 @@ public final class CarWatchdogDaemonHelper {
      *
      * @param mediator Car watchdog client to be unregistered.
      * @throws IllegalArgumentException If the mediator is not registered.
+     * @throws RemoteException
      */
-    public void unregisterMediator(ICarWatchdogClient mediator)
-            throws IllegalArgumentException, RemoteException  {
+    public void unregisterMediator(ICarWatchdogClient mediator)  throws RemoteException {
         invokeDaemonMethod((daemon) -> daemon.unregisterMediator(mediator));
     }
 
@@ -189,9 +198,9 @@ public final class CarWatchdogDaemonHelper {
      *
      * @param monitor Car watchdog monitor to be registered.
      * @throws IllegalArgumentException If there is another monitor registered.
+     * @throws RemoteException
      */
-    public void registerMonitor(ICarWatchdogMonitor monitor)
-            throws IllegalArgumentException, RemoteException  {
+    public void registerMonitor(ICarWatchdogMonitor monitor)  throws RemoteException {
         invokeDaemonMethod((daemon) -> daemon.registerMonitor(monitor));
     }
 
@@ -200,9 +209,9 @@ public final class CarWatchdogDaemonHelper {
      *
      * @param monitor Car watchdog monitor to be unregistered.
      * @throws IllegalArgumentException If the monitor is not registered.
+     * @throws RemoteException
      */
-    public void unregisterMonitor(ICarWatchdogMonitor monitor)
-            throws IllegalArgumentException, RemoteException  {
+    public void unregisterMonitor(ICarWatchdogMonitor monitor) throws RemoteException {
         invokeDaemonMethod((daemon) -> daemon.unregisterMonitor(monitor));
     }
 
@@ -213,9 +222,9 @@ public final class CarWatchdogDaemonHelper {
      * @param sessionId Session ID that car watchdog daemon has given.
      * @throws IllegalArgumentException If the client is not registered,
      *                                  or session ID is not correct.
+     * @throws RemoteException
      */
-    public void tellClientAlive(ICarWatchdogClient client, int sessionId)
-            throws IllegalArgumentException, RemoteException  {
+    public void tellClientAlive(ICarWatchdogClient client, int sessionId) throws RemoteException {
         invokeDaemonMethod((daemon) -> daemon.tellClientAlive(client, sessionId));
     }
 
@@ -227,9 +236,10 @@ public final class CarWatchdogDaemonHelper {
      * @param sessionId Session ID that car watchdog daemon has given.
      * @throws IllegalArgumentException If the client is not registered,
      *                                  or session ID is not correct.
+     * @throws RemoteException
      */
     public void tellMediatorAlive(ICarWatchdogClient mediator, int[] clientsNotResponding,
-            int sessionId) throws IllegalArgumentException, RemoteException {
+            int sessionId) throws RemoteException {
         invokeDaemonMethod(
                 (daemon) -> daemon.tellMediatorAlive(mediator, clientsNotResponding, sessionId));
     }
@@ -240,29 +250,25 @@ public final class CarWatchdogDaemonHelper {
      * @param monitor Car watchdog monitor that dumped process information.
      * @param pid ID of process that has been dumped.
      * @throws IllegalArgumentException If the monitor is not registered.
+     * @throws RemoteException
      */
-    public void tellDumpFinished(ICarWatchdogMonitor monitor, int pid)
-            throws IllegalArgumentException, RemoteException {
+    public void tellDumpFinished(ICarWatchdogMonitor monitor, int pid) throws RemoteException {
         invokeDaemonMethod((daemon) -> daemon.tellDumpFinished(monitor, pid));
     }
 
     /**
-     * Tells car watchdog daemon that system power cycle has been changed.
+     * Tells car watchdog daemon that system state has been changed for the specified StateType.
      *
-     * @param cycle System power cycle.
+     * @param type Either PowerCycle, UserState, or BootPhase
+     * @param arg1 First state change information for the specified state type.
+     * @param arg2 Second state change information for the specified state type.
+     * @throws IllegalArgumentException If the args don't match the state type. Refer to the aidl
+     *                                  interface for more information on the args.
+     * @throws RemoteException
      */
-    public void notifyPowerCycleChange(int cycle) throws RemoteException {
-        invokeDaemonMethod((daemon) -> daemon.notifyPowerCycleChange(cycle));
-    }
-
-    /**
-     * Tells car watchdog daemon that user state has been changed.
-     *
-     * @param userId User ID whose state has been changed.
-     * @param state New user state.
-     */
-    public void notifyUserStateChange(int userId, int state) throws RemoteException {
-        invokeDaemonMethod((daemon) -> daemon.notifyUserStateChange(userId, state));
+    public void notifySystemStateChange(int type, int arg1, int arg2)
+            throws IllegalArgumentException, RemoteException {
+        invokeDaemonMethod((daemon) -> daemon.notifySystemStateChange(type, arg1, arg2));
     }
 
     private void invokeDaemonMethod(Invokable r) throws IllegalArgumentException, RemoteException {
@@ -281,12 +287,12 @@ public final class CarWatchdogDaemonHelper {
             synchronized (mLock) {
                 mConnectionInProgress = false;
             }
-            Log.e(TAG, "Cannot reconnect to car watchdog daemon after retrying "
+            Log.e(mTag, "Cannot reconnect to car watchdog daemon after retrying "
                     + CAR_WATCHDOG_DAEMON_BIND_MAX_RETRY + " times");
             return;
         }
         if (makeBinderConnection()) {
-            Log.i(TAG, "Connected to car watchdog daemon");
+            Log.i(mTag, "Connected to car watchdog daemon");
             return;
         }
         mHandler.sendMessageDelayed(obtainMessage(CarWatchdogDaemonHelper::connectToDaemon,
@@ -298,17 +304,17 @@ public final class CarWatchdogDaemonHelper {
         long currentTimeMs = SystemClock.uptimeMillis();
         IBinder binder = ServiceManager.getService(CAR_WATCHDOG_DAEMON_INTERFACE);
         if (binder == null) {
-            Log.w(TAG, "Getting car watchdog daemon binder failed");
+            Log.w(mTag, "Getting car watchdog daemon binder failed");
             return false;
         }
         long elapsedTimeMs = SystemClock.uptimeMillis() - currentTimeMs;
         if (elapsedTimeMs > CAR_WATCHDOG_DAEMON_FIND_MARGINAL_TIME_MS) {
-            Log.wtf(TAG, "Finding car watchdog daemon took too long(" + elapsedTimeMs + "ms)");
+            Log.wtf(mTag, "Finding car watchdog daemon took too long(" + elapsedTimeMs + "ms)");
         }
 
         ICarWatchdog daemon = ICarWatchdog.Stub.asInterface(binder);
         if (daemon == null) {
-            Log.w(TAG, "Getting car watchdog daemon interface failed");
+            Log.w(mTag, "Getting car watchdog daemon interface failed");
             return false;
         }
         synchronized (mLock) {
@@ -331,13 +337,13 @@ public final class CarWatchdogDaemonHelper {
             binder = mCarWatchdogDaemon.asBinder();
         }
         if (binder == null) {
-            Log.w(TAG, "Linking to binder death recipient skipped");
+            Log.w(mTag, "Linking to binder death recipient skipped");
             return;
         }
         try {
             binder.linkToDeath(mDeathRecipient, 0);
         } catch (RemoteException e) {
-            Log.w(TAG, "Linking to binder death recipient failed: " + e);
+            Log.w(mTag, "Linking to binder death recipient failed: " + e);
         }
     }
 
@@ -350,7 +356,7 @@ public final class CarWatchdogDaemonHelper {
             binder = mCarWatchdogDaemon.asBinder();
         }
         if (binder == null) {
-            Log.w(TAG, "Unlinking from binder death recipient skipped");
+            Log.w(mTag, "Unlinking from binder death recipient skipped");
             return;
         }
         binder.unlinkToDeath(mDeathRecipient, 0);
