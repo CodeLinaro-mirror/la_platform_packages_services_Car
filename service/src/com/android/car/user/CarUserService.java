@@ -39,6 +39,7 @@ import android.car.userlib.CarUserManagerHelper;
 import android.car.userlib.CommonConstants.CarUserServiceConstants;
 import android.car.userlib.HalCallback;
 import android.car.userlib.UserHalHelper;
+import android.car.userlib.UserHelper;
 import android.content.Context;
 import android.content.pm.UserInfo;
 import android.content.res.Resources;
@@ -449,7 +450,7 @@ public final class CarUserService extends ICarUserService.Stub implements CarSer
     @NonNull
     public List<UserInfo> getAllDrivers() {
         checkManageUsersOrDumpPermission("getAllDrivers");
-        return getUsers((user) -> !isSystemUser(user.id) && user.isEnabled()
+        return getUsers((user) -> !UserHelper.isHeadlessSystemUser(user.id) && user.isEnabled()
                 && !user.isManagedProfile() && !user.isEphemeral());
     }
 
@@ -464,8 +465,8 @@ public final class CarUserService extends ICarUserService.Stub implements CarSer
     public List<UserInfo> getPassengers(@UserIdInt int driverId) {
         checkManageUsersOrDumpPermission("getPassengers");
         return getUsers((user) -> {
-            return !isSystemUser(user.id) && user.isEnabled() && user.isManagedProfile()
-                    && user.profileGroupId == driverId;
+            return !UserHelper.isHeadlessSystemUser(user.id) && user.isEnabled()
+                    && user.isManagedProfile() && user.profileGroupId == driverId;
         });
     }
 
@@ -1067,6 +1068,7 @@ public final class CarUserService extends ICarUserService.Stub implements CarSer
     @Override
     public void setUserSwitchUiCallback(@NonNull IResultReceiver receiver) {
         // TODO(b/154958003): check UID, only carSysUI should be allowed to set it.
+        checkManageUsersPermission("setUserSwitchUiCallback");
         mUserSwitchUiReceiver = receiver;
     }
 
@@ -1102,11 +1104,6 @@ public final class CarUserService extends ICarUserService.Stub implements CarSer
         }
 
         return usersInfo;
-    }
-
-    /** Returns whether the given user is a system user. */
-    private static boolean isSystemUser(@UserIdInt int userId) {
-        return userId == UserHandle.USER_SYSTEM;
     }
 
     private void updateDefaultUserRestriction() {
@@ -1403,14 +1400,14 @@ public final class CarUserService extends ICarUserService.Stub implements CarSer
     }
 
     private void onUserSwitching(@UserIdInt int fromUserId, @UserIdInt int toUserId) {
-        Log.i(TAG_USER, "onSwitchUser() callback for user " + toUserId);
+        Log.i(TAG_USER, "onUserSwitching() callback for user " + toUserId);
         TimingsTraceLog t = new TimingsTraceLog(TAG_USER, Trace.TRACE_TAG_SYSTEM_SERVER);
         t.traceBegin("onUserSwitching-" + toUserId);
 
         // Switch HAL users if user switch is not requested by CarUserService
         notifyHalLegacySwitch(fromUserId, toUserId);
 
-        if (!isSystemUser(toUserId)) {
+        if (!UserHelper.isHeadlessSystemUser(toUserId)) {
             mCarUserManagerHelper.setLastActiveUser(toUserId);
         }
         if (mLastPassengerId != UserHandle.USER_NULL) {

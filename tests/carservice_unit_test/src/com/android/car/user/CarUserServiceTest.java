@@ -16,6 +16,7 @@
 
 package com.android.car.user;
 
+import static android.car.test.mocks.AndroidMockitoHelper.mockUmGetSystemUser;
 import static android.car.test.mocks.AndroidMockitoHelper.mockUmGetUserInfo;
 import static android.car.test.mocks.AndroidMockitoHelper.mockUmGetUsers;
 import static android.car.test.util.UserTestingHelper.UserInfoBuilder;
@@ -54,6 +55,7 @@ import android.car.CarOccupantZoneManager.OccupantTypeEnum;
 import android.car.CarOccupantZoneManager.OccupantZoneInfo;
 import android.car.settings.CarSettings;
 import android.car.test.mocks.AbstractExtendedMockitoTestCase;
+import android.car.test.mocks.AndroidMockitoHelper;
 import android.car.test.mocks.BlockingAnswer;
 import android.car.test.util.BlockingResultReceiver;
 import android.car.testapi.BlockingUserLifecycleListener;
@@ -66,6 +68,7 @@ import android.car.user.UserSwitchResult;
 import android.car.userlib.CarUserManagerHelper;
 import android.car.userlib.HalCallback;
 import android.car.userlib.UserHalHelper;
+import android.car.userlib.UserHelper;
 import android.content.Context;
 import android.content.pm.UserInfo;
 import android.content.res.Resources;
@@ -177,7 +180,11 @@ public final class CarUserServiceTest extends AbstractExtendedMockitoTestCase {
     @Override
     protected void onSessionBuilder(CustomMockitoSessionBuilder builder) {
         builder
-            .spyStatic(ActivityManager.class);
+            .spyStatic(ActivityManager.class)
+            // TODO(b/156299496): it cannot spy on UserManager, as it would slow down the tests
+            // considerably (more than 5 minutes total, instead of just a couple seconds). So, it's
+            // mocking UserHelper.isHeadlessSystemUser() (on mockIsHeadlessSystemUser()) instead...
+            .spyStatic(UserHelper.class);
     }
 
     /**
@@ -221,7 +228,7 @@ public final class CarUserServiceTest extends AbstractExtendedMockitoTestCase {
     }
 
     @Test
-    public void testOnUserLifecycleEvent_nofityListener() throws Exception {
+    public void testOnUserLifecycleEvent_notifyListener() throws Exception {
         // Arrange
         mCarUserService.addUserLifecycleListener(mUserLifecycleListener);
         mockExistingUsers();
@@ -262,6 +269,14 @@ public final class CarUserServiceTest extends AbstractExtendedMockitoTestCase {
         assertThat(actualEvent.getUserId()).isEqualTo(expectedNewUserId);
     }
 
+    private void verifyLastActiveUserSet(@UserIdInt int userId) {
+        verify(mMockedCarUserManagerHelper).setLastActiveUser(userId);
+    }
+
+    private void verifyLastActiveUserNotSet() {
+        verify(mMockedCarUserManagerHelper, never()).setLastActiveUser(anyInt());
+    }
+
     /**
      * Test that the {@link CarUserService} disables the location service for headless user 0 upon
      * first run.
@@ -274,13 +289,32 @@ public final class CarUserServiceTest extends AbstractExtendedMockitoTestCase {
     }
 
     /**
-     * Test that the {@link CarUserService} updates last active user on user switch.
+     * Test that the {@link CarUserService} updates last active user on user switch in non-headless
+     * system user mode.
      */
     @Test
-    public void testLastActiveUserUpdatedOnUserSwitch() throws Exception {
+    public void testLastActiveUserUpdatedOnUserSwitch_nonHeadlessSystemUser() throws Exception {
+        mockIsHeadlessSystemUser(mRegularUser.id, false);
         mockExistingUsers();
+
         sendUserSwitchingEvent(mAdminUser.id, mRegularUser.id);
-        verify(mMockedCarUserManagerHelper).setLastActiveUser(mRegularUser.id);
+
+        verifyLastActiveUserSet(mRegularUser.id);
+    }
+
+    /**
+     * Test that the {@link CarUserService} doesn't update last active user on user switch in
+     * headless system user mode.
+     */
+    @Test
+    public void testLastActiveUserUpdatedOnUserSwitch_headlessSystemUser() throws Exception {
+        mockIsHeadlessSystemUser(mRegularUser.id, true);
+        mockUmGetSystemUser(mMockedUserManager);
+        mockExistingUsers();
+
+        sendUserSwitchingEvent(mAdminUser.id, mRegularUser.id);
+
+        verifyLastActiveUserNotSet();
     }
 
     /**
@@ -574,7 +608,8 @@ public final class CarUserServiceTest extends AbstractExtendedMockitoTestCase {
                 new UserInfo(15, "test15", UserInfo.FLAG_EPHEMERAL),
                 new UserInfo(16, "test16", UserInfo.FLAG_DISABLED),
                 new UserInfo(17, "test17", UserInfo.FLAG_MANAGED_PROFILE),
-                new UserInfo(18, "test18", UserInfo.FLAG_MANAGED_PROFILE)
+                new UserInfo(18, "test18", UserInfo.FLAG_MANAGED_PROFILE),
+                new UserInfo(19, "test19", NO_USER_INFO_FLAGS)
         ));
         // Parent: test10, child: test12
         associateParentChild(users.get(0), users.get(2));
@@ -588,12 +623,13 @@ public final class CarUserServiceTest extends AbstractExtendedMockitoTestCase {
     @Test
     public void testGetAllPossibleDrivers() {
         Set<Integer> expected = new HashSet<Integer>(Arrays.asList(10, 11, 13, 14));
-        doReturn(prepareUserList()).when(mMockedUserManager).getUsers(true);
+        when(mMockedUserManager.getUsers(true)).thenReturn(prepareUserList());
+        mockIsHeadlessSystemUser(19, true);
         for (UserInfo user : mCarUserService.getAllDrivers()) {
-            assertTrue(expected.contains(user.id));
+            assertThat(expected).contains(user.id);
             expected.remove(user.id);
         }
-        assertEquals(0, expected.size());
+        assertThat(expected).isEmpty();
     }
 
     @Test
@@ -603,18 +639,19 @@ public final class CarUserServiceTest extends AbstractExtendedMockitoTestCase {
                 put(0, new HashSet<Integer>());
                 put(10, new HashSet<Integer>(Arrays.asList(12)));
                 put(11, new HashSet<Integer>());
-                put(13, new HashSet<Integer>(Arrays.asList(17, 18)));
+                put(13, new HashSet<Integer>(Arrays.asList(17)));
             }
         };
+        mockIsHeadlessSystemUser(18, true);
         for (int i = 0; i < testCases.size(); i++) {
-            doReturn(prepareUserList()).when(mMockedUserManager).getUsers(true);
+            when(mMockedUserManager.getUsers(true)).thenReturn(prepareUserList());
             List<UserInfo> passengers = mCarUserService.getPassengers(testCases.keyAt(i));
             HashSet<Integer> expected = testCases.valueAt(i);
             for (UserInfo user : passengers) {
-                assertTrue(expected.contains(user.id));
+                assertThat(expected).contains(user.id);
                 expected.remove(user.id);
             }
-            assertEquals(0, expected.size());
+            assertThat(expected).isEmpty();
         }
     }
 
@@ -1321,7 +1358,7 @@ public final class CarUserServiceTest extends AbstractExtendedMockitoTestCase {
     private void mockExistingUsers() {
         mockUmGetUsers(mMockedUserManager, mExistingUsers);
         for (UserInfo user : mExistingUsers) {
-            when(mMockedUserManager.getUserInfo(user.id)).thenReturn(user);
+            AndroidMockitoHelper.mockUmGetUserInfo(mMockedUserManager, user);
         }
     }
 
@@ -1346,6 +1383,10 @@ public final class CarUserServiceTest extends AbstractExtendedMockitoTestCase {
             return null;
         }).when(mUserHal).getInitialUserInfo(eq(mGetUserInfoRequestType), eq(mAsyncCallTimeoutMs),
                 eq(usersInfo), notNull());
+    }
+
+    private void mockIsHeadlessSystemUser(@UserIdInt int userId, boolean mode) {
+        doReturn(mode).when(() -> UserHelper.isHeadlessSystemUser(userId));
     }
 
     private void mockHalSwitch(@UserIdInt int currentUserId, @NonNull UserInfo androidTargetUser,
