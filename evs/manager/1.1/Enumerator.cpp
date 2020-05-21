@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+#include <android-base/parseint.h>
+#include <android-base/strings.h>
 #include <android-base/logging.h>
 #include <hwbinder/IPCThreadState.h>
 #include <cutils/android_filesystem_config.h>
@@ -27,6 +29,7 @@ namespace evs {
 namespace V1_1 {
 namespace implementation {
 
+using ::android::base::EqualsIgnoreCase;
 using CameraDesc_1_0 = ::android::hardware::automotive::evs::V1_0::CameraDesc;
 using CameraDesc_1_1 = ::android::hardware::automotive::evs::V1_1::CameraDesc;
 
@@ -493,6 +496,134 @@ Return<void> Enumerator::closeUltrasonicsArray(
         const ::android::sp<IEvsUltrasonicsArray>& evsUltrasonicsArray)  {
     (void)evsUltrasonicsArray;
     return Void();
+}
+
+
+Return<void> Enumerator::debug(const hidl_handle& fd,
+                               const hidl_vec<hidl_string>& options) {
+    if (fd.getNativeHandle() != nullptr && fd->numFds > 0) {
+        cmdDump(fd->data[0], options);
+    } else {
+        LOG(ERROR) << "Invalid parameters";
+    }
+
+    return {};
+}
+
+
+void Enumerator::cmdDump(int fd, const hidl_vec<hidl_string>& options) {
+    if (options.size() == 0) {
+        dprintf(fd, "No option is given");
+        return;
+    }
+
+    const std::string option = options[0];
+    if (EqualsIgnoreCase(option, "--help")) {
+        cmdHelp(fd);
+    } else if (EqualsIgnoreCase(option, "--list")) {
+        cmdList(fd, options);
+    } else if (EqualsIgnoreCase(option, "--dump")) {
+        cmdDumpDevice(fd, options);
+    } else {
+        dprintf(fd, "Invalid option: %s\n", option.c_str());
+    }
+}
+
+
+void Enumerator::cmdHelp(int fd) {
+    dprintf(fd, "Usage: \n\n");
+    dprintf(fd, "--help: shows this help.\n");
+    dprintf(fd, "--list [all|camera|display]: list camera or display devices or both "
+                "available to EVS manager.\n");
+    dprintf(fd, "--dump [all|camera|display] <device id>: "
+                "show current status of the target device or all devices "
+                "when no device is given.\n");
+}
+
+
+void Enumerator::cmdList(int fd, const hidl_vec<hidl_string>& options) {
+    bool listCameras = true;
+    bool listDisplays = true;
+    if (options.size() > 1) {
+        const std::string option = options[1];
+        const bool listAll = EqualsIgnoreCase(option, "all");
+        listCameras = listAll || EqualsIgnoreCase(option, "camera");
+        listDisplays = listAll || EqualsIgnoreCase(option, "display");
+        if (!listCameras && !listDisplays) {
+            dprintf(fd, "Unrecognized option, %s, is ignored.\n", option.c_str());
+        }
+    }
+
+    if (listCameras) {
+        dprintf(fd, "Camera devices available to EVS service:\n");
+        if (mCameraDevices.size() < 1) {
+            // Camera devices may not be enumerated yet.
+            getCameraList_1_1(
+                [](const auto cameras) {
+                    if (cameras.size() < 1) {
+                        LOG(WARNING) << "No camera device is available to EVS.";
+                    }
+                });
+        }
+
+        for (auto& [id, desc] : mCameraDevices) {
+            dprintf(fd, "\t%s\n", id.c_str());
+        }
+
+        dprintf(fd, "\nCamera devices currently in use:\n");
+        for (auto& [id, ptr] : mActiveCameras) {
+            dprintf(fd, "\t%s\n", id.c_str());
+        }
+        dprintf(fd, "\n");
+    }
+
+    if (listDisplays) {
+        if (mHwEnumerator != nullptr) {
+            dprintf(fd, "Display devices available to EVS service:\n");
+            // Get an internal display identifier.
+            mHwEnumerator->getDisplayIdList(
+                [&](const auto& displayPorts) {
+                    for (auto& port : displayPorts) {
+                        dprintf(fd, "\tdisplay port %u\n", (unsigned)port);
+                    }
+                }
+            );
+        }
+    }
+}
+
+
+void Enumerator::cmdDumpDevice(int fd, const hidl_vec<hidl_string>& options) {
+    bool dumpCameras = true;
+    bool dumpDisplays = true;
+    if (options.size() > 1) {
+        const std::string option = options[1];
+        const bool dumpAll = EqualsIgnoreCase(option, "all");
+        dumpCameras = dumpAll || EqualsIgnoreCase(option, "camera");
+        dumpDisplays = dumpAll || EqualsIgnoreCase(option, "display");
+        if (!dumpCameras && !dumpDisplays) {
+            dprintf(fd, "Unrecognized option, %s, is ignored.\n", option.c_str());
+        }
+    }
+
+    if (dumpCameras) {
+        const bool dumpAllCameras = options.size() < 3;
+        std::string deviceId = "";
+        if (!dumpAllCameras) {
+            deviceId = options[2];
+        }
+
+        for (auto& [id, ptr] : mActiveCameras) {
+            if (!dumpAllCameras && !EqualsIgnoreCase(id, deviceId)) {
+                continue;
+            }
+            ptr->dump(fd);
+        }
+    }
+
+    if (dumpDisplays) {
+        dprintf(fd, "Not implemented yet\n");
+    }
 }
 
 } // namespace implementation

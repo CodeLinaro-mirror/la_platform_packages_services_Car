@@ -21,12 +21,14 @@ import static android.car.settings.CarSettings.Global.DISABLE_INSTRUMENTATION_SE
 import android.annotation.Nullable;
 import android.annotation.SystemApi;
 import android.app.ActivityOptions;
+import android.car.Car;
 import android.car.CarAppFocusManager;
 import android.car.cluster.IInstrumentClusterManagerCallback;
 import android.car.cluster.IInstrumentClusterManagerService;
 import android.car.cluster.renderer.IInstrumentCluster;
 import android.car.cluster.renderer.IInstrumentClusterHelper;
 import android.car.cluster.renderer.IInstrumentClusterNavigation;
+import android.car.navigation.CarNavigationInstrumentCluster;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -50,12 +52,15 @@ import com.android.car.CarInputService.KeyEventListener;
 import com.android.car.CarLocalServices;
 import com.android.car.CarLog;
 import com.android.car.CarServiceBase;
+import com.android.car.ICarImpl;
 import com.android.car.R;
 import com.android.car.am.FixedActivityService;
 import com.android.car.user.CarUserService;
 import com.android.internal.annotations.GuardedBy;
+import com.android.internal.annotations.VisibleForTesting;
 
 import java.io.PrintWriter;
+import java.lang.ref.WeakReference;
 import java.util.Objects;
 
 /**
@@ -68,6 +73,9 @@ public class InstrumentClusterService implements CarServiceBase, FocusOwnershipC
         KeyEventListener {
     private static final String TAG = CarLog.TAG_CLUSTER;
     private static final ContextOwner NO_OWNER = new ContextOwner(0, 0);
+
+    private static final long RENDERER_SERVICE_WAIT_TIMEOUT_MS = 5000;
+    private static final long RENDERER_WAIT_MAX_RETRY = 2;
 
     private final Context mContext;
     private final AppFocusService mAppFocusService;
@@ -85,17 +93,65 @@ public class InstrumentClusterService implements CarServiceBase, FocusOwnershipC
     private IInstrumentCluster mRendererService;
     // If renderer service crashed / stopped and this class fails to rebind with it immediately,
     // we should wait some time before next attempt. This may happen during APK update for example.
-    @GuardedBy("mLock")
-    private DeferredRebinder mDeferredRebinder;
+    private final DeferredRebinder mDeferredRebinder;
     // Whether {@link android.car.cluster.renderer.InstrumentClusterRendererService} is bound
     // (although not necessarily connected)
     @GuardedBy("mLock")
     private boolean mRendererBound = false;
 
+    private final String mRenderingServiceConfig;
+
+
+
+    @GuardedBy("mLock")
+    private IInstrumentClusterNavigation mIInstrumentClusterNavigationFromRenderer;
+
+    private final IInstrumentClusterNavigation mIInstrumentClusterNavigationnWrapper =
+            new IInstrumentClusterNavigation.Stub() {
+        @Override
+        public void onNavigationStateChanged(Bundle bundle) {
+            ICarImpl.assertPermission(mContext, Car.PERMISSION_CAR_NAVIGATION_MANAGER);
+            // No retry here as new events will be sent later.
+            IInstrumentClusterNavigation navigationBinder = getNavigationBinder(
+                    /* retryOnFail= */ false);
+            if (navigationBinder == null) {
+                Log.e(TAG, "onNavigationStateChanged failed, renderer not ready, Bundle:"
+                        + bundle);
+                return;
+            }
+            try {
+                navigationBinder.onNavigationStateChanged(bundle);
+            } catch (RemoteException e) {
+                Log.e(TAG, "onNavigationStateChanged failed, bundle:" + bundle, e);
+            }
+        }
+
+        @Override
+        public CarNavigationInstrumentCluster getInstrumentClusterInfo() {
+            ICarImpl.assertPermission(mContext, Car.PERMISSION_CAR_NAVIGATION_MANAGER);
+            // Failure in this call leads into an issue in the client, so throw exception
+            // when it cannot be recovered / retried.
+            for (int i = 0; i < RENDERER_WAIT_MAX_RETRY; i++) {
+                IInstrumentClusterNavigation navigationBinder = getNavigationBinder(
+                        /* retryOnFail= */ true);
+                if (navigationBinder == null) {
+                    continue;
+                }
+                try {
+                    return navigationBinder.getInstrumentClusterInfo();
+                } catch (RemoteException e) {
+                    Log.e(TAG, "getInstrumentClusterInfo failed", e);
+                }
+            }
+            throw new IllegalStateException("cannot access renderer service");
+        }
+    };
+
     /**
      * Connection to {@link android.car.cluster.renderer.InstrumentClusterRendererService}
      */
-    private final ServiceConnection mRendererServiceConnection = new ServiceConnection() {
+    @VisibleForTesting
+    final ServiceConnection mRendererServiceConnection = new ServiceConnection() {
         @Override
         public void onServiceConnected(ComponentName name, IBinder binder) {
             if (Log.isLoggable(TAG, Log.DEBUG)) {
@@ -106,6 +162,7 @@ public class InstrumentClusterService implements CarServiceBase, FocusOwnershipC
             synchronized (mLock) {
                 mRendererService = service;
                 navContextOwner = mNavContextOwner;
+                mLock.notifyAll();
             }
             if (navContextOwner != null && service != null) {
                 notifyNavContextOwnerChanged(service, navContextOwner);
@@ -118,16 +175,13 @@ public class InstrumentClusterService implements CarServiceBase, FocusOwnershipC
                 Log.d(TAG, "onServiceDisconnected, name: " + name);
             }
             mContext.unbindService(this);
-            DeferredRebinder rebinder;
             synchronized (mLock) {
                 mRendererBound = false;
                 mRendererService = null;
-                if (mDeferredRebinder == null) {
-                    mDeferredRebinder = new DeferredRebinder();
-                }
-                rebinder = mDeferredRebinder;
+                mIInstrumentClusterNavigationFromRenderer = null;
+
             }
-            rebinder.rebind();
+            mDeferredRebinder.rebind();
         }
     };
 
@@ -158,6 +212,53 @@ public class InstrumentClusterService implements CarServiceBase, FocusOwnershipC
         mContext = context;
         mAppFocusService = appFocusService;
         mCarInputService = carInputService;
+        mRenderingServiceConfig = mContext.getString(R.string.instrumentClusterRendererService);
+        mDeferredRebinder = new DeferredRebinder(this);
+    }
+
+    @GuardedBy("mLock")
+    private IInstrumentCluster waitForRendererLocked() {
+        if (mRendererService == null) {
+            try {
+                mLock.wait(RENDERER_SERVICE_WAIT_TIMEOUT_MS);
+            } catch (InterruptedException e) {
+                Log.d(TAG, "waitForRenderer, interrupted", e);
+                Thread.currentThread().interrupt();
+            }
+        }
+        return mRendererService;
+    }
+
+    private IInstrumentClusterNavigation getNavigationBinder(boolean retryOnFail) {
+        IInstrumentCluster renderer;
+        synchronized (mLock) {
+            if (mIInstrumentClusterNavigationFromRenderer != null) {
+                return mIInstrumentClusterNavigationFromRenderer;
+            }
+            renderer = waitForRendererLocked();
+        }
+        IInstrumentClusterNavigation navigationBinder = null;
+        for (int i = 0; i < RENDERER_WAIT_MAX_RETRY; i++) {
+            if (renderer == null) {
+                synchronized (mLock) {
+                    renderer = waitForRendererLocked();
+                }
+            }
+            try {
+                navigationBinder = renderer.getNavigationService();
+                break;
+            } catch (RemoteException e) {
+                Log.e(TAG, "RemoteException from renderer", e);
+                renderer = null;
+            }
+        }
+        if (navigationBinder == null) {
+            return navigationBinder;
+        }
+        synchronized (mLock) {
+            mIInstrumentClusterNavigationFromRenderer = navigationBinder;
+        }
+        return navigationBinder;
     }
 
     @Override
@@ -170,8 +271,17 @@ public class InstrumentClusterService implements CarServiceBase, FocusOwnershipC
         mCarInputService.setInstrumentClusterKeyListener(this /* KeyEventListener */);
         // TODO(b/124246323) Start earlier once data storage for cluster is clarified
         //  for early boot.
+        if (!isRendererServiceEnabled()) {
+            synchronized (mLock) {
+                mRendererBound = false;
+            }
+            return;
+        }
         CarLocalServices.getService(CarUserService.class).runOnUser0Unlock(() -> {
-            mRendererBound = bindInstrumentClusterRendererService();
+            boolean bound = bindInstrumentClusterRendererService();
+            synchronized (mLock) {
+                mRendererBound = bound;
+            }
         });
     }
 
@@ -182,18 +292,25 @@ public class InstrumentClusterService implements CarServiceBase, FocusOwnershipC
         }
 
         mAppFocusService.unregisterContextOwnerChangedCallback(this);
-        if (mRendererBound) {
-            mContext.unbindService(mRendererServiceConnection);
-            mRendererBound = false;
+        synchronized (mLock) {
+            if (mRendererBound) {
+                mContext.unbindService(mRendererServiceConnection);
+                mRendererBound = false;
+            }
         }
     }
 
     @Override
     public void dump(PrintWriter writer) {
         writer.println("**" + getClass().getSimpleName() + "**");
-        writer.println("bound with renderer: " + mRendererBound);
-        writer.println("renderer service: " + mRendererService);
-        writer.println("context owner: " + mNavContextOwner);
+        synchronized (mLock) {
+            writer.println("bound with renderer: " + mRendererBound);
+            writer.println("renderer service: " + mRendererService);
+            writer.println("context owner: " + mNavContextOwner);
+            writer.println("mRenderingServiceConfig:" + mRenderingServiceConfig);
+            writer.println("mIInstrumentClusterNavigationFromRenderer:"
+                    + mIInstrumentClusterNavigationFromRenderer);
+        }
     }
 
     @Override
@@ -243,24 +360,29 @@ public class InstrumentClusterService implements CarServiceBase, FocusOwnershipC
         }
     }
 
-    private boolean bindInstrumentClusterRendererService() {
+    private boolean isRendererServiceEnabled() {
+        if (TextUtils.isEmpty(mRenderingServiceConfig)) {
+            Log.d(TAG, "Instrument cluster renderer was not configured");
+            return false;
+        }
         boolean explicitlyDisabled = "true".equals(Settings.Global
                 .getString(mContext.getContentResolver(), DISABLE_INSTRUMENTATION_SERVICE));
         if (explicitlyDisabled) {
             Log.i(TAG, "Instrument cluster renderer explicitly disabled by settings");
             return false;
         }
+        return true;
+    }
 
-        String rendererService = mContext.getString(R.string.instrumentClusterRendererService);
-        if (TextUtils.isEmpty(rendererService)) {
-            Log.i(TAG, "Instrument cluster renderer was not configured");
+    private boolean bindInstrumentClusterRendererService() {
+        if (!isRendererServiceEnabled()) {
             return false;
         }
 
-        Log.d(TAG, "bindInstrumentClusterRendererService, component: " + rendererService);
+        Log.d(TAG, "bindInstrumentClusterRendererService, component: " + mRenderingServiceConfig);
 
         Intent intent = new Intent();
-        intent.setComponent(ComponentName.unflattenFromString(rendererService));
+        intent.setComponent(ComponentName.unflattenFromString(mRenderingServiceConfig));
         // Litle bit inefficiency here as Intent.getIBinderExtra() is a hidden API.
         Bundle bundle = new Bundle();
         bundle.putBinder(EXTRA_BUNDLE_KEY_FOR_INSTRUMENT_CLUSTER_HELPER,
@@ -272,13 +394,11 @@ public class InstrumentClusterService implements CarServiceBase, FocusOwnershipC
 
     @Nullable
     public IInstrumentClusterNavigation getNavigationService() {
-        try {
-            IInstrumentCluster service = getInstrumentClusterRendererService();
-            return service == null ? null : service.getNavigationService();
-        } catch (RemoteException e) {
-            Log.e(TAG, "getNavigationServiceBinder" , e);
+        if (!isRendererServiceEnabled()) {
             return null;
+
         }
+        return mIInstrumentClusterNavigationnWrapper;
     }
 
     /**
@@ -306,11 +426,9 @@ public class InstrumentClusterService implements CarServiceBase, FocusOwnershipC
     }
 
     private IInstrumentCluster getInstrumentClusterRendererService() {
-        IInstrumentCluster service;
         synchronized (mLock) {
-            service = mRendererService;
+            return mRendererService;
         }
-        return service;
     }
 
     private static class ContextOwner {
@@ -365,14 +483,27 @@ public class InstrumentClusterService implements CarServiceBase, FocusOwnershipC
         }
     }
 
-    private class DeferredRebinder extends Handler {
+    private static final class DeferredRebinder extends Handler {
+        private static final String TAG = DeferredRebinder.class.getSimpleName();
+
         private static final long NEXT_REBIND_ATTEMPT_DELAY_MS = 1000L;
         private static final int NUMBER_OF_ATTEMPTS = 10;
 
-        public void rebind() {
-            mRendererBound = bindInstrumentClusterRendererService();
+        private final WeakReference<InstrumentClusterService> mService;
 
-            if (!mRendererBound) {
+        private DeferredRebinder(InstrumentClusterService service) {
+            mService = new WeakReference<InstrumentClusterService>(service);
+        }
+
+        public void rebind() {
+            InstrumentClusterService service = mService.get();
+            if (service == null) {
+                Log.i(TAG, "rebind null service");
+                return;
+            }
+            service.mRendererBound = service.bindInstrumentClusterRendererService();
+
+            if (!service.mRendererBound) {
                 removeMessages(0);
                 sendMessageDelayed(obtainMessage(0, NUMBER_OF_ATTEMPTS, 0),
                         NEXT_REBIND_ATTEMPT_DELAY_MS);
@@ -381,9 +512,14 @@ public class InstrumentClusterService implements CarServiceBase, FocusOwnershipC
 
         @Override
         public void handleMessage(Message msg) {
-            mRendererBound = bindInstrumentClusterRendererService();
+            InstrumentClusterService service = mService.get();
+            if (service == null) {
+                Log.i(TAG, "handleMessage null service");
+                return;
+            }
+            service.mRendererBound = service.bindInstrumentClusterRendererService();
 
-            if (mRendererBound) {
+            if (service.mRendererBound) {
                 Log.w(TAG, "Failed to bound to render service, next attempt in "
                         + NEXT_REBIND_ATTEMPT_DELAY_MS + "ms.");
 

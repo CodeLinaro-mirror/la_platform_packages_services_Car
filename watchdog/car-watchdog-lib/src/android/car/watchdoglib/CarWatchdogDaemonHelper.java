@@ -44,6 +44,9 @@ import java.util.concurrent.CopyOnWriteArrayList;
 public final class CarWatchdogDaemonHelper {
 
     private static final String TAG = CarWatchdogDaemonHelper.class.getSimpleName();
+    // Carwatchdog daemon polls for the service manager status once every 250 milliseconds.
+    // CAR_WATCHDOG_DAEMON_BIND_RETRY_INTERVAL_MS value should be at least twice the poll interval
+    // used by the daemon.
     private static final long CAR_WATCHDOG_DAEMON_BIND_RETRY_INTERVAL_MS = 500;
     private static final long CAR_WATCHDOG_DAEMON_FIND_MARGINAL_TIME_MS = 300;
     private static final int CAR_WATCHDOG_DAEMON_BIND_MAX_RETRY = 3;
@@ -154,6 +157,7 @@ public final class CarWatchdogDaemonHelper {
      * @param client Car watchdog client to be registered.
      * @param timeout Time within which the client should respond.
      * @throws IllegalArgumentException If the client is already registered.
+     * @throws IllegalStateException If car watchdog daemon is not connected.
      * @throws RemoteException
      */
     public void registerClient(ICarWatchdogClient client, int timeout) throws RemoteException {
@@ -165,6 +169,7 @@ public final class CarWatchdogDaemonHelper {
      *
      * @param client Car watchdog client to be unregistered.
      * @throws IllegalArgumentException If the client is not registered.
+     * @throws IllegalStateException If car watchdog daemon is not connected.
      * @throws RemoteException
      */
     public void unregisterClient(ICarWatchdogClient client) throws RemoteException {
@@ -176,6 +181,7 @@ public final class CarWatchdogDaemonHelper {
      *
      * @param mediator Car watchdog client to be registered.
      * @throws IllegalArgumentException If the mediator is already registered.
+     * @throws IllegalStateException If car watchdog daemon is not connected.
      * @throws RemoteException
      */
     public void registerMediator(ICarWatchdogClient mediator) throws RemoteException {
@@ -187,6 +193,7 @@ public final class CarWatchdogDaemonHelper {
      *
      * @param mediator Car watchdog client to be unregistered.
      * @throws IllegalArgumentException If the mediator is not registered.
+     * @throws IllegalStateException If car watchdog daemon is not connected.
      * @throws RemoteException
      */
     public void unregisterMediator(ICarWatchdogClient mediator)  throws RemoteException {
@@ -198,6 +205,7 @@ public final class CarWatchdogDaemonHelper {
      *
      * @param monitor Car watchdog monitor to be registered.
      * @throws IllegalArgumentException If there is another monitor registered.
+     * @throws IllegalStateException If car watchdog daemon is not connected.
      * @throws RemoteException
      */
     public void registerMonitor(ICarWatchdogMonitor monitor)  throws RemoteException {
@@ -209,6 +217,7 @@ public final class CarWatchdogDaemonHelper {
      *
      * @param monitor Car watchdog monitor to be unregistered.
      * @throws IllegalArgumentException If the monitor is not registered.
+     * @throws IllegalStateException If car watchdog daemon is not connected.
      * @throws RemoteException
      */
     public void unregisterMonitor(ICarWatchdogMonitor monitor) throws RemoteException {
@@ -222,6 +231,7 @@ public final class CarWatchdogDaemonHelper {
      * @param sessionId Session ID that car watchdog daemon has given.
      * @throws IllegalArgumentException If the client is not registered,
      *                                  or session ID is not correct.
+     * @throws IllegalStateException If car watchdog daemon is not connected.
      * @throws RemoteException
      */
     public void tellClientAlive(ICarWatchdogClient client, int sessionId) throws RemoteException {
@@ -236,6 +246,7 @@ public final class CarWatchdogDaemonHelper {
      * @param sessionId Session ID that car watchdog daemon has given.
      * @throws IllegalArgumentException If the client is not registered,
      *                                  or session ID is not correct.
+     * @throws IllegalStateException If car watchdog daemon is not connected.
      * @throws RemoteException
      */
     public void tellMediatorAlive(ICarWatchdogClient mediator, int[] clientsNotResponding,
@@ -250,6 +261,7 @@ public final class CarWatchdogDaemonHelper {
      * @param monitor Car watchdog monitor that dumped process information.
      * @param pid ID of process that has been dumped.
      * @throws IllegalArgumentException If the monitor is not registered.
+     * @throws IllegalStateException If car watchdog daemon is not connected.
      * @throws RemoteException
      */
     public void tellDumpFinished(ICarWatchdogMonitor monitor, int pid) throws RemoteException {
@@ -264,14 +276,14 @@ public final class CarWatchdogDaemonHelper {
      * @param arg2 Second state change information for the specified state type.
      * @throws IllegalArgumentException If the args don't match the state type. Refer to the aidl
      *                                  interface for more information on the args.
+     * @throws IllegalStateException If car watchdog daemon is not connected.
      * @throws RemoteException
      */
-    public void notifySystemStateChange(int type, int arg1, int arg2)
-            throws IllegalArgumentException, RemoteException {
+    public void notifySystemStateChange(int type, int arg1, int arg2) throws RemoteException {
         invokeDaemonMethod((daemon) -> daemon.notifySystemStateChange(type, arg1, arg2));
     }
 
-    private void invokeDaemonMethod(Invokable r) throws IllegalArgumentException, RemoteException {
+    private void invokeDaemonMethod(Invokable r) throws RemoteException {
         ICarWatchdog daemon;
         synchronized (mLock) {
             if (mCarWatchdogDaemon == null) {

@@ -18,6 +18,8 @@
 
 #include "ServiceManager.h"
 
+#include <android-base/chrono_utils.h>
+#include <android-base/properties.h>
 #include <android-base/result.h>
 #include <binder/IPCThreadState.h>
 #include <binder/IServiceManager.h>
@@ -25,6 +27,8 @@
 #include <log/log.h>
 #include <signal.h>
 #include <utils/Looper.h>
+
+#include <thread>
 
 using android::IPCThreadState;
 using android::Looper;
@@ -34,6 +38,8 @@ using android::automotive::watchdog::ServiceManager;
 using android::base::Result;
 
 namespace {
+
+const size_t kMaxBinderThreadCount = 16;
 
 void sigHandler(int sig) {
     IPCThreadState::self()->stopProcess();
@@ -54,26 +60,39 @@ void registerSigHandler() {
 }  // namespace
 
 int main(int /*argc*/, char** /*argv*/) {
-    const size_t maxBinderThreadCount = 16;
     // Set up the looper
     sp<Looper> looper(Looper::prepare(/*opts=*/0));
 
-    // Set up the binder
-    sp<ProcessState> ps(ProcessState::self());
-    ps->setThreadPoolMaxThreadCount(maxBinderThreadCount);
-    ps->startThreadPool();
-    ps->giveThreadPoolName();
-    IPCThreadState::self()->disableBackgroundScheduling(true);
-
     // Start the services
-    const auto& result = ServiceManager::startServices(looper);
+    auto result = ServiceManager::startServices(looper);
     if (!result) {
-        ALOGE("%s", result.error().message().c_str());
+        ALOGE("Failed to start services: %s", result.error().message().c_str());
         ServiceManager::terminateServices();
         exit(result.error().code());
     }
 
     registerSigHandler();
+
+    // Wait for the service manager before starting binder mediator.
+    while (android::base::GetProperty("init.svc.servicemanager", "") != "running") {
+        // Poll frequent enough so the CarWatchdogDaemonHelper can connect to the daemon during
+        // system boot up.
+        std::this_thread::sleep_for(250ms);
+    }
+
+    // Set up the binder
+    sp<ProcessState> ps(ProcessState::self());
+    ps->setThreadPoolMaxThreadCount(kMaxBinderThreadCount);
+    ps->startThreadPool();
+    ps->giveThreadPoolName();
+    IPCThreadState::self()->disableBackgroundScheduling(true);
+
+    result = ServiceManager::startBinderMediator();
+    if (!result) {
+        ALOGE("Failed to start binder mediator: %s", result.error().message().c_str());
+        ServiceManager::terminateServices();
+        exit(result.error().code());
+    }
 
     // Loop forever -- the health check runs on this thread in a handler, and the binder calls
     // remain responsive in their pool of threads.

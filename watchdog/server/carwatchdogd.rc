@@ -12,6 +12,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+service carwatchdogd /system/bin/carwatchdogd
+    class core
+    user system
+    group system readproc
+    disabled
+
+on early-init && property:ro.build.type=userdebug
+    # Below intervals are in seconds
+    setprop ro.carwatchdog.boottime_collection_interval 1
+    setprop ro.carwatchdog.periodic_collection_interval 10
+
+on early-init && property:ro.build.type=eng
+    # Below intervals are in seconds
+    setprop ro.carwatchdog.boottime_collection_interval 1
+    setprop ro.carwatchdog.periodic_collection_interval 10
+
+on early-init && property:ro.build.type=user
+    # Below intervals are in seconds
+    setprop ro.carwatchdog.boottime_collection_interval 20
+    setprop ro.carwatchdog.periodic_collection_interval 60
+
 on early-init
     # Number of top stats per category
     setprop ro.carwatchdog.top_n_stats_per_category 5
@@ -19,14 +40,8 @@ on early-init
     # Number of top stats per sub-category
     setprop ro.carwatchdog.top_n_stats_per_subcategory 3
 
-    # Below intervals are in seconds
-    setprop ro.carwatchdog.boottime_collection_interval 1
-    setprop ro.carwatchdog.periodic_collection_interval 10
-
     # Cache size for the periodically collected records
     setprop ro.carwatchdog.periodic_collection_buffer_size 180
 
-service carwatchdogd /system/bin/carwatchdogd
-    class core
-    user system
-    group system readproc
+    # Start the service only after initializing the properties.
+    start carwatchdogd

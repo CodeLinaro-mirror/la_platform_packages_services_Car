@@ -22,17 +22,22 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UserIdInt;
 import android.app.ActivityManager;
+import android.app.IActivityManager;
 import android.content.Context;
 import android.content.pm.UserInfo;
 import android.hardware.automotive.vehicle.V2_0.UserFlags;
+import android.os.RemoteException;
+import android.os.Trace;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.util.Log;
 import android.util.Pair;
 import android.util.Slog;
+import android.util.TimingsTraceLog;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.Preconditions;
+import com.android.internal.widget.LockPatternUtils;
 
 import java.io.PrintWriter;
 import java.util.function.Consumer;
@@ -51,6 +56,7 @@ public final class InitialUserSetter {
     // implementation (where local is implemented by ActivityManagerInternal / UserManagerInternal)
     private final CarUserManagerHelper mHelper;
     private final UserManager mUm;
+    private final LockPatternUtils mLockPatternUtils;
 
     // TODO(b/151758646): make sure it's unit tested
     private final boolean mSupportsOverrideUserIdProperty;
@@ -68,18 +74,20 @@ public final class InitialUserSetter {
     public InitialUserSetter(@NonNull Context context, @NonNull Consumer<UserInfo> listener,
             @Nullable String newGuestName, boolean supportsOverrideUserIdProperty) {
         this(new CarUserManagerHelper(context), UserManager.get(context), listener,
+                new LockPatternUtils(context),
                 context.getString(com.android.internal.R.string.owner_name), newGuestName,
                 supportsOverrideUserIdProperty);
     }
 
     @VisibleForTesting
     public InitialUserSetter(@NonNull CarUserManagerHelper helper, @NonNull UserManager um,
-            @NonNull Consumer<UserInfo> listener,
+            @NonNull Consumer<UserInfo> listener, @NonNull LockPatternUtils lockPatternUtils,
             @Nullable String newUserName, @Nullable String newGuestName,
             boolean supportsOverrideUserIdProperty) {
         mHelper = helper;
         mUm = um;
         mListener = listener;
+        mLockPatternUtils = lockPatternUtils;
         mNewUserName = newUserName;
         mNewGuestName = newGuestName;
         mSupportsOverrideUserIdProperty = supportsOverrideUserIdProperty;
@@ -100,18 +108,18 @@ public final class InitialUserSetter {
      *   </ol>
      * </ol>
      */
-    public void executeDefaultBehavior() {
-        executeDefaultBehavior(/* fallback= */ false);
+    public void executeDefaultBehavior(boolean replaceGuest) {
+        executeDefaultBehavior(replaceGuest, /* fallback= */ false);
     }
 
-    private void executeDefaultBehavior(boolean fallback) {
+    private void executeDefaultBehavior(boolean replaceGuest, boolean fallback) {
         if (!mHelper.hasInitialUser()) {
             if (DBG) Log.d(TAG, "executeDefaultBehavior(): no initial user, creating it");
             createAndSwitchUser(mNewUserName, UserFlags.ADMIN, fallback);
         } else {
             if (DBG) Log.d(TAG, "executeDefaultBehavior(): switching to initial user");
             int userId = mHelper.getInitialUser(mSupportsOverrideUserIdProperty);
-            switchUser(userId, fallback);
+            switchUser(userId, replaceGuest, fallback);
         }
     }
 
@@ -126,19 +134,26 @@ public final class InitialUserSetter {
             return;
         }
         Log.w(TAG, "Falling back to default behavior. Reason: " + reason);
-        executeDefaultBehavior(/* fallback= */ false);
+        executeDefaultBehavior(/* replaceGuest= */ true, /* fallback= */ false);
     }
 
     /**
      * Switches to the given user, falling back to {@link #fallbackDefaultBehavior(String)} if it
      * fails.
      */
-    public void switchUser(@UserIdInt int userId) {
-        switchUser(userId, /* fallback= */ true);
+    public void switchUser(@UserIdInt int userId, boolean replaceGuest) {
+        try {
+            switchUser(userId, replaceGuest, /* fallback= */ true);
+        } catch (Exception e) {
+            fallbackDefaultBehavior(/* fallback= */ true, "Exception switching user: " + e);
+        }
     }
 
-    private void switchUser(@UserIdInt int userId, boolean fallback) {
-        if (DBG) Log.d(TAG, "switchUser(): userId=" + userId);
+    private void switchUser(@UserIdInt int userId, boolean replaceGuest, boolean fallback) {
+        if (DBG) {
+            Log.d(TAG, "switchUser(): userId=" + userId + ", replaceGuest=" + replaceGuest
+                    + ", fallback=" + fallback);
+        }
 
         UserInfo user = mUm.getUserInfo(userId);
         if (user == null) {
@@ -146,23 +161,24 @@ public final class InitialUserSetter {
             return;
         }
 
-        UserInfo actualUser = replaceGuestIfNeeded(user);
+        UserInfo actualUser = user;
 
-        if (actualUser == null) {
-            fallbackDefaultBehavior(fallback, "could not replace guest " + user.toFullString());
-            return;
+        if (user.isGuest() && replaceGuest) {
+            actualUser = replaceGuestIfNeeded(user);
+
+            if (actualUser == null) {
+                fallbackDefaultBehavior(fallback, "could not replace guest " + user.toFullString());
+                return;
+            }
         }
 
         int actualUserId = actualUser.id;
 
-        // If system user is the only user to unlock, it will be handled when boot is complete.
-        if (actualUserId != UserHandle.USER_SYSTEM) {
-            mHelper.unlockSystemUser();
-        }
+        unlockSystemUserIfNecessary(actualUserId);
 
         int currentUserId = ActivityManager.getCurrentUser();
         if (actualUserId != currentUserId) {
-            if (!mHelper.startForegroundUser(actualUserId)) {
+            if (!startForegroundUser(actualUserId)) {
                 fallbackDefaultBehavior(fallback, "am.switchUser(" + actualUserId + ") failed");
                 return;
             }
@@ -175,6 +191,13 @@ public final class InitialUserSetter {
             if (!mUm.removeUser(userId)) {
                 Slog.w(TAG, "Could not remove old guest " + userId);
             }
+        }
+    }
+
+    private void unlockSystemUserIfNecessary(@UserIdInt int userId) {
+        // If system user is the only user to unlock, it will be handled when boot is complete.
+        if (userId != UserHandle.USER_SYSTEM) {
+            unlockSystemUser();
         }
     }
 
@@ -192,6 +215,14 @@ public final class InitialUserSetter {
         Preconditions.checkArgument(user != null, "user cannot be null");
 
         if (!user.isGuest()) return user;
+
+        if (mLockPatternUtils.isSecure(user.id)) {
+            if (DBG) {
+                Log.d(TAG, "replaceGuestIfNeeded(), skipped, since user "
+                        + user.id + " has secure lock pattern");
+            }
+            return user;
+        }
 
         Log.i(TAG, "Replacing guest (" + user.toFullString() + ")");
 
@@ -230,7 +261,12 @@ public final class InitialUserSetter {
      * @param halFlags user flags as defined by Vehicle HAL ({@code UserFlags} enum).
      */
     public void createUser(@Nullable String name, int halFlags) {
-        createAndSwitchUser(name, halFlags, /* fallback= */ true);
+        try {
+            createAndSwitchUser(name, halFlags, /* fallback= */ true);
+        } catch (Exception e) {
+            fallbackDefaultBehavior(/* fallback= */ true, "Exception createUser user with flags "
+                    + UserHalHelper.userFlagsToString(halFlags) + ": " + e);
+        }
     }
 
     private void createAndSwitchUser(@Nullable String name, int halFlags, boolean fallback) {
@@ -241,7 +277,7 @@ public final class InitialUserSetter {
             return;
         }
 
-        switchUser(result.first.id, fallback);
+        switchUser(result.first.id, /* replaceGuest= */ false, fallback);
     }
 
     /**
@@ -295,6 +331,52 @@ public final class InitialUserSetter {
 
         if (DBG) Log.d(TAG, "user created: " + userInfo.id);
         return new Pair<>(userInfo, null);
+    }
+
+    @VisibleForTesting
+    void unlockSystemUser() {
+        Log.i(TAG, "unlocking system user");
+        IActivityManager am = ActivityManager.getService();
+
+        TimingsTraceLog t = new TimingsTraceLog(TAG, Trace.TRACE_TAG_SYSTEM_SERVER);
+        t.traceBegin("UnlockSystemUser");
+        try {
+            // This is for force changing state into RUNNING_LOCKED. Otherwise unlock does not
+            // update the state and USER_SYSTEM unlock happens twice.
+            t.traceBegin("am.startUser");
+            boolean started = am.startUserInBackground(UserHandle.USER_SYSTEM);
+            t.traceEnd();
+            if (!started) {
+                Log.w(TAG, "could not restart system user in foreground; trying unlock instead");
+                t.traceBegin("am.unlockUser");
+                boolean unlocked = am.unlockUser(UserHandle.USER_SYSTEM, /* token= */ null,
+                        /* secret= */ null, /* listener= */ null);
+                t.traceEnd();
+                if (!unlocked) {
+                    Log.w(TAG, "could not unlock system user neither");
+                    return;
+                }
+            }
+        } catch (RemoteException e) {
+            // should not happen for local call.
+            Log.wtf("RemoteException from AMS", e);
+        } finally {
+            t.traceEnd();
+        }
+    }
+
+    @VisibleForTesting
+    boolean startForegroundUser(@UserIdInt int userId) {
+        if (UserHelper.isHeadlessSystemUser(userId)) {
+            // System User doesn't associate with real person, can not be switched to.
+            return false;
+        }
+        try {
+            return ActivityManager.getService().startUserInForegroundWithListener(userId, null);
+        } catch (RemoteException e) {
+            Log.w(TAG, "failed to start user " + userId, e);
+            return false;
+        }
     }
 
     private void notifyListener(@Nullable UserInfo initialUser) {

@@ -17,7 +17,6 @@
 package com.android.car.user;
 
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doReturn;
-import static com.android.dx.mockito.inline.extended.ExtendedMockito.mockitoSession;
 
 import static com.google.common.truth.Truth.assertThat;
 
@@ -36,6 +35,7 @@ import android.app.AppOpsManager;
 import android.car.hardware.power.CarPowerManager;
 import android.car.hardware.power.CarPowerManager.CarPowerStateListener;
 import android.car.settings.CarSettings;
+import android.car.test.mocks.AbstractExtendedMockitoTestCase;
 import android.car.user.CarUserManager;
 import android.car.user.CarUserManager.UserLifecycleEvent;
 import android.car.user.CarUserManager.UserLifecycleListener;
@@ -57,19 +57,16 @@ import com.android.car.CarLocalServices;
 import com.android.car.CarPowerManagementService;
 import com.android.car.R;
 
-import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
-import org.mockito.MockitoSession;
-import org.mockito.quality.Strictness;
 
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
-public class CarUserNoticeServiceTest {
+public class CarUserNoticeServiceTest extends AbstractExtendedMockitoTestCase {
 
     @Mock
     private Context mMockContext;
@@ -97,27 +94,25 @@ public class CarUserNoticeServiceTest {
     @Captor
     private ArgumentCaptor<CarPowerStateListener> mPowerStateListener;
 
-    private MockitoSession mSession;
     private CarUserNoticeService mCarUserNoticeService;
 
     private final Handler mHandler = new Handler(Looper.getMainLooper());
+
+    @Override
+    protected void onSessionBuilder(CustomMockitoSessionBuilder session) {
+        session
+            .spyStatic(CarLocalServices.class)
+            .mockStatic(Settings.Secure.class);
+    }
 
     /**
      * Initialize all of the objects with the @Mock annotation.
      */
     @Before
     public void setUpMocks() throws Exception {
-        mSession = mockitoSession()
-                .initMocks(this)
-                .mockStatic(CarLocalServices.class)
-                .mockStatic(Settings.Secure.class)
-                .strictness(Strictness.LENIENT)
-                .startMocking();
-
         doReturn(mCarPowerManager).when(() -> CarLocalServices.createCarPowerManager(mMockContext));
         doReturn(mMockCarPowerManagementService)
                 .when(() -> CarLocalServices.getService(CarPowerManagementService.class));
-        doReturn(mCarPowerManager).when(() -> CarLocalServices.createCarPowerManager(mMockContext));
         doReturn(mMockCarUserService)
                 .when(() -> CarLocalServices.getService(CarUserService.class));
 
@@ -141,11 +136,6 @@ public class CarUserNoticeServiceTest {
         verify(mMockContext).registerReceiver(mDisplayBroadcastReceiver.capture(),
                 any(IntentFilter.class));
         verify(mCarPowerManager).setListener(mPowerStateListener.capture());
-    }
-
-    @After
-    public void tearDown() {
-        mSession.finishMocking();
     }
 
     @Test
@@ -260,7 +250,7 @@ public class CarUserNoticeServiceTest {
         return latch;
     }
 
-    private CountDownLatch mockKeySettings(String key, int value) {
+    private static CountDownLatch mockKeySettings(String key, int value) {
         CountDownLatch latch = new CountDownLatch(1);
         when(Settings.Secure.getIntForUser(any(),
                 eq(key), anyInt(),
