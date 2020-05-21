@@ -481,8 +481,7 @@
     <string name="face_lock_screen_setup_skip_dialog_text" product="tablet" msgid="2998863111689476550">"Protexe a túa tableta cunha opción de bloqueo de pantalla para que ninguén poida utilizala se a perdes ou cha rouban. Tamén é necesario para configurar a autenticación facial. Toca Cancelar e, despois, define un PIN ou escolle outra opción de bloqueo de pantalla."</string>
     <string name="face_lock_screen_setup_skip_dialog_text" product="device" msgid="6780557259734235952">"Protexe o teu dispositivo cunha opción de bloqueo de pantalla para que ninguén poida utilizalo se o perdes ou cho rouban. Tamén é necesario para configurar a autenticación facial. Toca Cancelar e, despois, define un PIN ou escolle outra opción de bloqueo de pantalla."</string>
     <string name="face_lock_screen_setup_skip_dialog_text" product="default" msgid="8541640018478926775">"Protexe o teu teléfono cunha opción de bloqueo de pantalla para que ninguén poida utilizalo se o perdes ou cho rouban. Tamén é necesario para configurar a autenticación facial. Toca Cancelar e, despois, define un PIN ou escolle outra opción de bloqueo de pantalla."</string>
-    <!-- no translation found for lock_screen_pin_skip_title (8217519439213393785) -->
-    <skip />
+    <string name="lock_screen_pin_skip_title" msgid="8217519439213393785">"Omitir a configuración do PIN?"</string>
     <string name="lock_screen_password_skip_title" msgid="3725788215672959827">"Omitir a conf. do contrasinal?"</string>
     <string name="lock_screen_pattern_skip_title" msgid="4237030500353932005">"Omitir a configur. do padrón?"</string>
     <string name="security_settings_fingerprint_enroll_setup_screen_lock" msgid="9036983528330627756">"Configurar bloqueo da pantalla"</string>
@@ -1092,8 +1091,11 @@
     <item msgid="2552412793005571845">"@*android:string/wfc_mode_cellular_preferred_summary"</item>
     <item msgid="742811521969300868">"@*android:string/wfc_mode_wifi_only_summary"</item>
   </string-array>
-    <!-- no translation found for wifi_calling_mode_choices_v2:0 (9149346657812979257) -->
-    <!-- no translation found for wifi_calling_mode_choices_v2:2 (6007360612667098926) -->
+  <string-array name="wifi_calling_mode_choices_v2">
+    <item msgid="9149346657812979257">"Wifi"</item>
+    <item msgid="4421333712484542489">"Datos móbiles"</item>
+    <item msgid="6007360612667098926">"Só por wifi"</item>
+  </string-array>
   <string-array name="wifi_calling_mode_choices_without_wifi_only">
     <item msgid="3658897985297386665">"@*android:string/wfc_mode_wifi_preferred_summary"</item>
     <item msgid="4191802193352447215">"@*android:string/wfc_mode_cellular_preferred_summary"</item>
@@ -1611,7 +1613,7 @@
     <string name="tether_settings_summary_hotspot_on_tether_on" msgid="1289593649526514499">"Zona wifi e conexión compartida activadas"</string>
     <string name="tether_settings_summary_hotspot_on_tether_off" msgid="8010689354668285422">"Zona wifi activada"</string>
     <string name="tether_settings_summary_hotspot_off_tether_on" msgid="1349909238672649877">"Conexión compartida activada"</string>
-    <string name="tether_settings_disabled_on_data_saver" msgid="3682544845899910726">"Non se pode compartir a conexión nin utilizar zonas wifi portátiles mentres o economizador de datos estea activado"</string>
+    <string name="tether_settings_disabled_on_data_saver" msgid="3682544845899910726">"Non se pode compartir a conexión nin utilizar zonas wifi portátiles mentres o aforro de datos estea activado"</string>
     <string name="usb_title" msgid="7480927657535578688">"USB"</string>
     <string name="usb_tethering_button_text" msgid="6242228383142012332">"Compartir conexión por USB"</string>
     <string name="usb_tethering_subtext" product="default" msgid="1573513260339548671">"Comparte a conexión a Internet do teléfono por USB"</string>
@@ -3365,9 +3367,9 @@
     <string name="no_notification_assistant" msgid="9140123568386413264">"Ningún asistente"</string>
     <string name="no_notification_listeners" msgid="1366386609506834717">"Ningunha aplicación instalada solicitou o acceso ás notificacións."</string>
     <string name="notification_assistant_security_warning_title" msgid="4190584438086738496">"Queres permitir que <xliff:g id="SERVICE">%1$s</xliff:g> teña acceso ás notificacións?"</string>
-    <string name="notification_assistant_security_warning_summary" msgid="6924513399671031930">"<xliff:g id="NOTIFICATION_ASSISTANT_NAME">%1$s</xliff:g> poderá ler todas as notificacións, incluída a información persoal, como os nomes dos contactos e o texto das mensaxes que recibas. Tamén poderá modificar ou ignorar as notificacións e activar os botóns de acción que conteñan. \n\nAdemais, poderá activar ou desactivar o modo Non molestar e cambiar a configuración asociada."</string>
+    <string name="notification_assistant_security_warning_summary" msgid="6924513399671031930">"<xliff:g id="NOTIFICATION_ASSISTANT_NAME">%1$s</xliff:g> poderá ler todas as notificacións, incluída a información persoal, como os nomes dos contactos e o texto das mensaxes que recibas. Tamén poderá modificar ou ignorar as notificacións e activar os botóns de acción que estas conteñan. \n\nAdemais, poderá activar ou desactivar o modo Non molestar e cambiar a configuración asociada."</string>
     <string name="notification_listener_security_warning_title" msgid="4902253246428777797">"Queres permitir que <xliff:g id="SERVICE">%1$s</xliff:g> teña acceso ás notificacións?"</string>
-    <string name="notification_listener_security_warning_summary" msgid="4454702907350100288">"<xliff:g id="NOTIFICATION_LISTENER_NAME">%1$s</xliff:g> poderá ler todas as notificacións, incluída a información persoal, coma os nomes dos contactos e o texto das mensaxes que recibas. Tamén poderá ignorar notificacións ou activar os botóns de acción que conteñan. \n\nAdemais, poderá activar ou desactivar o modo Non molestar e cambiar a configuración asociada."</string>
+    <string name="notification_listener_security_warning_summary" msgid="4454702907350100288">"<xliff:g id="NOTIFICATION_LISTENER_NAME">%1$s</xliff:g> poderá ler todas as notificacións, incluída a información persoal, coma os nomes dos contactos e o texto das mensaxes que recibas. Tamén poderá ignorar notificacións ou activar os botóns de acción que estas conteñan. \n\nAdemais, poderá activar ou desactivar o modo Non molestar e cambiar a configuración asociada."</string>
     <string name="notification_listener_disable_warning_summary" msgid="162165151519082978">"Se desactivas o acceso de <xliff:g id="NOTIFICATION_LISTENER_NAME">%1$s</xliff:g> ás notificacións, é posible que tamén se desactive o acceso en modo Non molestar."</string>
     <string name="notification_listener_disable_warning_confirm" msgid="7863495391671154188">"Desactivar"</string>
     <string name="notification_listener_disable_warning_cancel" msgid="6264631825225298458">"Cancelar"</string>
@@ -3522,7 +3524,7 @@
     <string name="zen_mode_when" msgid="7835420687948416255">"Activar automaticam."</string>
     <string name="zen_mode_when_never" msgid="4506296396609224524">"Nunca"</string>
     <string name="zen_mode_when_every_night" msgid="3942151668791426194">"Todas as noites"</string>
-    <string name="zen_mode_when_weeknights" msgid="2412709309122408474">"Noites pola semana"</string>
+    <string name="zen_mode_when_weeknights" msgid="2412709309122408474">"Noites entre semana"</string>
     <string name="zen_mode_start_time" msgid="5979122139937561731">"Hora de inicio"</string>
     <string name="zen_mode_end_time" msgid="3188578493250909972">"Hora de finalización"</string>
     <string name="zen_mode_end_time_next_day_summary_format" msgid="1598612215612648214">"<xliff:g id="FORMATTED_TIME">%s</xliff:g> do día seguinte"</string>
@@ -3804,8 +3806,8 @@
     <string name="overlay_settings" msgid="3325154759946433666">"Superpoñer sobre aplicacións"</string>
     <string name="system_alert_window_summary" msgid="7703582115861844158">"Aplicacións con permiso para superpoñerse a outras: <xliff:g id="COUNT_0">%1$d</xliff:g> de <xliff:g id="COUNT_1">%2$d</xliff:g>"</string>
     <string name="filter_overlay_apps" msgid="6336897660213304743">"Aplicacións con permiso"</string>
-    <string name="app_permission_summary_allowed" msgid="6458476982015518778">"Aplicación permitida"</string>
-    <string name="app_permission_summary_not_allowed" msgid="1171642541675462584">"Aplicación non permitida"</string>
+    <string name="app_permission_summary_allowed" msgid="6458476982015518778">"Permitido"</string>
+    <string name="app_permission_summary_not_allowed" msgid="1171642541675462584">"Non permitido"</string>
     <string name="keywords_install_other_apps" msgid="5383559540695847668">"instalar aplicacións fontes descoñecidas"</string>
     <string name="write_settings" msgid="9009040811145552108">"Modificar configuración"</string>
     <string name="keywords_write_settings" msgid="3450405263390246293">"editar ou modificar axustes do sistema"</string>
@@ -3891,7 +3893,7 @@
     <string name="condition_battery_summary" msgid="1236078243905690620">"Hai funcións restrinxidas"</string>
     <string name="condition_cellular_title" msgid="6605277435894307935">"Datos móbiles desactivados"</string>
     <string name="condition_cellular_summary" msgid="3607459310548343777">"Internet só está dispoñible mediante a wifi"</string>
-    <string name="condition_bg_data_title" msgid="184684435298857712">"Economizador de datos"</string>
+    <string name="condition_bg_data_title" msgid="184684435298857712">"Aforro de datos"</string>
     <string name="condition_bg_data_summary" msgid="5194942860807136682">"Hai funcións restrinxidas"</string>
     <string name="condition_work_title" msgid="9046811302347490371">"Perfil de traballo desactivado"</string>
     <string name="condition_work_summary" msgid="5586134491975748565">"Para aplicacións e notificacións"</string>
@@ -3958,8 +3960,8 @@
     <string name="configure" msgid="8232696842838580549">"Configurar"</string>
     <string name="data_usage_other_apps" msgid="7002491980141402084">"Outras aplicacións incluídas no uso"</string>
     <plurals name="data_saver_unrestricted_summary" formatted="false" msgid="6046013861315713697">
-      <item quantity="other"><xliff:g id="COUNT">%1$d</xliff:g> aplicacións poden usar datos sen restricións cando o Economizador de datos está activado</item>
-      <item quantity="one">1 aplicación pode usar datos sen restricións cando o Economizador de datos está activado</item>
+      <item quantity="other"><xliff:g id="COUNT">%1$d</xliff:g> aplicacións poden usar datos sen restricións cando o aforro de datos está activado</item>
+      <item quantity="one">1 aplicación pode usar datos sen restricións cando o aforro de datos está activado</item>
     </plurals>
     <string name="data_usage_title" msgid="7874606430902201083">"Datos principais"</string>
     <string name="data_usage_wifi_title" msgid="7161828479387766556">"Datos wifi"</string>
@@ -3979,14 +3981,14 @@
     <string name="no_carrier_update_now_text" msgid="4405472895804759042">"Actualizado agora mesmo"</string>
     <string name="launch_mdp_app_text" msgid="9186559496664208252">"Ver plan"</string>
     <string name="launch_wifi_text" msgid="317820210431682605">"Ver detalles"</string>
-    <string name="data_saver_title" msgid="7903308134514179256">"Economizador de datos"</string>
+    <string name="data_saver_title" msgid="7903308134514179256">"Aforro de datos"</string>
     <string name="unrestricted_data_saver" msgid="9139401849550738720">"Datos sen restricións"</string>
     <string name="restrict_background_blacklisted" msgid="7158991683849067124">"Desactiváronse os datos en segundo plano"</string>
     <string name="data_saver_on" msgid="7281809065420480881">"Activado"</string>
     <string name="data_saver_off" msgid="7439439787358504018">"Desactivado"</string>
-    <string name="data_saver_switch_title" msgid="8244008132112735207">"Usar Economizador de datos"</string>
+    <string name="data_saver_switch_title" msgid="8244008132112735207">"Usar Aforro de datos"</string>
     <string name="unrestricted_app_title" msgid="4390661122069905122">"Uso de datos sen restricións"</string>
-    <string name="unrestricted_app_summary" msgid="2829141815077800483">"Acceso sen restricións co Economizador de datos activado"</string>
+    <string name="unrestricted_app_summary" msgid="2829141815077800483">"Acceso sen restricións co aforro de datos activado"</string>
     <string name="home_app" msgid="3695063566006954160">"Aplicación de Inicio"</string>
     <string name="no_default_home" msgid="1518949210961918497">"Non hai inicio predeterminado"</string>
     <string name="lockpattern_settings_require_cred_before_startup" msgid="63693894094570367">"Inicio seguro"</string>
@@ -4132,7 +4134,7 @@
     <string name="fingerprint_swipe_for_notifications_title" msgid="3676002930672489760">"Dedo no sensor para ver notificacións"</string>
     <string name="fingerprint_gesture_screen_title" msgid="8638932855807473479">"Pasar dedo polo sensor"</string>
     <string name="fingerprint_swipe_for_notifications_summary" product="default" msgid="4347999905190477310">"Para consultar as notificacións, pasa o dedo cara abaixo sobre o sensor de impresión dixital situado na parte traseira do teléfono."</string>
-    <string name="fingerprint_swipe_for_notifications_summary" product="tablet" msgid="3480057984564476283">"Para consultar as notificacións, pasa o dedo cara abaixo sobre o sensor de impresión dixital situado na parte traseira da tableta."</string>
+    <string name="fingerprint_swipe_for_notifications_summary" product="tablet" msgid="3480057984564476283">"Para consultar as notificacións, pasa o dedo cara abaixo sobre o sensor de impresión dixital, situado na parte traseira da tableta."</string>
     <string name="fingerprint_swipe_for_notifications_summary" product="device" msgid="7950264130913070035">"Para consultar as notificacións, pasa o dedo cara abaixo sobre o sensor de impresión dixital situado na parte traseira do dispositivo."</string>
     <string name="fingerprint_swipe_for_notifications_suggestion_title" msgid="948946491233738823">"Consultar notificacións rapidamente"</string>
     <string name="gesture_setting_on" msgid="7573680730101327866">"Activado"</string>
