@@ -36,6 +36,7 @@ import android.car.user.CarUserManager.UserLifecycleListener;
 import android.car.user.GetUserIdentificationAssociationResponse;
 import android.car.user.UserSwitchResult;
 import android.car.userlib.CarUserManagerHelper;
+import android.car.userlib.CommonConstants.CarUserServiceConstants;
 import android.car.userlib.HalCallback;
 import android.car.userlib.UserHalHelper;
 import android.content.Context;
@@ -103,13 +104,14 @@ public final class CarUserService extends ICarUserService.Stub implements CarSer
     private static final String TAG = TAG_USER;
 
     /** {@code int} extra used to represent a user id in a {@link IResultReceiver} response. */
-    public static final String BUNDLE_USER_ID = "user.id";
+    public static final String BUNDLE_USER_ID = CarUserServiceConstants.BUNDLE_USER_ID;
     /** {@code int} extra used to represent user flags in a {@link IResultReceiver} response. */
-    public static final String BUNDLE_USER_FLAGS = "user.flags";
+    public static final String BUNDLE_USER_FLAGS = CarUserServiceConstants.BUNDLE_USER_FLAGS;
     /** {@code String} extra used to represent a user name in a {@link IResultReceiver} response. */
-    public static final String BUNDLE_USER_NAME = "user.name";
+    public static final String BUNDLE_USER_NAME = CarUserServiceConstants.BUNDLE_USER_NAME;
     /** {@code int} extra used to represent the info action {@link IResultReceiver} response. */
-    public static final String BUNDLE_INITIAL_INFO_ACTION = "initial_info.action";
+    public static final String BUNDLE_INITIAL_INFO_ACTION =
+            CarUserServiceConstants.BUNDLE_INITIAL_INFO_ACTION;
 
     private final Context mContext;
     private final CarUserManagerHelper mCarUserManagerHelper;
@@ -177,6 +179,8 @@ public final class CarUserService extends ICarUserService.Stub implements CarSer
     private UserInfo mInitialUser;
 
     private UserMetrics mUserMetrics;
+
+    private IResultReceiver mUserSwitchUiReceiver;
 
     /** Interface for callbaks related to passenger activities. */
     public interface PassengerCallback {
@@ -248,6 +252,7 @@ public final class CarUserService extends ICarUserService.Stub implements CarSer
         writer.println("*CarUserService*");
         String indent = "  ";
         handleDumpListeners(writer, indent);
+        writer.printf("User switch UI receiver %s\n", mUserSwitchUiReceiver);
         synchronized (mLockUser) {
             writer.println("User0Unlocked: " + mUser0Unlocked);
             writer.println("BackgroundUsersToRestart: " + mBackgroundUsersToRestart);
@@ -820,6 +825,7 @@ public final class CarUserService extends ICarUserService.Stub implements CarSer
                         try {
                             switched = mAm.switchUser(targetUserId);
                             if (switched) {
+                                sendUserSwitchUiCallback(targetUserId);
                                 resultStatus = UserSwitchResult.STATUS_SUCCESSFUL;
                                 mRequestIdForUserSwitchInProcess = resp.requestId;
                             } else {
@@ -844,6 +850,20 @@ public final class CarUserService extends ICarUserService.Stub implements CarSer
             }
             sendResult(receiver, resultStatus, resp.errorMessage);
         });
+    }
+
+    private void sendUserSwitchUiCallback(@UserIdInt int targetUserId) {
+        if (mUserSwitchUiReceiver == null) {
+            Log.w(TAG_USER, "No User switch UI receiver.");
+            return;
+        }
+
+        try {
+            EventLog.writeEvent(EventLogTags.CAR_USER_SVC_SWITCH_USER_UI_REQ, targetUserId);
+            mUserSwitchUiReceiver.send(targetUserId, null);
+        } catch (RemoteException e) {
+            Log.e(TAG_USER, "Error calling user switch UI receiver.", e);
+        }
     }
 
     @Override
@@ -930,6 +950,19 @@ public final class CarUserService extends ICarUserService.Stub implements CarSer
         return mHal.isSupported();
     }
 
+    /**
+     * Sets a callback which is invoked before user switch.
+     *
+     * <p>
+     * This method should only be called by the Car System UI. The purpose of this call is to notify
+     * Car System UI to show the user switch UI before the user switch.
+     */
+    @Override
+    public void setUserSwitchUiCallback(@NonNull IResultReceiver receiver) {
+        // TODO(b/154958003): check UID, only carSysUI should be allowed to set it.
+        mUserSwitchUiReceiver = receiver;
+    }
+
     // TODO(b/144120654): use helper to generate UsersInfo
     private UsersInfo getUsersInfo() {
         UserInfo currentUser;
@@ -939,6 +972,11 @@ public final class CarUserService extends ICarUserService.Stub implements CarSer
             // shouldn't happen
             throw new IllegalStateException("Could not get current user: ", e);
         }
+        return getUsersInfo(currentUser);
+    }
+
+    // TODO(b/144120654): use helper to generate UsersInfo
+    private UsersInfo getUsersInfo(@NonNull UserInfo currentUser) {
         List<UserInfo> existingUsers = mUserManager.getUsers();
         int size = existingUsers.size();
 
@@ -1150,7 +1188,7 @@ public final class CarUserService extends ICarUserService.Stub implements CarSer
 
         // Handle special cases first...
         if (eventType == CarUserManager.USER_LIFECYCLE_EVENT_TYPE_SWITCHING) {
-            onUserSwitching(userId);
+            onUserSwitching(fromUserId, toUserId);
         } else if (eventType == CarUserManager.USER_LIFECYCLE_EVENT_TYPE_UNLOCKED) {
             onUserUnlocked(userId);
         }
@@ -1257,22 +1295,41 @@ public final class CarUserService extends ICarUserService.Stub implements CarSer
         t.traceEnd(); // notify-listeners-user-USERID-event-EVENT_TYPE
     }
 
-    private void onUserSwitching(@UserIdInt int userId) {
-        Log.i(TAG_USER, "onSwitchUser() callback for user " + userId);
+    private void onUserSwitching(@UserIdInt int fromUserId, @UserIdInt int toUserId) {
+        Log.i(TAG_USER, "onSwitchUser() callback for user " + toUserId);
         TimingsTraceLog t = new TimingsTraceLog(TAG_USER, Trace.TRACE_TAG_SYSTEM_SERVER);
-        t.traceBegin("onUserSwitching-" + userId);
+        t.traceBegin("onUserSwitching-" + toUserId);
 
-        if (!isSystemUser(userId)) {
-            mCarUserManagerHelper.setLastActiveUser(userId);
+        // Switch HAL users if user switch is not requested by CarUserService
+        notifyHalLegacySwitch(fromUserId, toUserId);
+
+        if (!isSystemUser(toUserId)) {
+            mCarUserManagerHelper.setLastActiveUser(toUserId);
         }
         if (mLastPassengerId != UserHandle.USER_NULL) {
             stopPassengerInternal(mLastPassengerId, false);
         }
         if (mEnablePassengerSupport && isPassengerDisplayAvailable()) {
             setupPassengerUser();
-            startFirstPassenger(userId);
+            startFirstPassenger(toUserId);
         }
         t.traceEnd();
+    }
+
+    private void notifyHalLegacySwitch(@UserIdInt int fromUserId, @UserIdInt int toUserId) {
+        synchronized (mLockUser) {
+            if (mUserIdForUserSwitchInProcess != UserHandle.USER_NULL) return;
+        }
+
+        // switch HAL user
+        UserInfo targetUser = mUserManager.getUserInfo(toUserId);
+        android.hardware.automotive.vehicle.V2_0.UserInfo halTargetUser =
+                new android.hardware.automotive.vehicle.V2_0.UserInfo();
+        halTargetUser.userId = targetUser.id;
+        halTargetUser.flags = UserHalHelper.convertFlags(targetUser);
+        UserInfo currentUser = mUserManager.getUserInfo(fromUserId);
+        UsersInfo usersInfo = getUsersInfo(currentUser);
+        mHal.legacyUserSwitch(halTargetUser, usersInfo);
     }
 
     /**

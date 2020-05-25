@@ -16,18 +16,12 @@
 
 package com.android.car.audio;
 
-import static com.android.dx.mockito.inline.extended.ExtendedMockito.doReturn;
-
 import static com.google.common.truth.Truth.assertThat;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.eq;
-
+import android.car.media.CarAudioManager;
 import android.car.settings.CarSettings;
 import android.car.test.mocks.AbstractExtendedMockitoTestCase;
 import android.content.ContentResolver;
-import android.provider.Settings;
 
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 
@@ -40,17 +34,16 @@ import org.mockito.Mock;
 public class CarAudioSettingsUnitTest extends AbstractExtendedMockitoTestCase {
 
     private static final int TEST_USER_ID_1 = 11;
+    private static final int TEST_ZONE_ID = CarAudioManager.PRIMARY_AUDIO_ZONE;
+    private static final int TEST_GROUP_ID = 0;
+    private static final int TEST_GAIN_INDEX = 10;
+    private static final String TEST_GAIN_INDEX_KEY = "android.car.VOLUME_GROUP/0";
 
 
     @Mock
     private ContentResolver mMockContentResolver;
 
     private CarAudioSettings mCarAudioSettings;
-
-    @Override
-    protected void onSessionBuilder(CustomMockitoSessionBuilder session) {
-        session.spyStatic(Settings.Secure.class);
-    }
 
     @Before
     public void setUp() {
@@ -73,9 +66,27 @@ public class CarAudioSettingsUnitTest extends AbstractExtendedMockitoTestCase {
                 .isTrue();
     }
 
+    @Test
+    public void getStoredVolumeGainIndexForUser_returnsSavedValue() {
+        setStoredVolumeGainIndexForUser(TEST_GAIN_INDEX);
+
+        assertThat(mCarAudioSettings.getStoredVolumeGainIndexForUser(TEST_USER_ID_1, TEST_ZONE_ID,
+                        TEST_GROUP_ID)).isEqualTo(TEST_GAIN_INDEX);
+    }
+
+    @Test
+    public void storedVolumeGainIndexForUser_savesValue() {
+        mCarAudioSettings.storeVolumeGainIndexForUser(TEST_USER_ID_1, TEST_ZONE_ID,
+                TEST_GROUP_ID, TEST_GAIN_INDEX);
+        assertThat(getSettingsInt(TEST_GAIN_INDEX_KEY)).isEqualTo(TEST_GAIN_INDEX);
+    }
+
+    private void setStoredVolumeGainIndexForUser(int gainIndexForUser) {
+        putSettingsInt(TEST_GAIN_INDEX_KEY, gainIndexForUser);
+    }
+
     private void setRejectNavigationOnCallSettingsValues(int settingsValue) {
-        doReturn(settingsValue).when(()->Settings.Secure.getIntForUser(any(),
-                eq(CarSettings.Secure.KEY_AUDIO_FOCUS_NAVIGATION_REJECTED_DURING_CALL), anyInt(),
-                anyInt()));
+        putSettingsInt(CarSettings.Secure.KEY_AUDIO_FOCUS_NAVIGATION_REJECTED_DURING_CALL,
+                settingsValue);
     }
 }

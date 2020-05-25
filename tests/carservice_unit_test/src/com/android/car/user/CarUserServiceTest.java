@@ -85,7 +85,6 @@ import android.os.Bundle;
 import android.os.RemoteException;
 import android.os.UserHandle;
 import android.os.UserManager;
-import android.provider.Settings;
 import android.util.Log;
 import android.util.SparseArray;
 
@@ -94,6 +93,7 @@ import androidx.test.InstrumentationRegistry;
 import com.android.car.hal.UserHalService;
 import com.android.internal.R;
 import com.android.internal.infra.AndroidFuture;
+import com.android.internal.os.IResultReceiver;
 import com.android.internal.util.Preconditions;
 
 import org.junit.Before;
@@ -140,6 +140,7 @@ public final class CarUserServiceTest extends AbstractExtendedMockitoTestCase {
     @Mock private Resources mMockedResources;
     @Mock private Drawable mMockedDrawable;
     @Mock private UserMetrics mUserMetrics;
+    @Mock IResultReceiver mSwitchUserUiReceiver;
 
     private final BlockingUserLifecycleListener mUserLifecycleListener =
             BlockingUserLifecycleListener.newDefaultListener();
@@ -173,8 +174,7 @@ public final class CarUserServiceTest extends AbstractExtendedMockitoTestCase {
     @Override
     protected void onSessionBuilder(CustomMockitoSessionBuilder builder) {
         builder
-            .spyStatic(ActivityManager.class)
-            .mockStatic(Settings.Global.class);
+            .spyStatic(ActivityManager.class);
     }
 
     /**
@@ -203,7 +203,6 @@ public final class CarUserServiceTest extends AbstractExtendedMockitoTestCase {
                         3, mUserMetrics);
 
         mFakeCarOccupantZoneService = new FakeCarOccupantZoneService(mCarUserService);
-        mockSettingsGlobal();
     }
 
     @Test
@@ -222,13 +221,14 @@ public final class CarUserServiceTest extends AbstractExtendedMockitoTestCase {
     public void testOnUserLifecycleEvent_nofityListener() throws Exception {
         // Arrange
         mCarUserService.addUserLifecycleListener(mUserLifecycleListener);
+        mockExistingUsers();
 
         // Act
-        int userId = 11;
-        sendUserLifecycleEvent(userId, CarUserManager.USER_LIFECYCLE_EVENT_TYPE_SWITCHING);
+        sendUserSwitchingEvent(mAdminUser.id, mRegularUser.id);
 
         // Verify
-        verifyListenerOnEventInvoked(userId, CarUserManager.USER_LIFECYCLE_EVENT_TYPE_SWITCHING);
+        verifyListenerOnEventInvoked(mRegularUser.id,
+                CarUserManager.USER_LIFECYCLE_EVENT_TYPE_SWITCHING);
     }
 
     @Test
@@ -239,16 +239,17 @@ public final class CarUserServiceTest extends AbstractExtendedMockitoTestCase {
         doThrow(new RuntimeException("Failed onEvent invocation")).when(
                 failureListener).onEvent(any(UserLifecycleEvent.class));
         mCarUserService.addUserLifecycleListener(failureListener);
+        mockExistingUsers();
 
         // Adding the non-failure listener later.
         mCarUserService.addUserLifecycleListener(mUserLifecycleListener);
 
         // Act
-        int userId = 11;
-        sendUserLifecycleEvent(userId, CarUserManager.USER_LIFECYCLE_EVENT_TYPE_SWITCHING);
+        sendUserSwitchingEvent(mAdminUser.id, mRegularUser.id);
 
         // Verify
-        verifyListenerOnEventInvoked(userId, CarUserManager.USER_LIFECYCLE_EVENT_TYPE_SWITCHING);
+        verifyListenerOnEventInvoked(mRegularUser.id,
+                CarUserManager.USER_LIFECYCLE_EVENT_TYPE_SWITCHING);
     }
 
     private void verifyListenerOnEventInvoked(int expectedNewUserId, int expectedEventType)
@@ -273,15 +274,10 @@ public final class CarUserServiceTest extends AbstractExtendedMockitoTestCase {
      * Test that the {@link CarUserService} updates last active user on user switch.
      */
     @Test
-    public void testLastActiveUserUpdatedOnUserSwitch() {
-        int lastActiveUserId = 99;
-        UserInfo persistentUser = new UserInfo(lastActiveUserId, "persistent user",
-                NO_USER_INFO_FLAGS);
-        doReturn(persistentUser).when(mMockedUserManager).getUserInfo(lastActiveUserId);
-
-        sendUserSwitchingEvent(lastActiveUserId);
-
-        verify(mMockedCarUserManagerHelper).setLastActiveUser(lastActiveUserId);
+    public void testLastActiveUserUpdatedOnUserSwitch() throws Exception {
+        mockExistingUsers();
+        sendUserSwitchingEvent(mAdminUser.id, mRegularUser.id);
+        verify(mMockedCarUserManagerHelper).setLastActiveUser(mRegularUser.id);
     }
 
     /**
@@ -912,6 +908,51 @@ public final class CarUserServiceTest extends AbstractExtendedMockitoTestCase {
     }
 
     @Test
+    public void testHalUserSwitchOnAndroidSwitch_successfulNoExitingUserSwitch() {
+        mockExistingUsers();
+
+        sendUserSwitchingEvent(mAdminUser.id, mRegularUser.id);
+
+        ArgumentCaptor<android.hardware.automotive.vehicle.V2_0.UserInfo> targetUser =
+                ArgumentCaptor.forClass(android.hardware.automotive.vehicle.V2_0.UserInfo.class);
+        ArgumentCaptor<UsersInfo> usersInfo = ArgumentCaptor.forClass(UsersInfo.class);
+        verify(mUserHal).legacyUserSwitch(targetUser.capture(), usersInfo.capture());
+        assertThat(targetUser.getValue().userId).isEqualTo(mRegularUser.id);
+        assertThat(usersInfo.getValue().currentUser.userId).isEqualTo(mAdminUser.id);
+    }
+
+    @Test
+    public void testHalUserSwitchOnAndroidSwitch_failureExitingUserSwitch() throws Exception {
+        mockExistingUsersAndCurrentUser(mAdminUser);
+        int requestId = 42;
+        mSwitchUserResponse.status = SwitchUserStatus.SUCCESS;
+        mSwitchUserResponse.requestId = requestId;
+        mockHalSwitch(mAdminUser.id, mGuestUser, mSwitchUserResponse);
+        mockAmSwitchUser(mGuestUser, true);
+        mCarUserService.switchUser(mGuestUser.id, mAsyncCallTimeoutMs, mUserSwitchFuture);
+
+        sendUserSwitchingEvent(mAdminUser.id, mGuestUser.id);
+
+        verify(mUserHal, never()).legacyUserSwitch(any(), any());
+    }
+
+    @Test
+    public void testSetSwitchUserUI_receiverSetAndCalled() throws Exception {
+        mockExistingUsersAndCurrentUser(mAdminUser);
+        int requestId = 42;
+        mSwitchUserResponse.status = SwitchUserStatus.SUCCESS;
+        mSwitchUserResponse.requestId = requestId;
+        mockHalSwitch(mAdminUser.id, mGuestUser, mSwitchUserResponse);
+        mockAmSwitchUser(mGuestUser, true);
+
+        mCarUserService.setUserSwitchUiCallback(mSwitchUserUiReceiver);
+        mCarUserService.switchUser(mGuestUser.id, mAsyncCallTimeoutMs, mUserSwitchFuture);
+
+        // update current user due to successful user switch
+        verify(mSwitchUserUiReceiver).send(mGuestUser.id, null);
+    }
+
+    @Test
     public void testGetUserInfo_nullReceiver() throws Exception {
         assertThrows(NullPointerException.class, () -> mCarUserService
                 .getInitialUserInfo(mGetUserInfoRequestType, mAsyncCallTimeoutMs, null));
@@ -1095,12 +1136,12 @@ public final class CarUserServiceTest extends AbstractExtendedMockitoTestCase {
     }
 
     @Test
-    public void testUserMetric_SendEvent() {
-        int userId = 99;
-        sendUserSwitchingEvent(userId);
+    public void testUserMetric_SendEvent() throws Exception {
+        mockExistingUsersAndCurrentUser(mAdminUser);
+        sendUserSwitchingEvent(mAdminUser.id, mRegularUser.id);
 
         verify(mUserMetrics).onEvent(CarUserManager.USER_LIFECYCLE_EVENT_TYPE_SWITCHING,
-                0, UserHandle.USER_NULL, userId);
+                0, mAdminUser.id, mRegularUser.id);
     }
 
     @Test
@@ -1423,37 +1464,19 @@ public final class CarUserServiceTest extends AbstractExtendedMockitoTestCase {
         }
     }
 
-    // TODO(b/148403316): Refactor to use common fake settings provider
-    private void mockSettingsGlobal() {
-        when(Settings.Global.putInt(any(), eq(CarSettings.Global.DEFAULT_USER_RESTRICTIONS_SET),
-                anyInt())).thenAnswer(invocation -> {
-                            int value = (int) invocation.getArguments()[2];
-                            when(Settings.Global.getInt(any(),
-                                    eq(CarSettings.Global.DEFAULT_USER_RESTRICTIONS_SET), anyInt()))
-                                    .thenReturn(value);
-                            return null;
-                        }
-        );
-    }
-
-    private int getSettingsInt(String key) {
-        return Settings.Global.getInt(
-                InstrumentationRegistry.getTargetContext().getContentResolver(),
-                key, /* default= */ 0);
-    }
-
-    private void sendUserLifecycleEvent(@UserIdInt int userId,
+    private void sendUserLifecycleEvent(@UserIdInt int fromUserId, @UserIdInt int toUserId,
             @UserLifecycleEventType int eventType) {
-        mCarUserService.onUserLifecycleEvent(eventType, /* timestampMs= */ 0,
-                /* fromUserId= */ UserHandle.USER_NULL, userId);
+        mCarUserService.onUserLifecycleEvent(eventType, /* timestampMs= */ 0, fromUserId, toUserId);
     }
 
     private void sendUserUnlockedEvent(@UserIdInt int userId) {
-        sendUserLifecycleEvent(userId, CarUserManager.USER_LIFECYCLE_EVENT_TYPE_UNLOCKED);
+        sendUserLifecycleEvent(/* fromUser */ 0, userId,
+                CarUserManager.USER_LIFECYCLE_EVENT_TYPE_UNLOCKED);
     }
 
-    private void sendUserSwitchingEvent(@UserIdInt int userId) {
-        sendUserLifecycleEvent(userId, CarUserManager.USER_LIFECYCLE_EVENT_TYPE_SWITCHING);
+    private void sendUserSwitchingEvent(@UserIdInt int fromUserId, @UserIdInt int toUserId) {
+        sendUserLifecycleEvent(fromUserId, toUserId,
+                CarUserManager.USER_LIFECYCLE_EVENT_TYPE_SWITCHING);
     }
 
     @NonNull
