@@ -24,6 +24,8 @@ import android.annotation.NonNull;
 import android.annotation.UserIdInt;
 import android.app.ActivityManager;
 import android.car.test.util.UserTestingHelper;
+import android.content.Context;
+import android.content.pm.PackageManager;
 import android.content.pm.UserInfo;
 import android.content.pm.UserInfo.UserInfoFlag;
 import android.os.IBinder;
@@ -32,15 +34,22 @@ import android.os.ServiceManager;
 import android.os.UserHandle;
 import android.os.UserManager;
 
+import com.android.internal.infra.AndroidFuture;
+
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
 /**
  * Provides common Mockito calls for core Android classes.
  */
 public final class AndroidMockitoHelper {
+
+    private static final long ASYNC_TIMEOUT_MS = 500;
 
     /**
      * Mocks a call to {@link ActivityManager#getCurrentUser()}.
@@ -160,6 +169,40 @@ public final class AndroidMockitoHelper {
             @NonNull IBinder binder, @NonNull T service) {
         doReturn(binder).when(() -> ServiceManager.getService(name));
         when(binder.queryLocalInterface(anyString())).thenReturn(service);
+    }
+
+    /**
+     * Mocks a call to {@link Context#getSystemService(Class)}.
+     */
+    public static <T> void mockContextGetService(@NonNull Context context,
+            @NonNull Class<T> serviceClass, @NonNull T service) {
+        when(context.getSystemService(serviceClass)).thenReturn(service);
+        if (serviceClass.equals(PackageManager.class)) {
+            when(context.getPackageManager()).thenReturn(PackageManager.class.cast(service));
+        }
+    }
+
+    /**
+     * Gets the result of a future, or throw a {@link IllegalStateException} if it times out after
+     * {@value #ASYNC_TIMEOUT_MS} ms.
+     */
+    @NonNull
+    public static <T> T getResult(@NonNull AndroidFuture<T> future)
+            throws InterruptedException, ExecutionException {
+        return getResult(future, ASYNC_TIMEOUT_MS);
+    }
+
+    /**
+     * Gets the result of a future, or throw a {@link IllegalStateException} if it times out.
+     */
+    @NonNull
+    public static <T> T getResult(@NonNull AndroidFuture<T> future, long timeoutMs)
+            throws InterruptedException, ExecutionException {
+        try {
+            return future.get(timeoutMs, TimeUnit.MILLISECONDS);
+        } catch (TimeoutException e) {
+            throw new IllegalStateException("not called in " + ASYNC_TIMEOUT_MS + "ms", e);
+        }
     }
 
     private AndroidMockitoHelper() {

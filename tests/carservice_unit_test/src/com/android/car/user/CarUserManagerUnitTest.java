@@ -15,11 +15,10 @@
  */
 package com.android.car.user;
 
-import static android.Manifest.permission.INTERACT_ACROSS_USERS;
+import static android.car.test.mocks.AndroidMockitoHelper.getResult;
 import static android.car.test.mocks.AndroidMockitoHelper.mockUmGetUsers;
 import static android.car.test.util.UserTestingHelper.newUsers;
 import static android.car.testapi.CarMockitoHelper.mockHandleRemoteExceptionFromCarServiceWithDefaultValue;
-import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 import static android.os.UserHandle.USER_SYSTEM;
 
 import static com.google.common.truth.Truth.assertThat;
@@ -31,12 +30,10 @@ import static org.mockito.ArgumentMatchers.notNull;
 import static org.mockito.ArgumentMatchers.same;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.testng.Assert.assertThrows;
 
-import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UserIdInt;
 import android.car.Car;
@@ -47,7 +44,6 @@ import android.car.user.CarUserManager.UserLifecycleListener;
 import android.car.user.CarUserManager.UserSwitchUiCallback;
 import android.car.user.UserIdentificationAssociationResponse;
 import android.car.user.UserSwitchResult;
-import android.content.Context;
 import android.content.pm.UserInfo;
 import android.os.RemoteException;
 import android.os.UserManager;
@@ -59,12 +55,8 @@ import org.junit.Test;
 import org.mockito.Mock;
 
 import java.util.List;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
 public final class CarUserManagerUnitTest extends AbstractExtendedMockitoTestCase {
-
-    private static final long ASYNC_TIMEOUT_MS = 500;
 
     @Mock
     private Car mCar;
@@ -124,22 +116,16 @@ public final class CarUserManagerUnitTest extends AbstractExtendedMockitoTestCas
 
     @Test
     public void testAddListener_nullExecutor() {
-        mockInteractAcrossUsersPermission();
-
         assertThrows(NullPointerException.class, () -> mMgr.addListener(null, (e) -> { }));
     }
 
     @Test
     public void testAddListener_nullListener() {
-        mockInteractAcrossUsersPermission();
-
         assertThrows(NullPointerException.class, () -> mMgr.addListener(Runnable::run, null));
     }
 
     @Test
     public void testAddListener_sameListenerAddedTwice() {
-        mockInteractAcrossUsersPermission();
-
         UserLifecycleListener listener = (e) -> { };
 
         mMgr.addListener(Runnable::run, listener);
@@ -148,23 +134,17 @@ public final class CarUserManagerUnitTest extends AbstractExtendedMockitoTestCas
 
     @Test
     public void testAddListener_differentListenersAddedTwice() {
-        mockInteractAcrossUsersPermission();
-
         mMgr.addListener(Runnable::run, (e) -> { });
         mMgr.addListener(Runnable::run, (e) -> { });
     }
 
     @Test
     public void testRemoveListener_nullListener() {
-        mockInteractAcrossUsersPermission();
-
         assertThrows(NullPointerException.class, () -> mMgr.removeListener(null));
     }
 
     @Test
     public void testRemoveListener_notAddedBefore() {
-        mockInteractAcrossUsersPermission();
-
         UserLifecycleListener listener = (e) -> { };
 
         assertThrows(IllegalStateException.class, () -> mMgr.removeListener(listener));
@@ -172,7 +152,6 @@ public final class CarUserManagerUnitTest extends AbstractExtendedMockitoTestCas
 
     @Test
     public void testRemoveListener_addAndRemove() {
-        mockInteractAcrossUsersPermission();
         UserLifecycleListener listener = (e) -> { };
 
         mMgr.addListener(Runnable::run, listener);
@@ -254,13 +233,6 @@ public final class CarUserManagerUnitTest extends AbstractExtendedMockitoTestCas
                 mMgr.getUserIdentificationAssociation(types);
 
         assertThat(actualResponse).isSameAs(expectedResponse);
-    }
-
-    // TODO(b/155311595): remove once permission check is done only on service
-    private void mockInteractAcrossUsersPermission() {
-        Context context = mock(Context.class);
-        when(mCar.getContext()).thenReturn(context);
-        when(context.checkSelfPermission(INTERACT_ACROSS_USERS)).thenReturn(PERMISSION_GRANTED);
     }
 
     @Test
@@ -352,15 +324,6 @@ public final class CarUserManagerUnitTest extends AbstractExtendedMockitoTestCas
     private void expectServiceSwitchUserSucceeds(@UserIdInt int userId) throws RemoteException {
         doThrow(new RemoteException("D'OH!")).when(mService)
             .switchUser(eq(userId), anyInt(), notNull());
-    }
-
-    @NonNull
-    private static <T> T getResult(@NonNull AndroidFuture<T> future) throws Exception {
-        try {
-            return future.get(ASYNC_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-        } catch (TimeoutException e) {
-            throw new IllegalStateException("not called in " + ASYNC_TIMEOUT_MS + "ms", e);
-        }
     }
 
     private void setExistingUsers(int... userIds) {
