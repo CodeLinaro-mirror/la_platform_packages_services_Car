@@ -24,6 +24,7 @@ import static android.car.test.mocks.CarArgumentMatchers.isPropertyWithValues;
 import static android.car.test.util.VehicleHalTestingHelper.newConfig;
 import static android.car.test.util.VehicleHalTestingHelper.newSubscribableConfig;
 import static android.hardware.automotive.vehicle.V2_0.InitialUserInfoRequestType.COLD_BOOT;
+import static android.hardware.automotive.vehicle.V2_0.UserIdentificationAssociationSetValue.ASSOCIATE_CURRENT_USER;
 import static android.hardware.automotive.vehicle.V2_0.UserIdentificationAssociationType.CUSTOM_1;
 import static android.hardware.automotive.vehicle.V2_0.UserIdentificationAssociationType.KEY_FOB;
 import static android.hardware.automotive.vehicle.V2_0.UserIdentificationAssociationValue.ASSOCIATED_CURRENT_USER;
@@ -32,12 +33,17 @@ import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.Truth.assertWithMessage;
 
 import static org.junit.Assert.fail;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.testng.Assert.assertThrows;
 
+import android.annotation.NonNull;
 import android.car.hardware.property.VehicleHalStatusCode;
 import android.car.userlib.HalCallback;
 import android.car.userlib.UserHalHelper;
@@ -50,16 +56,24 @@ import android.hardware.automotive.vehicle.V2_0.UserFlags;
 import android.hardware.automotive.vehicle.V2_0.UserIdentificationAssociation;
 import android.hardware.automotive.vehicle.V2_0.UserIdentificationGetRequest;
 import android.hardware.automotive.vehicle.V2_0.UserIdentificationResponse;
+import android.hardware.automotive.vehicle.V2_0.UserIdentificationSetAssociation;
+import android.hardware.automotive.vehicle.V2_0.UserIdentificationSetRequest;
 import android.hardware.automotive.vehicle.V2_0.UserInfo;
 import android.hardware.automotive.vehicle.V2_0.UsersInfo;
 import android.hardware.automotive.vehicle.V2_0.VehiclePropConfig;
 import android.hardware.automotive.vehicle.V2_0.VehiclePropValue;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.ServiceSpecificException;
 import android.os.SystemClock;
 import android.os.UserHandle;
 import android.util.Log;
 import android.util.Pair;
 
+import com.android.car.CarLocalServices;
+import com.android.car.user.CarUserService;
+
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -98,26 +112,36 @@ public final class UserHalServiceTest {
     private static final int CALLBACK_TIMEOUT_TIMEOUT = TIMEOUT_MS + 450;
 
     // Used when crafting a request property - the real value will be set by the mock.
-    private static final int REQUEST_ID_PLACE_HOLDER = 42;
+    private static final int REQUEST_ID_PLACE_HOLDER = 1111;
+
+    private static final int DEFAULT_REQUEST_ID = 2222;
+
+    private static final int DEFAULT_USER_ID = 333;
+    private static final int DEFAULT_USER_FLAGS = 444;
 
     private static final int INITIAL_USER_INFO_RESPONSE_ACTION = 108;
 
+
     @Mock
     private VehicleHal mVehicleHal;
+    @Mock
+    private CarUserService mCarUserService;
+
+    private final Handler mHandler = new Handler(Looper.getMainLooper());
 
     private final UserInfo mUser0 = new UserInfo();
     private final UserInfo mUser10 = new UserInfo();
 
     private final UsersInfo mUsersInfo = new UsersInfo();
 
+    // Must be a spy so we can mock getNextRequestId()
     private UserHalService mUserHalService;
 
     @Before
     public void setFixtures() {
-        mUserHalService = new UserHalService(mVehicleHal);
-        mUserHalService.takeProperties(Arrays.asList(
-                newSubscribableConfig(INITIAL_USER_INFO),
-                newSubscribableConfig(SWITCH_USER)));
+        mUserHalService = spy(new UserHalService(mVehicleHal, mHandler));
+        // Needs at least one property, otherwise isSupported() will return false
+        mUserHalService.takeProperties(Arrays.asList(newSubscribableConfig(INITIAL_USER_INFO)));
 
         mUser0.userId = 0;
         mUser0.flags = 100;
@@ -129,6 +153,13 @@ public final class UserHalServiceTest {
         mUsersInfo.existingUsers = new ArrayList<>(2);
         mUsersInfo.existingUsers.add(mUser0);
         mUsersInfo.existingUsers.add(mUser10);
+
+        CarLocalServices.addService(CarUserService.class, mCarUserService);
+    }
+
+    @After
+    public void clearFixtures() {
+        CarLocalServices.removeServiceForTest(CarUserService.class);
     }
 
     @Test
@@ -243,8 +274,8 @@ public final class UserHalServiceTest {
 
     @Test
     public void testGetUserInfo_halReplyWithWrongRequestId() throws Exception {
-        VehiclePropValue propResponse = UserHalHelper.createPropRequest(REQUEST_ID_PLACE_HOLDER,
-                    INITIAL_USER_INFO_RESPONSE_ACTION, INITIAL_USER_INFO);
+        VehiclePropValue propResponse = UserHalHelper.createPropRequest(INITIAL_USER_INFO,
+                    REQUEST_ID_PLACE_HOLDER, INITIAL_USER_INFO_RESPONSE_ACTION);
 
         replySetPropertyWithOnChangeEvent(INITIAL_USER_INFO, propResponse,
                 /* rightRequestId= */ false);
@@ -261,8 +292,8 @@ public final class UserHalServiceTest {
 
     @Test
     public void testGetUserInfo_halReturnedInvalidAction() throws Exception {
-        VehiclePropValue propResponse = UserHalHelper.createPropRequest(REQUEST_ID_PLACE_HOLDER,
-                    INITIAL_USER_INFO_RESPONSE_ACTION, INITIAL_USER_INFO);
+        VehiclePropValue propResponse = UserHalHelper.createPropRequest(INITIAL_USER_INFO,
+                    REQUEST_ID_PLACE_HOLDER, INITIAL_USER_INFO_RESPONSE_ACTION);
 
         AtomicReference<VehiclePropValue> reqCaptor = replySetPropertyWithOnChangeEvent(
                 INITIAL_USER_INFO, propResponse, /* rightRequestId= */ true);
@@ -284,8 +315,8 @@ public final class UserHalServiceTest {
 
     @Test
     public void testGetUserInfo_successDefault() throws Exception {
-        VehiclePropValue propResponse = UserHalHelper.createPropRequest(REQUEST_ID_PLACE_HOLDER,
-                    InitialUserInfoResponseAction.DEFAULT, INITIAL_USER_INFO);
+        VehiclePropValue propResponse = UserHalHelper.createPropRequest(INITIAL_USER_INFO,
+                    REQUEST_ID_PLACE_HOLDER, InitialUserInfoResponseAction.DEFAULT);
 
         AtomicReference<VehiclePropValue> reqCaptor = replySetPropertyWithOnChangeEvent(
                 INITIAL_USER_INFO, propResponse, /* rightRequestId= */ true);
@@ -313,8 +344,8 @@ public final class UserHalServiceTest {
     @Test
     public void testGetUserInfo_successSwitchUser() throws Exception {
         int userIdToSwitch = 42;
-        VehiclePropValue propResponse = UserHalHelper.createPropRequest(REQUEST_ID_PLACE_HOLDER,
-                    InitialUserInfoResponseAction.SWITCH, INITIAL_USER_INFO);
+        VehiclePropValue propResponse = UserHalHelper.createPropRequest(INITIAL_USER_INFO,
+                    REQUEST_ID_PLACE_HOLDER, InitialUserInfoResponseAction.SWITCH);
         propResponse.value.int32Values.add(userIdToSwitch);
 
         AtomicReference<VehiclePropValue> reqCaptor = replySetPropertyWithOnChangeEvent(
@@ -344,8 +375,8 @@ public final class UserHalServiceTest {
     public void testGetUserInfo_successCreateUser() throws Exception {
         int newUserFlags = 108;
         String newUserName = "Groot";
-        VehiclePropValue propResponse = UserHalHelper.createPropRequest(REQUEST_ID_PLACE_HOLDER,
-                    InitialUserInfoResponseAction.CREATE, INITIAL_USER_INFO);
+        VehiclePropValue propResponse = UserHalHelper.createPropRequest(INITIAL_USER_INFO,
+                    REQUEST_ID_PLACE_HOLDER, InitialUserInfoResponseAction.CREATE);
         propResponse.value.int32Values.add(newUserFlags);
         propResponse.value.stringValue = newUserName;
 
@@ -434,8 +465,8 @@ public final class UserHalServiceTest {
 
     @Test
     public void testSwitchUser_halReplyWithWrongRequestId() throws Exception {
-        VehiclePropValue propResponse = UserHalHelper.createPropRequest(REQUEST_ID_PLACE_HOLDER,
-                    InitialUserInfoResponseAction.SWITCH, SWITCH_USER);
+        VehiclePropValue propResponse = UserHalHelper.createPropRequest(SWITCH_USER,
+                    REQUEST_ID_PLACE_HOLDER, InitialUserInfoResponseAction.SWITCH);
 
         replySetPropertyWithOnChangeEvent(SWITCH_USER, propResponse,
                 /* rightRequestId= */ false);
@@ -451,8 +482,8 @@ public final class UserHalServiceTest {
 
     @Test
     public void testSwitchUser_halReturnedInvalidMessageType() throws Exception {
-        VehiclePropValue propResponse = UserHalHelper.createPropRequest(REQUEST_ID_PLACE_HOLDER,
-                    SwitchUserMessageType.VEHICLE_REQUEST, SWITCH_USER);
+        VehiclePropValue propResponse = UserHalHelper.createPropRequest(SWITCH_USER,
+                REQUEST_ID_PLACE_HOLDER, SwitchUserMessageType.LEGACY_ANDROID_SWITCH);
         propResponse.value.int32Values.add(SwitchUserStatus.SUCCESS);
 
         AtomicReference<VehiclePropValue> reqCaptor = replySetPropertyWithOnChangeEvent(
@@ -465,7 +496,7 @@ public final class UserHalServiceTest {
         callback.assertCalled();
 
         // Make sure the arguments were properly converted
-        assertSwitchUserSetRequest(reqCaptor.get(), SwitchUserMessageType.ANDROID_SWITCH, mUser10);
+        assertHALSetRequest(reqCaptor.get(), SwitchUserMessageType.ANDROID_SWITCH, mUser10);
 
         // Assert response
         assertCallbackStatus(callback, HalCallback.STATUS_WRONG_HAL_RESPONSE);
@@ -474,8 +505,8 @@ public final class UserHalServiceTest {
 
     @Test
     public void testUserSwitch_success() throws Exception {
-        VehiclePropValue propResponse = UserHalHelper.createPropRequest(REQUEST_ID_PLACE_HOLDER,
-                    SwitchUserMessageType.VEHICLE_RESPONSE, SWITCH_USER);
+        VehiclePropValue propResponse = UserHalHelper.createPropRequest(SWITCH_USER,
+                    REQUEST_ID_PLACE_HOLDER, SwitchUserMessageType.VEHICLE_RESPONSE);
         propResponse.value.int32Values.add(SwitchUserStatus.SUCCESS);
 
         AtomicReference<VehiclePropValue> reqCaptor = replySetPropertyWithOnChangeEvent(
@@ -488,7 +519,7 @@ public final class UserHalServiceTest {
         callback.assertCalled();
 
         // Make sure the arguments were properly converted
-        assertSwitchUserSetRequest(reqCaptor.get(), SwitchUserMessageType.ANDROID_SWITCH, mUser10);
+        assertHALSetRequest(reqCaptor.get(), SwitchUserMessageType.ANDROID_SWITCH, mUser10);
 
         // Assert response
         assertCallbackStatus(callback, HalCallback.STATUS_OK);
@@ -499,8 +530,8 @@ public final class UserHalServiceTest {
 
     @Test
     public void testUserSwitch_failure() throws Exception {
-        VehiclePropValue propResponse = UserHalHelper.createPropRequest(REQUEST_ID_PLACE_HOLDER,
-                    SwitchUserMessageType.VEHICLE_RESPONSE, SWITCH_USER);
+        VehiclePropValue propResponse = UserHalHelper.createPropRequest(SWITCH_USER,
+                    REQUEST_ID_PLACE_HOLDER, SwitchUserMessageType.VEHICLE_RESPONSE);
         propResponse.value.int32Values.add(SwitchUserStatus.FAILURE);
 
         AtomicReference<VehiclePropValue> reqCaptor = replySetPropertyWithOnChangeEvent(
@@ -513,7 +544,7 @@ public final class UserHalServiceTest {
         callback.assertCalled();
 
         // Make sure the arguments were properly converted
-        assertSwitchUserSetRequest(reqCaptor.get(), SwitchUserMessageType.ANDROID_SWITCH, mUser10);
+        assertHALSetRequest(reqCaptor.get(), SwitchUserMessageType.ANDROID_SWITCH, mUser10);
 
         // Assert response
         assertCallbackStatus(callback, HalCallback.STATUS_OK);
@@ -542,8 +573,8 @@ public final class UserHalServiceTest {
 
     @Test
     public void testSwitchUser_halReturnedInvalidStatus() throws Exception {
-        VehiclePropValue propResponse = UserHalHelper.createPropRequest(REQUEST_ID_PLACE_HOLDER,
-                    SwitchUserMessageType.VEHICLE_RESPONSE, SWITCH_USER);
+        VehiclePropValue propResponse = UserHalHelper.createPropRequest(SWITCH_USER,
+                    REQUEST_ID_PLACE_HOLDER, SwitchUserMessageType.VEHICLE_RESPONSE);
         propResponse.value.int32Values.add(/*status =*/ 110); // an invalid status
 
         AtomicReference<VehiclePropValue> reqCaptor = replySetPropertyWithOnChangeEvent(
@@ -556,11 +587,40 @@ public final class UserHalServiceTest {
         callback.assertCalled();
 
         // Make sure the arguments were properly converted
-        assertSwitchUserSetRequest(reqCaptor.get(), SwitchUserMessageType.ANDROID_SWITCH, mUser10);
+        assertHALSetRequest(reqCaptor.get(), SwitchUserMessageType.ANDROID_SWITCH, mUser10);
 
         // Assert response
         assertCallbackStatus(callback, HalCallback.STATUS_WRONG_HAL_RESPONSE);
         assertThat(callback.response).isNull();
+    }
+
+    @Test
+    public void testUserSwitch_OEMRequest_success() throws Exception {
+        int requestId = -4;
+        int targetUserId = 11;
+        VehiclePropValue propResponse = UserHalHelper.createPropRequest(SWITCH_USER,
+                requestId, SwitchUserMessageType.VEHICLE_REQUEST);
+
+        propResponse.value.int32Values.add(targetUserId);
+
+        mUserHalService.onHalEvents(Arrays.asList(propResponse));
+        waitForHandler();
+
+        verify(mCarUserService).switchAndroidUserFromHal(requestId, targetUserId);
+    }
+
+    @Test
+    public void testUserSwitch_OEMRequest_failure_positiveRequestId() throws Exception {
+        int requestId = 4;
+        int targetUserId = 11;
+        VehiclePropValue propResponse = UserHalHelper.createPropRequest(SWITCH_USER,
+                requestId, SwitchUserMessageType.VEHICLE_REQUEST);
+        propResponse.value.int32Values.add(targetUserId);
+
+        mUserHalService.onHalEvents(Arrays.asList(propResponse));
+        waitForHandler();
+
+        verify(mCarUserService, never()).switchAndroidUserFromHal(anyInt(), anyInt());
     }
 
     @Test
@@ -576,7 +636,24 @@ public final class UserHalServiceTest {
                 ArgumentCaptor.forClass(VehiclePropValue.class);
         verify(mVehicleHal).set(propCaptor.capture());
         VehiclePropValue prop = propCaptor.getValue();
-        assertPostSwitchResponseSetRequest(prop, SwitchUserMessageType.ANDROID_POST_SWITCH,
+        assertHALSetRequest(prop, SwitchUserMessageType.ANDROID_POST_SWITCH,
+                mUser10);
+    }
+
+    @Test
+    public void testUserSwitchLegacy_noUsersInfo() {
+        assertThrows(NullPointerException.class,
+                () -> mUserHalService.legacyUserSwitch(mUser10, null));
+    }
+
+    @Test
+    public void testUserSwitchLegacy_HalCalledWithCorrectProp() {
+        mUserHalService.legacyUserSwitch(mUser10, mUsersInfo);
+        ArgumentCaptor<VehiclePropValue> propCaptor =
+                ArgumentCaptor.forClass(VehiclePropValue.class);
+        verify(mVehicleHal).set(propCaptor.capture());
+        VehiclePropValue prop = propCaptor.getValue();
+        assertHALSetRequest(prop, SwitchUserMessageType.LEGACY_ANDROID_SWITCH,
                 mUser10);
     }
 
@@ -598,104 +675,308 @@ public final class UserHalServiceTest {
 
     @Test
     public void testGetUserAssociation_invalidResponse() {
-        VehiclePropValue mockedResponse = new VehiclePropValue();
-        mockedResponse.prop = USER_IDENTIFICATION_ASSOCIATION;
-        mockedResponse.value.int32Values.add(1); // 1 associations
-        mockedResponse.value.int32Values.add(KEY_FOB); // type only, it's missing value
-        when(mVehicleHal.get(
-                isPropertyWithValues(USER_IDENTIFICATION_ASSOCIATION, 42, 108, 1, KEY_FOB)))
-                        .thenReturn(mockedResponse);
-
-        UserIdentificationGetRequest request = new UserIdentificationGetRequest();
-        request.userInfo.userId = 42;
-        request.userInfo.flags = 108;
-        request.numberAssociationTypes = 1;
-        request.associationTypes.add(KEY_FOB);
+        VehiclePropValue propResponse = new VehiclePropValue();
+        propResponse.prop = USER_IDENTIFICATION_ASSOCIATION;
+        propResponse.value.int32Values.add(DEFAULT_REQUEST_ID);
+        propResponse.value.int32Values.add(1); // 1 associations
+        propResponse.value.int32Values.add(KEY_FOB); // type only, it's missing value
+        UserIdentificationGetRequest request = replyToValidGetUserIdentificationRequest(
+                propResponse);
 
         assertThat(mUserHalService.getUserAssociation(request)).isNull();
     }
 
     @Test
     public void testGetUserAssociation_nullResponse() {
-        VehiclePropValue mockedResponse = new VehiclePropValue();
-        mockedResponse.prop = USER_IDENTIFICATION_ASSOCIATION;
-        mockedResponse.value.int32Values.add(1); // 1 association
-        mockedResponse.value.int32Values.add(KEY_FOB);
-        mockedResponse.value.int32Values.add(ASSOCIATED_CURRENT_USER);
-        when(mVehicleHal.get(
-                isPropertyWithValues(USER_IDENTIFICATION_ASSOCIATION, 42, 108, 1, KEY_FOB)))
-                        .thenReturn(null);
-
-        UserIdentificationGetRequest request = new UserIdentificationGetRequest();
-        request.userInfo.userId = 42;
-        request.userInfo.flags = 108;
-        request.numberAssociationTypes = 1;
-        request.associationTypes.add(KEY_FOB);
+        UserIdentificationGetRequest request = replyToValidGetUserIdentificationRequest(null);
 
         assertThat(mUserHalService.getUserAssociation(request)).isNull();
+
+        verifyValidGetUserIdentificationRequestMade();
     }
 
     @Test
     public void testGetUserAssociation_wrongNumberOfAssociationsOnResponse() {
-        VehiclePropValue mockedResponse = new VehiclePropValue();
-        mockedResponse.prop = USER_IDENTIFICATION_ASSOCIATION;
-        mockedResponse.value.int32Values.add(2); // 2 associations
-        mockedResponse.value.int32Values.add(KEY_FOB);
-        mockedResponse.value.int32Values.add(ASSOCIATED_CURRENT_USER);
-        mockedResponse.value.int32Values.add(CUSTOM_1);
-        mockedResponse.value.int32Values.add(ASSOCIATED_CURRENT_USER);
-        when(mVehicleHal.get(
-                isPropertyWithValues(USER_IDENTIFICATION_ASSOCIATION, 42, 108, 1, KEY_FOB)))
-                        .thenReturn(mockedResponse);
-
-        UserIdentificationGetRequest request = new UserIdentificationGetRequest();
-        request.userInfo.userId = 42;
-        request.userInfo.flags = 108;
-        request.numberAssociationTypes = 1;
-        request.associationTypes.add(KEY_FOB);
+        VehiclePropValue propResponse = new VehiclePropValue();
+        propResponse.prop = USER_IDENTIFICATION_ASSOCIATION;
+        propResponse.value.int32Values.add(DEFAULT_REQUEST_ID);
+        propResponse.value.int32Values.add(2); // 2 associations
+        propResponse.value.int32Values.add(KEY_FOB);
+        propResponse.value.int32Values.add(ASSOCIATED_CURRENT_USER);
+        propResponse.value.int32Values.add(CUSTOM_1);
+        propResponse.value.int32Values.add(ASSOCIATED_CURRENT_USER);
+        UserIdentificationGetRequest request = replyToValidGetUserIdentificationRequest(
+                propResponse);
 
         assertThat(mUserHalService.getUserAssociation(request)).isNull();
+
+        verifyValidGetUserIdentificationRequestMade();
     }
 
     @Test
     public void testGetUserAssociation_typesOnResponseMismatchTypesOnRequest() {
-        VehiclePropValue mockedResponse = new VehiclePropValue();
-        mockedResponse.prop = USER_IDENTIFICATION_ASSOCIATION;
-        mockedResponse.value.int32Values.add(1);
-        mockedResponse.value.int32Values.add(CUSTOM_1);
-        mockedResponse.value.int32Values.add(ASSOCIATED_CURRENT_USER);
-        when(mVehicleHal.get(
-                isPropertyWithValues(USER_IDENTIFICATION_ASSOCIATION, 42, 108, 1, KEY_FOB)))
-                        .thenReturn(mockedResponse);
-
-        UserIdentificationGetRequest request = new UserIdentificationGetRequest();
-        request.userInfo.userId = 42;
-        request.userInfo.flags = 108;
-        request.numberAssociationTypes = 1;
-        request.associationTypes.add(KEY_FOB);
+        VehiclePropValue propResponse = new VehiclePropValue();
+        propResponse.prop = USER_IDENTIFICATION_ASSOCIATION;
+        propResponse.value.int32Values.add(DEFAULT_REQUEST_ID);
+        propResponse.value.int32Values.add(1); // 1 association
+        propResponse.value.int32Values.add(CUSTOM_1);
+        propResponse.value.int32Values.add(ASSOCIATED_CURRENT_USER);
+        UserIdentificationGetRequest request = replyToValidGetUserIdentificationRequest(
+                propResponse);
 
         assertThat(mUserHalService.getUserAssociation(request)).isNull();
+
+        verifyValidGetUserIdentificationRequestMade();
+    }
+
+    @Test
+    public void testGetUserAssociation_requestIdMismatch() {
+        VehiclePropValue propResponse = new VehiclePropValue();
+        propResponse.prop = USER_IDENTIFICATION_ASSOCIATION;
+        propResponse.value.int32Values.add(DEFAULT_REQUEST_ID + 1);
+        propResponse.value.int32Values.add(1); // 1 association
+        propResponse.value.int32Values.add(KEY_FOB);
+        propResponse.value.int32Values.add(ASSOCIATED_CURRENT_USER);
+        UserIdentificationGetRequest request = replyToValidGetUserIdentificationRequest(
+                propResponse);
+
+        assertThat(mUserHalService.getUserAssociation(request)).isNull();
+
+        verifyValidGetUserIdentificationRequestMade();
     }
 
     @Test
     public void testGetUserAssociation_ok() {
-        VehiclePropValue mockedResponse = new VehiclePropValue();
-        mockedResponse.prop = USER_IDENTIFICATION_ASSOCIATION;
-        mockedResponse.value.int32Values.add(1); // 1 association
-        mockedResponse.value.int32Values.add(KEY_FOB);
-        mockedResponse.value.int32Values.add(ASSOCIATED_CURRENT_USER);
-        when(mVehicleHal.get(
-                isPropertyWithValues(USER_IDENTIFICATION_ASSOCIATION, 42, 108, 1, KEY_FOB)))
-                        .thenReturn(mockedResponse);
+        VehiclePropValue propResponse = new VehiclePropValue();
+        propResponse.prop = USER_IDENTIFICATION_ASSOCIATION;
+        propResponse.value.int32Values.add(DEFAULT_REQUEST_ID);
+        propResponse.value.int32Values.add(1); // 1 association
+        propResponse.value.int32Values.add(KEY_FOB);
+        propResponse.value.int32Values.add(ASSOCIATED_CURRENT_USER);
+        UserIdentificationGetRequest request = replyToValidGetUserIdentificationRequest(
+                propResponse);
 
-        UserIdentificationGetRequest request = new UserIdentificationGetRequest();
-        request.userInfo.userId = 42;
-        request.userInfo.flags = 108;
-        request.numberAssociationTypes = 1;
-        request.associationTypes.add(KEY_FOB);
+        UserIdentificationResponse response = mUserHalService.getUserAssociation(request);
 
-        UserIdentificationResponse actualResponse = mUserHalService.getUserAssociation(request);
+        assertThat(response.requestId).isEqualTo(DEFAULT_REQUEST_ID);
+        assertThat(response.numberAssociation).isEqualTo(1);
+        assertThat(response.associations).hasSize(1);
+        UserIdentificationAssociation actualAssociation = response.associations.get(0);
+        assertThat(actualAssociation.type).isEqualTo(KEY_FOB);
+        assertThat(actualAssociation.value).isEqualTo(ASSOCIATED_CURRENT_USER);
+    }
 
+    @Test
+    public void testSetUserAssociation_invalidTimeout() {
+        UserIdentificationSetRequest request = new UserIdentificationSetRequest();
+        assertThrows(IllegalArgumentException.class, () ->
+                mUserHalService.setUserAssociation(0, request, (i, r) -> { }));
+        assertThrows(IllegalArgumentException.class, () ->
+                mUserHalService.setUserAssociation(-1, request, (i, r) -> { }));
+    }
+
+    @Test
+    public void testSetUserAssociation_nullRequest() {
+        assertThrows(NullPointerException.class, () ->
+                mUserHalService.setUserAssociation(TIMEOUT_MS, null, (i, r) -> { }));
+    }
+
+    @Test
+    public void testSetUserAssociation_nullCallback() {
+        UserIdentificationSetRequest request = new UserIdentificationSetRequest();
+        assertThrows(NullPointerException.class, () ->
+                mUserHalService.setUserAssociation(TIMEOUT_MS, request, null));
+    }
+
+    @Test
+    public void testSetUserAssociation_requestWithDuplicatedTypes() {
+        UserIdentificationSetRequest request = new UserIdentificationSetRequest();
+        request.numberAssociations = 2;
+        UserIdentificationSetAssociation association1 = new UserIdentificationSetAssociation();
+        association1.type = KEY_FOB;
+        association1.value = ASSOCIATE_CURRENT_USER;
+        request.associations.add(association1);
+        request.associations.add(association1);
+
+        assertThrows(IllegalArgumentException.class, () ->
+                mUserHalService.setUserAssociation(TIMEOUT_MS, request, (i, r) -> { }));
+    }
+
+    @Test
+    public void testSetUserAssociation_halSetTimedOut() throws Exception {
+        UserIdentificationSetRequest request = validUserIdentificationSetRequest();
+        GenericHalCallback<UserIdentificationResponse> callback = new GenericHalCallback<>(
+                CALLBACK_TIMEOUT_TIMEOUT);
+        replySetPropertyWithTimeoutException(USER_IDENTIFICATION_ASSOCIATION);
+
+        mUserHalService.setUserAssociation(TIMEOUT_MS, request, callback);
+
+        callback.assertCalled();
+        assertCallbackStatus(callback, HalCallback.STATUS_HAL_SET_TIMEOUT);
+        assertThat(callback.response).isNull();
+
+        // Make sure the pending request was removed
+        SystemClock.sleep(CALLBACK_TIMEOUT_TIMEOUT);
+        callback.assertNotCalledAgain();
+    }
+
+    @Test
+    public void testSetUserAssociation_halDidNotReply() throws Exception {
+        UserIdentificationSetRequest request = validUserIdentificationSetRequest();
+        GenericHalCallback<UserIdentificationResponse> callback = new GenericHalCallback<>(
+                CALLBACK_TIMEOUT_TIMEOUT);
+
+        mUserHalService.setUserAssociation(TIMEOUT_MS, request, callback);
+
+        callback.assertCalled();
+        assertCallbackStatus(callback, HalCallback.STATUS_HAL_RESPONSE_TIMEOUT);
+        assertThat(callback.response).isNull();
+    }
+
+    @Test
+    public void testSetUserAssociation_secondCallFailWhilePending() throws Exception {
+        UserIdentificationSetRequest request = validUserIdentificationSetRequest();
+        GenericHalCallback<UserIdentificationResponse> callback1 = new GenericHalCallback<>(
+                CALLBACK_TIMEOUT_TIMEOUT);
+        GenericHalCallback<UserIdentificationResponse> callback2 = new GenericHalCallback<>(
+                CALLBACK_TIMEOUT_TIMEOUT);
+
+        mUserHalService.setUserAssociation(TIMEOUT_MS, request, callback1);
+        mUserHalService.setUserAssociation(TIMEOUT_MS, request, callback2);
+
+        callback1.assertCalled();
+        assertCallbackStatus(callback1, HalCallback.STATUS_HAL_RESPONSE_TIMEOUT);
+        assertThat(callback1.response).isNull();
+
+        callback2.assertCalled();
+        assertCallbackStatus(callback2, HalCallback.STATUS_CONCURRENT_OPERATION);
+        assertThat(callback1.response).isNull();
+    }
+
+    @Test
+    public void testSetUserAssociation_responseWithWrongRequestId() throws Exception {
+        VehiclePropValue propResponse = new VehiclePropValue();
+        propResponse.prop = USER_IDENTIFICATION_ASSOCIATION;
+        propResponse.value.int32Values.add(DEFAULT_REQUEST_ID + 1);
+        AtomicReference<VehiclePropValue> propRequest = replySetPropertyWithOnChangeEvent(
+                USER_IDENTIFICATION_ASSOCIATION, propResponse, /* rightRequestId= */ true);
+        UserIdentificationSetRequest request = replyToValidSetUserIdentificationRequest();
+        GenericHalCallback<UserIdentificationResponse> callback = new GenericHalCallback<>(
+                CALLBACK_TIMEOUT_TIMEOUT);
+
+        mUserHalService.setUserAssociation(TIMEOUT_MS, request, callback);
+
+        // Assert request
+        verifyValidSetUserIdentificationRequestMade(propRequest.get());
+        // Assert response
+        callback.assertCalled();
+        assertCallbackStatus(callback, HalCallback.STATUS_WRONG_HAL_RESPONSE);
+        assertThat(callback.response).isNull();
+    }
+
+    @Test
+    public void testSetUserAssociation_notEnoughValuesOnResponse() throws Exception {
+        VehiclePropValue propResponse = new VehiclePropValue();
+        propResponse.prop = USER_IDENTIFICATION_ASSOCIATION;
+        // need at least 4: requestId, number associations, type1, value1
+        propResponse.value.int32Values.add(1);
+        propResponse.value.int32Values.add(2);
+        propResponse.value.int32Values.add(3);
+
+        AtomicReference<VehiclePropValue> propRequest = replySetPropertyWithOnChangeEvent(
+                USER_IDENTIFICATION_ASSOCIATION, propResponse, /* rightRequestId= */ true);
+        UserIdentificationSetRequest request = replyToValidSetUserIdentificationRequest();
+        GenericHalCallback<UserIdentificationResponse> callback = new GenericHalCallback<>(
+                CALLBACK_TIMEOUT_TIMEOUT);
+
+        mUserHalService.setUserAssociation(TIMEOUT_MS, request, callback);
+
+        // Assert request
+        verifyValidSetUserIdentificationRequestMade(propRequest.get());
+        // Assert response
+        callback.assertCalled();
+        assertCallbackStatus(callback, HalCallback.STATUS_WRONG_HAL_RESPONSE);
+        assertThat(callback.response).isNull();
+    }
+
+    @Test
+    public void testSetUserAssociation_wrongNumberOfAssociationsOnResponse() throws Exception {
+        VehiclePropValue propResponse = new VehiclePropValue();
+        propResponse.prop = USER_IDENTIFICATION_ASSOCIATION;
+        propResponse.value.int32Values.add(DEFAULT_REQUEST_ID);
+        propResponse.value.int32Values.add(2); // 2 associations; request is just 1
+        propResponse.value.int32Values.add(KEY_FOB);
+        propResponse.value.int32Values.add(ASSOCIATED_CURRENT_USER);
+        propResponse.value.int32Values.add(CUSTOM_1);
+        propResponse.value.int32Values.add(ASSOCIATED_CURRENT_USER);
+
+        AtomicReference<VehiclePropValue> propRequest = replySetPropertyWithOnChangeEvent(
+                USER_IDENTIFICATION_ASSOCIATION, propResponse, /* rightRequestId= */ true);
+        UserIdentificationSetRequest request = replyToValidSetUserIdentificationRequest();
+        GenericHalCallback<UserIdentificationResponse> callback = new GenericHalCallback<>(
+                CALLBACK_TIMEOUT_TIMEOUT);
+
+        mUserHalService.setUserAssociation(TIMEOUT_MS, request, callback);
+
+        // Assert request
+        verifyValidSetUserIdentificationRequestMade(propRequest.get());
+        // Assert response
+        callback.assertCalled();
+        assertCallbackStatus(callback, HalCallback.STATUS_WRONG_HAL_RESPONSE);
+        assertThat(callback.response).isNull();
+    }
+
+    @Test
+    public void testSetUserAssociation_typeMismatchOnResponse() throws Exception {
+        VehiclePropValue propResponse = new VehiclePropValue();
+        propResponse.prop = USER_IDENTIFICATION_ASSOCIATION;
+        propResponse.value.int32Values.add(DEFAULT_REQUEST_ID);
+        propResponse.value.int32Values.add(1); // 1 association
+        propResponse.value.int32Values.add(CUSTOM_1); // request is KEY_FOB
+        propResponse.value.int32Values.add(ASSOCIATED_CURRENT_USER);
+
+        AtomicReference<VehiclePropValue> propRequest = replySetPropertyWithOnChangeEvent(
+                USER_IDENTIFICATION_ASSOCIATION, propResponse, /* rightRequestId= */ true);
+        UserIdentificationSetRequest request = replyToValidSetUserIdentificationRequest();
+        GenericHalCallback<UserIdentificationResponse> callback = new GenericHalCallback<>(
+                CALLBACK_TIMEOUT_TIMEOUT);
+
+        mUserHalService.setUserAssociation(TIMEOUT_MS, request, callback);
+
+        // Assert request
+        verifyValidSetUserIdentificationRequestMade(propRequest.get());
+        // Assert response
+        callback.assertCalled();
+        assertCallbackStatus(callback, HalCallback.STATUS_WRONG_HAL_RESPONSE);
+        assertThat(callback.response).isNull();
+    }
+
+    @Test
+    public void testSetUserAssociation_ok() throws Exception {
+        VehiclePropValue propResponse = new VehiclePropValue();
+        propResponse.prop = USER_IDENTIFICATION_ASSOCIATION;
+        propResponse.value.int32Values.add(DEFAULT_REQUEST_ID);
+        propResponse.value.int32Values.add(1); // 1 association
+        propResponse.value.int32Values.add(KEY_FOB);
+        propResponse.value.int32Values.add(ASSOCIATED_CURRENT_USER);
+
+        AtomicReference<VehiclePropValue> propRequest = replySetPropertyWithOnChangeEvent(
+                USER_IDENTIFICATION_ASSOCIATION, propResponse, /* rightRequestId= */ true);
+        UserIdentificationSetRequest request = replyToValidSetUserIdentificationRequest();
+        GenericHalCallback<UserIdentificationResponse> callback = new GenericHalCallback<>(
+                CALLBACK_TIMEOUT_TIMEOUT);
+
+        mUserHalService.setUserAssociation(TIMEOUT_MS, request, callback);
+
+        // Assert request
+        verifyValidSetUserIdentificationRequestMade(propRequest.get());
+        // Assert response
+        callback.assertCalled();
+        assertCallbackStatus(callback, HalCallback.STATUS_OK);
+
+        UserIdentificationResponse actualResponse = callback.response;
+
+        assertThat(actualResponse.requestId).isEqualTo(DEFAULT_REQUEST_ID);
         assertThat(actualResponse.numberAssociation).isEqualTo(1);
         assertThat(actualResponse.associations).hasSize(1);
         UserIdentificationAssociation actualAssociation = actualResponse.associations.get(0);
@@ -759,7 +1040,8 @@ public final class UserHalServiceTest {
             int requestId = request.value.int32Values.get(0);
             int responseId = rightRequestId ? requestId : requestId + 1000;
             response.value.int32Values.set(0, responseId);
-            Log.d(TAG, "mockSetPropertyWithOnChange(): resp=" + response + " for req=" + request);
+            Log.d(TAG, "replySetPropertyWithOnChangeEvent(): resp=" + response + " for req="
+                    + request);
             mUserHalService.onHalEvents(Arrays.asList(response));
             return null;
         }).when(mVehicleHal).set(isProperty(prop));
@@ -774,12 +1056,67 @@ public final class UserHalServiceTest {
                 "PropId: 0x" + Integer.toHexString(prop))).when(mVehicleHal).set(isProperty(prop));
     }
 
+    /**
+     * Creates and set expectations for a valid request.
+     */
+    private UserIdentificationGetRequest replyToValidGetUserIdentificationRequest(
+            @NonNull VehiclePropValue response) {
+        mockNextRequestId(DEFAULT_REQUEST_ID);
+
+        UserIdentificationGetRequest request = new UserIdentificationGetRequest();
+        request.userInfo.userId = DEFAULT_USER_ID;
+        request.userInfo.flags = DEFAULT_USER_FLAGS;
+        request.numberAssociationTypes = 1;
+        request.associationTypes.add(KEY_FOB);
+
+        when(mVehicleHal.get(isPropertyWithValues(USER_IDENTIFICATION_ASSOCIATION,
+                DEFAULT_REQUEST_ID, DEFAULT_USER_ID, DEFAULT_USER_FLAGS,
+                /* numberAssociations= */ 1, KEY_FOB)))
+            .thenReturn(response);
+
+        return request;
+    }
+
+    /**
+     * Creates and set expectations for a valid request.
+     */
+    private UserIdentificationSetRequest replyToValidSetUserIdentificationRequest() {
+        mockNextRequestId(DEFAULT_REQUEST_ID);
+        return validUserIdentificationSetRequest();
+    }
+
+    /**
+     * Creates a valid request that can be used in test cases where its content is not asserted.
+     */
+    private UserIdentificationSetRequest validUserIdentificationSetRequest() {
+        UserIdentificationSetRequest request = new UserIdentificationSetRequest();
+        request.userInfo.userId = DEFAULT_USER_ID;
+        request.userInfo.flags = DEFAULT_USER_FLAGS;
+        request.numberAssociations = 1;
+        UserIdentificationSetAssociation association1 = new UserIdentificationSetAssociation();
+        association1.type = KEY_FOB;
+        association1.value = ASSOCIATE_CURRENT_USER;
+        request.associations.add(association1);
+        return request;
+    }
+
+    /**
+     * Run empty runnable to make sure that all posted handlers are done.
+     */
+    private void waitForHandler() {
+        mHandler.runWithScissors(() -> { }, /* Default timeout */ CALLBACK_TIMEOUT_TIMEOUT);
+    }
+
+    private void mockNextRequestId(int requestId) {
+        doReturn(requestId).when(mUserHalService).getNextRequestId();
+    }
+
     private void assertInitialUserInfoSetRequest(VehiclePropValue req, int requestType) {
         assertThat(req.value.int32Values.get(1)).isEqualTo(requestType);
         assertUsersInfo(req, mUsersInfo, 2);
     }
 
-    private void assertSwitchUserSetRequest(VehiclePropValue req, int messageType,
+    private void assertHALSetRequest(VehiclePropValue req, int messageType,
             UserInfo targetUserInfo) {
         assertThat(req.value.int32Values.get(1)).isEqualTo(messageType);
         assertWithMessage("targetuser.id mismatch").that(req.value.int32Values.get(2))
@@ -789,24 +1126,34 @@ public final class UserHalServiceTest {
         assertUsersInfo(req, mUsersInfo, 4);
     }
 
-    private void assertPostSwitchResponseSetRequest(VehiclePropValue req, int messageType,
-            UserInfo targetUserInfo) {
-        assertThat(req.value.int32Values.get(1)).isEqualTo(messageType);
-        assertWithMessage("targetuser.id mismatch").that(req.value.int32Values.get(2))
-                .isEqualTo(targetUserInfo.userId);
-        assertWithMessage("targetuser.flags mismatch").that(req.value.int32Values.get(3))
-                .isEqualTo(targetUserInfo.flags);
-        assertUsersInfo(req, mUsersInfo, 4);
-    }
-
-    private void assertCallbackStatus(GenericHalCallback callback,
-            int expectedStatus) {
+    private void assertCallbackStatus(GenericHalCallback<?> callback, int expectedStatus) {
         int actualStatus = callback.status;
         if (actualStatus == expectedStatus) return;
 
         fail("Wrong callback status; expected "
                 + UserHalHelper.halCallbackStatusToString(expectedStatus) + ", got "
                 + UserHalHelper.halCallbackStatusToString(actualStatus));
+    }
+
+    /**
+     * Verifies {@code hal.get()} was called with the values used on
+     * {@link #replyToValidGetUserIdentificationRequest(VehiclePropValue)}.
+     */
+    private void verifyValidGetUserIdentificationRequestMade() {
+        verify(mVehicleHal).get(isPropertyWithValues(USER_IDENTIFICATION_ASSOCIATION,
+                DEFAULT_REQUEST_ID, DEFAULT_USER_ID, DEFAULT_USER_FLAGS,
+                /* numberAssociations= */ 1, KEY_FOB));
+    }
+
+    /**
+     * Verifies {@code hal.set()} was called with the values used on
+     * {@link #replyToValidSetUserIdentificationRequest(VehiclePropValue)}.
+     */
+    private void verifyValidSetUserIdentificationRequestMade(@NonNull VehiclePropValue request) {
+        assertThat(request.prop).isEqualTo(USER_IDENTIFICATION_ASSOCIATION);
+        assertThat(request.value.int32Values).containsExactly(DEFAULT_REQUEST_ID, DEFAULT_USER_ID,
+                DEFAULT_USER_FLAGS,
+                /* numberAssociations= */ 1, KEY_FOB, ASSOCIATE_CURRENT_USER);
     }
 
     private final class GenericHalCallback<R> implements HalCallback<R> {
