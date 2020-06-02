@@ -42,7 +42,6 @@ PRODUCT_PACKAGES += \
     Settings \
     SharedStorageBackup \
     VpnDialogs \
-    MmsService \
     ExternalStorageProvider \
     atrace \
     libandroidfw \
