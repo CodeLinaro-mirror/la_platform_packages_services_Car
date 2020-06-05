@@ -17,7 +17,7 @@
 package com.android.car.user;
 
 import static android.car.test.mocks.AndroidMockitoHelper.getResult;
-import static android.car.test.mocks.AndroidMockitoHelper.mockUmGetSystemUser;
+import static android.car.test.mocks.AndroidMockitoHelper.mockUmCreateUser;
 import static android.car.test.mocks.AndroidMockitoHelper.mockUmGetUserInfo;
 import static android.car.test.mocks.AndroidMockitoHelper.mockUmGetUsers;
 import static android.car.test.util.UserTestingHelper.UserInfoBuilder;
@@ -63,10 +63,12 @@ import android.car.user.CarUserManager;
 import android.car.user.CarUserManager.UserLifecycleEvent;
 import android.car.user.CarUserManager.UserLifecycleEventType;
 import android.car.user.CarUserManager.UserLifecycleListener;
+import android.car.user.UserCreationResult;
 import android.car.user.UserIdentificationAssociationResponse;
 import android.car.user.UserSwitchResult;
 import android.car.userlib.CarUserManagerHelper;
 import android.car.userlib.HalCallback;
+import android.car.userlib.HalCallback.HalCallbackStatus;
 import android.car.userlib.UserHalHelper;
 import android.car.userlib.UserHelper;
 import android.content.Context;
@@ -74,9 +76,13 @@ import android.content.pm.PackageManager;
 import android.content.pm.UserInfo;
 import android.content.res.Resources;
 import android.graphics.drawable.Drawable;
+import android.hardware.automotive.vehicle.V2_0.CreateUserRequest;
+import android.hardware.automotive.vehicle.V2_0.CreateUserResponse;
+import android.hardware.automotive.vehicle.V2_0.CreateUserStatus;
 import android.hardware.automotive.vehicle.V2_0.InitialUserInfoRequestType;
 import android.hardware.automotive.vehicle.V2_0.InitialUserInfoResponse;
 import android.hardware.automotive.vehicle.V2_0.InitialUserInfoResponseAction;
+import android.hardware.automotive.vehicle.V2_0.SwitchUserRequest;
 import android.hardware.automotive.vehicle.V2_0.SwitchUserResponse;
 import android.hardware.automotive.vehicle.V2_0.SwitchUserStatus;
 import android.hardware.automotive.vehicle.V2_0.UserFlags;
@@ -136,6 +142,8 @@ public final class CarUserServiceTest extends AbstractExtendedMockitoTestCase {
 
     private static final int NON_EXISTING_USER = 55; // must not be on mExistingUsers
 
+    private static final long DEFAULT_LIFECYCLE_TIMESTAMP = 1;
+
     @Mock private Context mMockContext;
     @Mock private Context mApplicationContext;
     @Mock private LocationManager mLocationManager;
@@ -160,6 +168,7 @@ public final class CarUserServiceTest extends AbstractExtendedMockitoTestCase {
 
     private final int mGetUserInfoRequestType = InitialUserInfoRequestType.COLD_BOOT;
     private final AndroidFuture<UserSwitchResult> mUserSwitchFuture = new AndroidFuture<>();
+    private final AndroidFuture<UserCreationResult> mUserCreationFuture = new AndroidFuture<>();
     private final AndroidFuture<UserIdentificationAssociationResponse> mUserAssociationRespFuture =
             new AndroidFuture<>();
     private final int mAsyncCallTimeoutMs = 100;
@@ -305,21 +314,6 @@ public final class CarUserServiceTest extends AbstractExtendedMockitoTestCase {
         sendUserSwitchingEvent(mAdminUser.id, mRegularUser.id);
 
         verifyLastActiveUserSet(mRegularUser.id);
-    }
-
-    /**
-     * Test that the {@link CarUserService} doesn't update last active user on user switch in
-     * headless system user mode.
-     */
-    @Test
-    public void testLastActiveUserUpdatedOnUserSwitch_headlessSystemUser() throws Exception {
-        mockIsHeadlessSystemUser(mRegularUser.id, true);
-        mockUmGetSystemUser(mMockedUserManager);
-        mockExistingUsers();
-
-        sendUserSwitchingEvent(mAdminUser.id, mRegularUser.id);
-
-        verifyLastActiveUserNotSet();
     }
 
     /**
@@ -664,6 +658,14 @@ public final class CarUserServiceTest extends AbstractExtendedMockitoTestCase {
     }
 
     @Test
+    public void testSwitchUser_nullReceiver() throws Exception {
+        mockExistingUsersAndCurrentUser(mAdminUser);
+
+        assertThrows(NullPointerException.class, () -> mCarUserService
+                .switchUser(mAdminUser.id, mAsyncCallTimeoutMs, null));
+    }
+
+    @Test
     public void testSwitchUser_nonExistingTarget() throws Exception {
         assertThrows(IllegalArgumentException.class, () -> mCarUserService
                 .switchUser(NON_EXISTING_USER, mAsyncCallTimeoutMs, mUserSwitchFuture));
@@ -671,9 +673,10 @@ public final class CarUserServiceTest extends AbstractExtendedMockitoTestCase {
 
     @Test
     public void testSwitchUser_targetSameAsCurrentUser() throws Exception {
-        mockExistingUsers();
-        mockGetCurrentUser(mAdminUser.id);
+        mockExistingUsersAndCurrentUser(mAdminUser);
+
         mCarUserService.switchUser(mAdminUser.id, mAsyncCallTimeoutMs, mUserSwitchFuture);
+
         assertThat(getUserSwitchResult().getStatus())
                 .isEqualTo(UserSwitchResult.STATUS_ALREADY_REQUESTED_USER);
     }
@@ -961,17 +964,12 @@ public final class CarUserServiceTest extends AbstractExtendedMockitoTestCase {
     }
 
     @Test
-    public void testHalUserSwitchOnAndroidSwitch_successfulNoExitingUserSwitch() {
-        mockExistingUsers();
+    public void testHalUserSwitchOnAndroidSwitch_successfulNoExitingUserSwitch() throws Exception {
+        mockExistingUsersAndCurrentUser(mAdminUser);
 
         sendUserSwitchingEvent(mAdminUser.id, mRegularUser.id);
 
-        ArgumentCaptor<android.hardware.automotive.vehicle.V2_0.UserInfo> targetUser =
-                ArgumentCaptor.forClass(android.hardware.automotive.vehicle.V2_0.UserInfo.class);
-        ArgumentCaptor<UsersInfo> usersInfo = ArgumentCaptor.forClass(UsersInfo.class);
-        verify(mUserHal).legacyUserSwitch(targetUser.capture(), usersInfo.capture());
-        assertThat(targetUser.getValue().userId).isEqualTo(mRegularUser.id);
-        assertThat(usersInfo.getValue().currentUser.userId).isEqualTo(mAdminUser.id);
+        verify(mUserHal).legacyUserSwitch(isSwitchUserRequest(0, mAdminUser.id, mRegularUser.id));
     }
 
     @Test
@@ -986,7 +984,7 @@ public final class CarUserServiceTest extends AbstractExtendedMockitoTestCase {
 
         sendUserSwitchingEvent(mAdminUser.id, mGuestUser.id);
 
-        verify(mUserHal, never()).legacyUserSwitch(any(), any());
+        verify(mUserHal, never()).legacyUserSwitch(any());
     }
 
     @Test
@@ -1038,6 +1036,164 @@ public final class CarUserServiceTest extends AbstractExtendedMockitoTestCase {
         mCarUserService.switchAndroidUserFromHal(requestId, mRegularUser.id);
 
         assertPostSwitch(requestId, mAdminUser.id, mRegularUser.id);
+    }
+
+    @Test
+    public void testCreateUser_nullType() throws Exception {
+        assertThrows(NullPointerException.class, () -> mCarUserService
+                .createUser("dude", null, 108, mAsyncCallTimeoutMs, mUserCreationFuture));
+    }
+
+    @Test
+    public void testCreateUser_nullReceiver() throws Exception {
+        assertThrows(NullPointerException.class, () -> mCarUserService
+                .createUser("dude", "TypeONegative", 108, mAsyncCallTimeoutMs, null));
+    }
+
+    @Test
+    public void testCreateUser_umCreateReturnsNull() throws Exception {
+        // No need to mock um.createUser() to return null
+
+        mCarUserService.createUser("dude", "TypeONegative", 108, mAsyncCallTimeoutMs,
+                mUserCreationFuture);
+
+        UserCreationResult result = getUserCreationResult();
+        assertThat(result.getStatus()).isEqualTo(UserCreationResult.STATUS_ANDROID_FAILURE);
+        assertThat(result.getUser()).isNull();
+        assertThat(result.getErrorMessage()).isNull();
+        assertNoHalUserCreation();
+        verifyNoUserRemoved();
+    }
+
+    @Test
+    public void testCreateUser_umCreateThrowsException() throws Exception {
+        mockUmCreateUser(mMockedUserManager, "dude", "TypeONegative", 108,
+                new RuntimeException("D'OH!"));
+
+        mCarUserService.createUser("dude", "TypeONegative", 108, mAsyncCallTimeoutMs,
+                mUserCreationFuture);
+
+        UserCreationResult result = getUserCreationResult();
+        assertThat(result.getStatus()).isEqualTo(UserCreationResult.STATUS_ANDROID_FAILURE);
+        assertThat(result.getUser()).isNull();
+        assertThat(result.getErrorMessage()).isNull();
+        assertNoHalUserCreation();
+        verifyNoUserRemoved();
+    }
+
+    @Test
+    public void testCreateUser_internalHalFailure() throws Exception {
+        mockUmCreateUser(mMockedUserManager, "dude", "TypeONegative", 108, 42);
+        mockHalCreateUser(HalCallback.STATUS_INVALID, /* not_used_status= */ -1);
+
+        mCarUserService.createUser("dude", "TypeONegative", 108, mAsyncCallTimeoutMs,
+                mUserCreationFuture);
+
+        UserCreationResult result = getUserCreationResult();
+        assertThat(result.getStatus()).isEqualTo(UserCreationResult.STATUS_HAL_INTERNAL_FAILURE);
+        assertThat(result.getUser()).isNull();
+        assertThat(result.getErrorMessage()).isNull();
+        verifyUserRemoved(42);
+    }
+
+    @Test
+    public void testCreateUser_halFailure() throws Exception {
+        mockUmCreateUser(mMockedUserManager, "dude", "TypeONegative", 108, 42);
+        mockHalCreateUser(HalCallback.STATUS_OK, CreateUserStatus.FAILURE);
+
+        mCarUserService.createUser("dude", "TypeONegative", 108, mAsyncCallTimeoutMs,
+                mUserCreationFuture);
+
+        UserCreationResult result = getUserCreationResult();
+        assertThat(result.getStatus()).isEqualTo(UserCreationResult.STATUS_HAL_FAILURE);
+        assertThat(result.getUser()).isNull();
+        assertThat(result.getErrorMessage()).isNull();
+
+        verifyUserRemoved(42);
+    }
+
+    @Test
+    public void testCreateUser_halServiceThrowsRuntimeException() throws Exception {
+        mockUmCreateUser(mMockedUserManager, "dude", "TypeONegative", 108, 42);
+        mockHalCreateUserThrowsRuntimeException();
+
+        mCarUserService.createUser("dude", "TypeONegative", 108, mAsyncCallTimeoutMs,
+                mUserCreationFuture);
+
+        UserCreationResult result = getUserCreationResult();
+        assertThat(result.getStatus()).isEqualTo(UserCreationResult.STATUS_HAL_INTERNAL_FAILURE);
+        assertThat(result.getUser()).isNull();
+        assertThat(result.getErrorMessage()).isNull();
+
+        verifyUserRemoved(42);
+    }
+
+    @Test
+    public void testCreateUser_success() throws Exception {
+        mockExistingUsersAndCurrentUser(mAdminUser);
+        int userId = mGuestUser.id;
+        mockUmCreateUser(mMockedUserManager, "dude", UserManager.USER_TYPE_FULL_GUEST,
+                UserInfo.FLAG_EPHEMERAL, userId);
+        ArgumentCaptor<CreateUserRequest> requestCaptor =
+                mockHalCreateUser(HalCallback.STATUS_OK, CreateUserStatus.SUCCESS);
+
+        mCarUserService.createUser("dude", UserManager.USER_TYPE_FULL_GUEST,
+                UserInfo.FLAG_EPHEMERAL, mAsyncCallTimeoutMs, mUserCreationFuture);
+
+        // Assert request
+        CreateUserRequest request = requestCaptor.getValue();
+        Log.d(TAG, "createUser() request: " + request);
+        assertThat(request.newUserName).isEqualTo("dude");
+        assertThat(request.newUserInfo.userId).isEqualTo(userId);
+        assertThat(request.newUserInfo.flags).isEqualTo(UserFlags.GUEST | UserFlags.EPHEMERAL);
+        assertDefaultUsersInfo(request.usersInfo, mAdminUser);
+
+        UserCreationResult result = getUserCreationResult();
+        assertThat(result.getStatus()).isEqualTo(UserCreationResult.STATUS_SUCCESSFUL);
+        assertThat(result.getErrorMessage()).isNull();
+        UserInfo newUser = result.getUser();
+        assertThat(newUser).isNotNull();
+        assertThat(newUser.id).isEqualTo(userId);
+        assertThat(newUser.name).isEqualTo("dude");
+        assertThat(newUser.userType).isEqualTo(UserManager.USER_TYPE_FULL_GUEST);
+        assertThat(newUser.flags).isEqualTo(UserInfo.FLAG_EPHEMERAL);
+
+        verifyNoUserRemoved();
+    }
+
+    @Test
+    public void testCreateUser_success_nullName() throws Exception {
+        String nullName = null;
+        mockExistingUsersAndCurrentUser(mAdminUser);
+        int userId = mGuestUser.id;
+        mockUmCreateUser(mMockedUserManager, nullName, UserManager.USER_TYPE_FULL_GUEST,
+                UserInfo.FLAG_EPHEMERAL, userId);
+        ArgumentCaptor<CreateUserRequest> requestCaptor =
+                mockHalCreateUser(HalCallback.STATUS_OK, CreateUserStatus.SUCCESS);
+
+        mCarUserService.createUser(nullName, UserManager.USER_TYPE_FULL_GUEST,
+                UserInfo.FLAG_EPHEMERAL, mAsyncCallTimeoutMs, mUserCreationFuture);
+
+        // Assert request
+        CreateUserRequest request = requestCaptor.getValue();
+        Log.d(TAG, "createUser() request: " + request);
+        assertThat(request.newUserName).isEmpty();
+        assertThat(request.newUserInfo.userId).isEqualTo(userId);
+        assertThat(request.newUserInfo.flags).isEqualTo(UserFlags.GUEST | UserFlags.EPHEMERAL);
+        assertDefaultUsersInfo(request.usersInfo, mAdminUser);
+
+        UserCreationResult result = getUserCreationResult();
+        assertThat(result.getStatus()).isEqualTo(UserCreationResult.STATUS_SUCCESSFUL);
+        assertThat(result.getErrorMessage()).isNull();
+
+        UserInfo newUser = result.getUser();
+        assertThat(newUser).isNotNull();
+        assertThat(newUser.id).isEqualTo(userId);
+        assertThat(newUser.name).isNull();
+        assertThat(newUser.userType).isEqualTo(UserManager.USER_TYPE_FULL_GUEST);
+        assertThat(newUser.flags).isEqualTo(UserInfo.FLAG_EPHEMERAL);
+
+        verifyNoUserRemoved();
     }
 
     @Test
@@ -1341,7 +1497,7 @@ public final class CarUserServiceTest extends AbstractExtendedMockitoTestCase {
         sendUserSwitchingEvent(mAdminUser.id, mRegularUser.id);
 
         verify(mUserMetrics).onEvent(CarUserManager.USER_LIFECYCLE_EVENT_TYPE_SWITCHING,
-                0, mAdminUser.id, mRegularUser.id);
+                DEFAULT_LIFECYCLE_TIMESTAMP, mAdminUser.id, mRegularUser.id);
     }
 
     @Test
@@ -1358,6 +1514,11 @@ public final class CarUserServiceTest extends AbstractExtendedMockitoTestCase {
     @NonNull
     private UserSwitchResult getUserSwitchResult() throws Exception {
         return getResult(mUserSwitchFuture);
+    }
+
+    @NonNull
+    private UserCreationResult getUserCreationResult() throws Exception {
+        return getResult(mUserCreationFuture);
     }
 
     @NonNull
@@ -1427,6 +1588,28 @@ public final class CarUserServiceTest extends AbstractExtendedMockitoTestCase {
         mockHalSwitch(currentUserId, HalCallback.STATUS_OK, response, androidTargetUser);
     }
 
+    @NonNull
+    private ArgumentCaptor<CreateUserRequest> mockHalCreateUser(
+            @HalCallbackStatus int callbackStatus, int responseStatus) {
+        CreateUserResponse response = new CreateUserResponse();
+        response.status = responseStatus;
+        ArgumentCaptor<CreateUserRequest> captor = ArgumentCaptor.forClass(CreateUserRequest.class);
+        doAnswer((invocation) -> {
+            Log.d(TAG, "Answering " + invocation + " with " + response);
+            @SuppressWarnings("unchecked")
+            HalCallback<CreateUserResponse> callback =
+                    (HalCallback<CreateUserResponse>) invocation.getArguments()[2];
+            callback.onResponse(callbackStatus, response);
+            return null;
+        }).when(mUserHal).createUser(captor.capture(), eq(mAsyncCallTimeoutMs), notNull());
+        return captor;
+    }
+
+    private void mockHalCreateUserThrowsRuntimeException() {
+        doThrow(new RuntimeException("D'OH!"))
+                .when(mUserHal).createUser(any(), eq(mAsyncCallTimeoutMs), notNull());
+    }
+
     private void mockCallerUid(int uid, boolean returnCorrectUid) throws Exception {
         String packageName = "packageName";
         String className = "className";
@@ -1448,18 +1631,20 @@ public final class CarUserServiceTest extends AbstractExtendedMockitoTestCase {
         halTargetUser.userId = androidTargetUser.id;
         halTargetUser.flags = UserHalHelper.convertFlags(androidTargetUser);
         UsersInfo usersInfo = newUsersInfo(currentUserId);
+        SwitchUserRequest request = new SwitchUserRequest();
+        request.targetUser = halTargetUser;
+        request.usersInfo = usersInfo;
 
         BlockingAnswer<Void> blockingAnswer = BlockingAnswer.forVoidReturn(10_000, (invocation) -> {
             Log.d(TAG, "Answering " + invocation + " with " + response);
             @SuppressWarnings("unchecked")
             HalCallback<SwitchUserResponse> callback = (HalCallback<SwitchUserResponse>) invocation
-                    .getArguments()[3];
+                    .getArguments()[2];
             callback.onResponse(HalCallback.STATUS_OK, response);
         });
-        doAnswer(blockingAnswer).when(mUserHal).switchUser(eq(halTargetUser),
-                eq(mAsyncCallTimeoutMs), eq(usersInfo), notNull());
+        doAnswer(blockingAnswer).when(mUserHal).switchUser(eq(request), eq(mAsyncCallTimeoutMs),
+                notNull());
         return blockingAnswer;
-
     }
 
     private void mockHalSwitch(@UserIdInt int currentUserId,
@@ -1470,15 +1655,18 @@ public final class CarUserServiceTest extends AbstractExtendedMockitoTestCase {
         halTargetUser.userId = androidTargetUser.id;
         halTargetUser.flags = UserHalHelper.convertFlags(androidTargetUser);
         UsersInfo usersInfo = newUsersInfo(currentUserId);
+        SwitchUserRequest request = new SwitchUserRequest();
+        request.targetUser = halTargetUser;
+        request.usersInfo = usersInfo;
+
         doAnswer((invocation) -> {
             Log.d(TAG, "Answering " + invocation + " with " + response);
             @SuppressWarnings("unchecked")
             HalCallback<SwitchUserResponse> callback =
-                    (HalCallback<SwitchUserResponse>) invocation.getArguments()[3];
+                    (HalCallback<SwitchUserResponse>) invocation.getArguments()[2];
             callback.onResponse(callbackStatus, response);
             return null;
-        }).when(mUserHal).switchUser(eq(halTargetUser), eq(mAsyncCallTimeoutMs), eq(usersInfo),
-                notNull());
+        }).when(mUserHal).switchUser(eq(request), eq(mAsyncCallTimeoutMs), notNull());
     }
 
     private void mockHalGetUserIdentificationAssociation(@NonNull UserInfo user,
@@ -1569,7 +1757,6 @@ public final class CarUserServiceTest extends AbstractExtendedMockitoTestCase {
         for (int i = 0; i < actual.numberUsers; i++) {
             assertSameUser(actual.existingUsers.get(i), mExistingUsers.get(i));
         }
-
     }
 
     private void assertSameUser(android.hardware.automotive.vehicle.V2_0.UserInfo halUser,
@@ -1579,6 +1766,14 @@ public final class CarUserServiceTest extends AbstractExtendedMockitoTestCase {
                 UserInfo.flagsToString(androidUser.flags),
                 UserHalHelper.userFlagsToString(halUser.flags))
             .that(halUser.flags).isEqualTo(UserHalHelper.convertFlags(androidUser));
+    }
+
+    private void verifyUserRemoved(@UserIdInt int userId) {
+        verify(mMockedUserManager).removeUser(userId);
+    }
+
+    private void verifyNoUserRemoved() {
+        verify(mMockedUserManager, never()).removeUser(anyInt());
     }
 
     @NonNull
@@ -1666,34 +1861,26 @@ public final class CarUserServiceTest extends AbstractExtendedMockitoTestCase {
     }
 
     private void assertNoPostSwitch() {
-        verify(mUserHal, never()).postSwitchResponse(anyInt(), any(), any());
+        verify(mUserHal, never()).postSwitchResponse(any());
     }
 
     private void assertPostSwitch(int requestId, int currentId, int targetId) {
-        // verify post switch response
-        ArgumentCaptor<android.hardware.automotive.vehicle.V2_0.UserInfo> targetUser =
-                ArgumentCaptor.forClass(android.hardware.automotive.vehicle.V2_0.UserInfo.class);
-        ArgumentCaptor<UsersInfo> usersInfo = ArgumentCaptor.forClass(UsersInfo.class);
-        verify(mUserHal).postSwitchResponse(eq(requestId), targetUser.capture(),
-                usersInfo.capture());
-        assertThat(targetUser.getValue().userId).isEqualTo(targetId);
-        assertThat(usersInfo.getValue().currentUser.userId).isEqualTo(currentId);
+        verify(mUserHal).postSwitchResponse(isSwitchUserRequest(requestId, currentId, targetId));
     }
 
     private void assertHalSwitch(int currentId, int targetId) {
-        verify(mUserHal).switchUser(isHalUser(targetId), eq(mAsyncCallTimeoutMs),
-                isHalCurrentUser(currentId), any());
+        verify(mUserHal).switchUser(isSwitchUserRequest(0, currentId, targetId),
+                eq(mAsyncCallTimeoutMs), any());
+    }
+
+    private void assertNoHalUserCreation() {
+        verify(mUserHal, never()).createUser(any(), eq(mAsyncCallTimeoutMs), any());
     }
 
     @NonNull
-    private static android.hardware.automotive.vehicle.V2_0.UserInfo isHalUser(
-            @UserIdInt int userId) {
-        return argThat(new UserInfoMatcher(userId));
-    }
-
-    @NonNull
-    private static UsersInfo isHalCurrentUser(@UserIdInt int userId) {
-        return argThat(new UsersInfoCurrentUserIdMatcher(userId));
+    private static SwitchUserRequest isSwitchUserRequest(int requestId,
+            @UserIdInt int currentUserId, @UserIdInt int targetUserId) {
+        return argThat(new SwitchUserRequestMatcher(requestId, currentUserId, targetUserId));
     }
 
     static final class FakeCarOccupantZoneService {
@@ -1740,7 +1927,8 @@ public final class CarUserServiceTest extends AbstractExtendedMockitoTestCase {
 
     private void sendUserLifecycleEvent(@UserIdInt int fromUserId, @UserIdInt int toUserId,
             @UserLifecycleEventType int eventType) {
-        mCarUserService.onUserLifecycleEvent(eventType, /* timestampMs= */ 0, fromUserId, toUserId);
+        mCarUserService.onUserLifecycleEvent(eventType, DEFAULT_LIFECYCLE_TIMESTAMP, fromUserId,
+                toUserId);
     }
 
     private void sendUserUnlockedEvent(@UserIdInt int userId) {
@@ -1818,53 +2006,46 @@ public final class CarUserServiceTest extends AbstractExtendedMockitoTestCase {
         }
     }
 
-    private static final class UserInfoMatcher
-            implements ArgumentMatcher<android.hardware.automotive.vehicle.V2_0.UserInfo> {
-
-        private static final String MY_TAG =
-                android.hardware.automotive.vehicle.V2_0.UserInfo.class.getSimpleName();
-
-        private final @UserIdInt int mUserId;
-
-        private UserInfoMatcher(@UserIdInt int userId) {
-            mUserId = userId;
-        }
-
-        @Override
-        public boolean matches(android.hardware.automotive.vehicle.V2_0.UserInfo argument) {
-            if (argument == null) {
-                Log.w(MY_TAG, "null argument");
-                return false;
-            }
-            if (argument.userId != mUserId) {
-                Log.w(MY_TAG, "wrong user id on " + argument + "; expected " + mUserId);
-                return false;
-            }
-            Log.d(MY_TAG, "Good News, Everyone! " + argument + " matches " + this);
-            return true;
-        }
-    }
-
-    private static final class UsersInfoCurrentUserIdMatcher implements ArgumentMatcher<UsersInfo> {
-
+    private static final class SwitchUserRequestMatcher
+            implements ArgumentMatcher<SwitchUserRequest> {
         private static final String MY_TAG = UsersInfo.class.getSimpleName();
 
-        private final @UserIdInt int mUserId;
+        private final int mRequestId;
+        private final @UserIdInt int mCurrentUserId;
+        private final @UserIdInt int mTargetUserId;
 
-        private UsersInfoCurrentUserIdMatcher(@UserIdInt int userId) {
-            mUserId = userId;
+
+        private SwitchUserRequestMatcher(int requestId, @UserIdInt int currentUserId,
+                @UserIdInt int targetUserId) {
+            mCurrentUserId = currentUserId;
+            mTargetUserId = targetUserId;
+            mRequestId = requestId;
         }
 
         @Override
-        public boolean matches(UsersInfo argument) {
+        public boolean matches(SwitchUserRequest argument) {
             if (argument == null) {
                 Log.w(MY_TAG, "null argument");
                 return false;
             }
-            if (argument.currentUser.userId != mUserId) {
-                Log.w(MY_TAG, "wrong user id on " + argument + "; expected " + mUserId);
+            if (argument.usersInfo.currentUser.userId != mCurrentUserId) {
+                Log.w(MY_TAG,
+                        "wrong current user id on " + argument + "; expected " + mCurrentUserId);
                 return false;
             }
+
+            if (argument.targetUser.userId != mTargetUserId) {
+                Log.w(MY_TAG,
+                        "wrong target user id on " + argument + "; expected " + mTargetUserId);
+                return false;
+            }
+
+            if (argument.requestId != mRequestId) {
+                Log.w(MY_TAG,
+                        "wrong request Id on " + argument + "; expected " + mTargetUserId);
+                return false;
+            }
+
             Log.d(MY_TAG, "Good News, Everyone! " + argument + " matches " + this);
             return true;
         }
