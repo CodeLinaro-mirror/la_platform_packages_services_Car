@@ -37,66 +37,51 @@ import java.lang.annotation.RetentionPolicy;
 public final class UserSwitchResult implements Parcelable {
 
     /**
-     * {@link UserSwitchStatus} called when user switch is successful for both HAL and Android.
-     *
-     * @hide
+     * When user switch is successful for both HAL and Android.
      */
-    public static final int STATUS_SUCCESSFUL = 1;
+    public static final int STATUS_SUCCESSFUL = CommonResults.STATUS_SUCCESSFUL;
 
     /**
-     * {@link UserSwitchStatus} called when user switch is only successful for Hal but not for
-     * Android. Hal user switch rollover message have been sent.
-     *
-     * @hide
+     * When user switch is only successful for Hal but not for Android. Hal user switch rollover
+     * message have been sent.
      */
-    public static final int STATUS_ANDROID_FAILURE = 2;
+    public static final int STATUS_ANDROID_FAILURE = CommonResults.STATUS_ANDROID_FAILURE;
 
     /**
-     * {@link UserSwitchStatus} called when user switch is failed for HAL. User switch for Android
-     * is not called.
-     *
-     * @hide
+     * When user switch fails for HAL. User switch for Android is not called.
      */
-    public static final int STATUS_HAL_FAILURE = 3;
+    public static final int STATUS_HAL_FAILURE = CommonResults.STATUS_HAL_FAILURE;
 
     /**
-     * {@link UserSwitchStatus} called when user switch is failed for HAL for some internal error.
-     * User switch for Android is not called.
-     *
-     * @hide
+     * When user switch fails for HAL for some internal error. User switch for Android is not
+     * called.
      */
-    public static final int STATUS_HAL_INTERNAL_FAILURE = 4;
+    public static final int STATUS_HAL_INTERNAL_FAILURE = CommonResults.STATUS_HAL_INTERNAL_FAILURE;
 
     /**
-     * {@link UserSwitchStatus} called when target user is same as current user.
-     *
-     * @hide
+     * When given parameters or environment states are invalid for switching user. HAL or Android
+     * user switch is not requested.
      */
-    public static final int STATUS_ALREADY_REQUESTED_USER = 5;
+    public static final int STATUS_INVALID_REQUEST = CommonResults.STATUS_INVALID_REQUEST;
 
     /**
-     * {@link UserSwitchStatus} called when another user switch request for the same target user is
-     * in process.
-     *
-     * @hide
+     * When target user is same as current user.
      */
-    public static final int STATUS_TARGET_USER_ALREADY_BEING_SWITCHED_TO = 6;
+    public static final int STATUS_ALREADY_REQUESTED_USER =
+            CommonResults.LAST_COMMON_STATUS + 1;
 
     /**
-     * {@link UserSwitchStatus} called when another user switch request for a new different target
-     * user is received. Previous request is abandoned.
-     *
-     * @hide
+     * When another user switch request for the same target user is in process.
      */
-    public static final int STATUS_TARGET_USER_ABANDONED_DUE_TO_A_NEW_REQUEST = 7;
+    public static final int STATUS_TARGET_USER_ALREADY_BEING_SWITCHED_TO =
+            CommonResults.LAST_COMMON_STATUS + 2;
 
     /**
-     * {@link UserSwitchStatus} called when given parameters or environment states are invalid for
-     * switching user. HAL or Android user switch is not requested.
-     *
-     * @hide
+     * When another user switch request for a new different target user is received. Previous
+     * request is abandoned.
      */
-    public static final int STATUS_INVALID_REQUEST = 8;
+    public static final int STATUS_TARGET_USER_ABANDONED_DUE_TO_A_NEW_REQUEST =
+            CommonResults.LAST_COMMON_STATUS + 3;
 
     /**
      * Gets the user switch result status.
@@ -106,7 +91,7 @@ public final class UserSwitchResult implements Parcelable {
      *         {@link UserSwitchResult#STATUS_HAL_FAILURE},
      *         {@link UserSwitchResult#STATUS_HAL_INTERNAL_FAILURE},
      *         {@link UserSwitchResult#STATUS_ALREADY_REQUESTED_USER},
-     *         {@link UserSwitchResult#STATUS_TARGET_USER_ALREADY_BEING_SWITCHED_TO}
+     *         {@link UserSwitchResult#STATUS_TARGET_USER_ALREADY_BEING_SWITCHED_TO},
      *         {@link UserSwitchResult#STATUS_TARGET_USER_ABANDONED_DUE_TO_A_NEW_REQUEST}, or
      *         {@link UserSwitchResult#STATUS_INVALID_REQUEST}.
      */
@@ -117,6 +102,13 @@ public final class UserSwitchResult implements Parcelable {
      */
     @Nullable
     private final String mErrorMessage;
+
+    /**
+     * Check if {@link UserSwitchResult} is successful.
+     */
+    public boolean isSuccess() {
+        return mStatus == STATUS_SUCCESSFUL || mStatus == STATUS_ALREADY_REQUESTED_USER;
+    }
 
 
 
@@ -183,7 +175,7 @@ public final class UserSwitchResult implements Parcelable {
      *           {@link UserSwitchResult#STATUS_HAL_FAILURE},
      *           {@link UserSwitchResult#STATUS_HAL_INTERNAL_FAILURE},
      *           {@link UserSwitchResult#STATUS_ALREADY_REQUESTED_USER},
-     *           {@link UserSwitchResult#STATUS_TARGET_USER_ALREADY_BEING_SWITCHED_TO}
+     *           {@link UserSwitchResult#STATUS_TARGET_USER_ALREADY_BEING_SWITCHED_TO},
      *           {@link UserSwitchResult#STATUS_TARGET_USER_ABANDONED_DUE_TO_A_NEW_REQUEST}, or
      *           {@link UserSwitchResult#STATUS_INVALID_REQUEST}.
      * @param errorMessage
@@ -208,7 +200,7 @@ public final class UserSwitchResult implements Parcelable {
      *         {@link UserSwitchResult#STATUS_HAL_FAILURE},
      *         {@link UserSwitchResult#STATUS_HAL_INTERNAL_FAILURE},
      *         {@link UserSwitchResult#STATUS_ALREADY_REQUESTED_USER},
-     *         {@link UserSwitchResult#STATUS_TARGET_USER_ALREADY_BEING_SWITCHED_TO}
+     *         {@link UserSwitchResult#STATUS_TARGET_USER_ALREADY_BEING_SWITCHED_TO},
      *         {@link UserSwitchResult#STATUS_TARGET_USER_ABANDONED_DUE_TO_A_NEW_REQUEST}, or
      *         {@link UserSwitchResult#STATUS_INVALID_REQUEST}.
      */
@@ -286,10 +278,10 @@ public final class UserSwitchResult implements Parcelable {
     };
 
     @DataClass.Generated(
-            time = 1589580732431L,
+            time = 1590737883648L,
             codegenVersion = "1.0.15",
             sourceFile = "packages/services/Car/car-lib/src/android/car/user/UserSwitchResult.java",
-            inputSignatures = "public static final  int STATUS_SUCCESSFUL\npublic static final  int STATUS_ANDROID_FAILURE\npublic static final  int STATUS_HAL_FAILURE\npublic static final  int STATUS_HAL_INTERNAL_FAILURE\npublic static final  int STATUS_ALREADY_REQUESTED_USER\npublic static final  int STATUS_TARGET_USER_ALREADY_BEING_SWITCHED_TO\npublic static final  int STATUS_TARGET_USER_ABANDONED_DUE_TO_A_NEW_REQUEST\npublic static final  int STATUS_INVALID_REQUEST\nprivate final  int mStatus\nprivate final @android.annotation.Nullable java.lang.String mErrorMessage\nclass UserSwitchResult extends java.lang.Object implements [android.os.Parcelable]\n@com.android.internal.util.DataClass(genToString=true, genHiddenConstructor=true, genHiddenConstDefs=true)")
+            inputSignatures = "public static final  int STATUS_SUCCESSFUL\npublic static final  int STATUS_ANDROID_FAILURE\npublic static final  int STATUS_HAL_FAILURE\npublic static final  int STATUS_HAL_INTERNAL_FAILURE\npublic static final  int STATUS_ALREADY_REQUESTED_USER\npublic static final  int STATUS_TARGET_USER_ALREADY_BEING_SWITCHED_TO\npublic static final  int STATUS_TARGET_USER_ABANDONED_DUE_TO_A_NEW_REQUEST\npublic static final  int STATUS_INVALID_REQUEST\nprivate final  int mStatus\nprivate final @android.annotation.Nullable java.lang.String mErrorMessage\npublic  boolean isSuccess()\nclass UserSwitchResult extends java.lang.Object implements [android.os.Parcelable]\n@com.android.internal.util.DataClass(genToString=true, genHiddenConstructor=true, genHiddenConstDefs=true)")
     @Deprecated
     private void __metadata() {}
 
