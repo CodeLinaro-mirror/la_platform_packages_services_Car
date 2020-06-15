@@ -16,6 +16,7 @@
 package com.android.car;
 
 import android.annotation.NonNull;
+import android.annotation.UserIdInt;
 import android.app.ActivityManager;
 import android.car.Car;
 import android.car.hardware.power.CarPowerManager.CarPowerStateListener;
@@ -23,6 +24,7 @@ import android.car.hardware.power.ICarPower;
 import android.car.hardware.power.ICarPowerStateListener;
 import android.car.userlib.HalCallback;
 import android.car.userlib.InitialUserSetter;
+import android.car.userlib.InitialUserSetter.InitialUserInfoType;
 import android.car.userlib.UserHalHelper;
 import android.car.userlib.UserHelper;
 import android.content.ComponentName;
@@ -42,6 +44,7 @@ import android.os.Message;
 import android.os.PowerManager;
 import android.os.RemoteCallbackList;
 import android.os.RemoteException;
+import android.os.ServiceManager;
 import android.os.SystemClock;
 import android.os.SystemProperties;
 import android.os.UserHandle;
@@ -57,6 +60,7 @@ import com.android.car.user.CarUserNoticeService;
 import com.android.car.user.CarUserService;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.app.IVoiceInteractionManagerService;
 
 import java.io.PrintWriter;
 import java.lang.ref.WeakReference;
@@ -127,11 +131,15 @@ public class CarPowerManagementService extends ICarPower.Stub implements
     private int mShutdownPollingIntervalMs = SHUTDOWN_POLLING_INTERVAL_MS;
     @GuardedBy("mLock")
     private boolean mRebootAfterGarageMode;
+    @GuardedBy("mLock")
+    private boolean mGarageModeShouldExitImmediately;
     private final boolean mDisableUserSwitchDuringResume;
 
     private final UserManager mUserManager;
     private final CarUserService mUserService;
     private final InitialUserSetter mInitialUserSetter;
+
+    private final IVoiceInteractionManagerService mVoiceInteractionManagerService;
 
     // TODO:  Make this OEM configurable.
     private static final int SHUTDOWN_POLLING_INTERVAL_MS = 2000;
@@ -164,14 +172,16 @@ public class CarPowerManagementService extends ICarPower.Stub implements
         this(context, context.getResources(), powerHal, systemInterface, UserManager.get(context),
                 carUserService, new InitialUserSetter(context,
                         (u) -> carUserService.setInitialUser(u),
-                        context.getString(R.string.default_guest_name),
-                        !carUserService.isUserHalSupported()));
+                        context.getString(R.string.default_guest_name)),
+                IVoiceInteractionManagerService.Stub.asInterface(
+                        ServiceManager.getService(Context.VOICE_INTERACTION_MANAGER_SERVICE)));
     }
 
     @VisibleForTesting
-    CarPowerManagementService(Context context, Resources resources, PowerHalService powerHal,
-            SystemInterface systemInterface, UserManager userManager,
-            CarUserService carUserService, InitialUserSetter initialUserSetter) {
+    public CarPowerManagementService(Context context, Resources resources, PowerHalService powerHal,
+            SystemInterface systemInterface, UserManager userManager, CarUserService carUserService,
+            InitialUserSetter initialUserSetter,
+            IVoiceInteractionManagerService voiceInteractionService) {
         mContext = context;
         mHal = powerHal;
         mSystemInterface = systemInterface;
@@ -191,10 +201,11 @@ public class CarPowerManagementService extends ICarPower.Stub implements
         }
         mUserService = carUserService;
         mInitialUserSetter = initialUserSetter;
+        mVoiceInteractionManagerService = voiceInteractionService;
     }
 
     @VisibleForTesting
-    protected void setShutdownTimersForTest(int pollingIntervalMs, int shutdownTimeoutMs) {
+    public void setShutdownTimersForTest(int pollingIntervalMs, int shutdownTimeoutMs) {
         // Override timers to keep testing time short
         // Passing in '0' resets the value to the default
         synchronized (mLock) {
@@ -405,6 +416,7 @@ public class CarPowerManagementService extends ICarPower.Stub implements
 
         mSystemInterface.setDisplayState(true);
         sendPowerManagerEvent(CarPowerStateListener.ON);
+
         mHal.sendOn();
 
         try {
@@ -412,6 +424,8 @@ public class CarPowerManagementService extends ICarPower.Stub implements
         } catch (Exception e) {
             Log.e(CarLog.TAG_POWER, "Could not switch user on resume", e);
         }
+
+        setVoiceInteractionDisabled(false);
     }
 
     @VisibleForTesting // Ideally it should not be exposed, but it speeds up the unit tests
@@ -431,7 +445,13 @@ public class CarPowerManagementService extends ICarPower.Stub implements
             return;
         }
 
-        mInitialUserSetter.executeDefaultBehavior(/* replaceGuest= */ !mSwitchGuestUserBeforeSleep);
+        executeDefaultInitialUserBehavior(!mSwitchGuestUserBeforeSleep);
+    }
+
+    private void executeDefaultInitialUserBehavior(boolean replaceGuest) {
+        mInitialUserSetter.set(newInitialUserInfoBuilder(InitialUserSetter.TYPE_DEFAULT_BEHAVIOR)
+                .setReplaceGuest(replaceGuest)
+                .build());
     }
 
     /**
@@ -447,10 +467,32 @@ public class CarPowerManagementService extends ICarPower.Stub implements
         boolean replaceGuest = !mSwitchGuestUserBeforeSleep;
         if (newUser == null) {
             Log.w(TAG, "Failed to replace guest; falling back to default behavior");
-            mInitialUserSetter.executeDefaultBehavior(replaceGuest);
+            executeDefaultInitialUserBehavior(replaceGuest);
             return;
         }
-        mInitialUserSetter.switchUser(newUser.id, replaceGuest);
+        switchUser(newUser.id, replaceGuest);
+    }
+
+    private void switchUser(@UserIdInt int userId, boolean replaceGuest) {
+        mInitialUserSetter.set(newInitialUserInfoBuilder(InitialUserSetter.TYPE_SWITCH)
+                .setSwitchUserId(userId).setReplaceGuest(replaceGuest).build());
+    }
+
+    private InitialUserSetter.Builder newInitialUserInfoBuilder(@InitialUserInfoType int type) {
+        return new InitialUserSetter.Builder(type)
+                .setSupportsOverrideUserIdProperty(!mUserService.isUserHalSupported());
+    }
+
+    /**
+     * Tells Garage Mode if it should run normally, or just
+     * exit immediately without indicating 'idle'
+     * @return True if no idle jobs should be run
+     * @hide
+     */
+    public boolean garageModeShouldExitImmediately() {
+        synchronized (mLock) {
+            return mGarageModeShouldExitImmediately;
+        }
     }
 
     /**
@@ -470,6 +512,9 @@ public class CarPowerManagementService extends ICarPower.Stub implements
                 case HalCallback.STATUS_WRONG_HAL_RESPONSE:
                     switchUserOnResumeUserHalFallback("wrong response");
                     return;
+                case HalCallback.STATUS_HAL_NOT_SUPPORTED:
+                    switchUserOnResumeUserHalFallback("Hal not supported");
+                    return;
                 case HalCallback.STATUS_OK:
                     if (response == null) {
                         switchUserOnResumeUserHalFallback("no response");
@@ -479,14 +524,14 @@ public class CarPowerManagementService extends ICarPower.Stub implements
                     switch (response.action) {
                         case InitialUserInfoResponseAction.DEFAULT:
                             Log.i(TAG, "HAL requested default initial user behavior");
-                            mInitialUserSetter.executeDefaultBehavior(replaceGuest);
+                            executeDefaultInitialUserBehavior(replaceGuest);
                             return;
                         case InitialUserInfoResponseAction.SWITCH:
                             int userId = response.userToSwitchOrCreate.userId;
                             Log.i(TAG, "HAL requested switch to user " + userId);
                             // If guest was replaced on shutdown, it doesn't need to be replaced
                             // again
-                            mInitialUserSetter.switchUser(userId, replaceGuest);
+                            switchUser(userId, replaceGuest);
                             return;
                         case InitialUserInfoResponseAction.CREATE:
                             int halFlags = response.userToSwitchOrCreate.flags;
@@ -494,7 +539,11 @@ public class CarPowerManagementService extends ICarPower.Stub implements
                             Log.i(TAG, "HAL requested new user (name="
                                     + UserHelper.safeName(name) + ", flags="
                                     + UserHalHelper.userFlagsToString(halFlags) + ")");
-                            mInitialUserSetter.createUser(name, halFlags);
+                            mInitialUserSetter
+                                    .set(newInitialUserInfoBuilder(InitialUserSetter.TYPE_CREATE)
+                                            .setNewUserName(name)
+                                            .setNewUserFlags(halFlags)
+                                            .build());
                             return;
                         default:
                             switchUserOnResumeUserHalFallback(
@@ -513,10 +562,11 @@ public class CarPowerManagementService extends ICarPower.Stub implements
     private void switchUserOnResumeUserHalFallback(String reason) {
         Log.w(TAG, "Failed to set initial user based on User Hal (" + reason
                 + "); falling back to default behavior");
-        mInitialUserSetter.executeDefaultBehavior(/* replaceGuest= */ !mSwitchGuestUserBeforeSleep);
+        executeDefaultInitialUserBehavior(!mSwitchGuestUserBeforeSleep);
     }
 
     private void handleShutdownPrepare(CpmsState newState) {
+        setVoiceInteractionDisabled(true);
         mSystemInterface.setDisplayState(false);
         // Shutdown on finish if the system doesn't support deep sleep or doesn't allow it.
         synchronized (mLock) {
@@ -524,23 +574,15 @@ public class CarPowerManagementService extends ICarPower.Stub implements
                     || !mHal.isDeepSleepAllowed()
                     || !mSystemInterface.isSystemSupportingDeepSleep()
                     || !newState.mCanSleep;
+            mGarageModeShouldExitImmediately = !newState.mCanPostpone;
         }
-        if (newState.mCanPostpone) {
-            Log.i(CarLog.TAG_POWER, "starting shutdown prepare");
-            sendPowerManagerEvent(CarPowerStateListener.SHUTDOWN_PREPARE);
-            mHal.sendShutdownPrepare();
-            doHandlePreprocessing();
-        } else {
-            Log.i(CarLog.TAG_POWER, "starting shutdown immediately");
-            synchronized (mLock) {
-                releaseTimerLocked();
-            }
-            // Notify hal that we are shutting down and since it is immediate, don't schedule next
-            // wake up
-            mHal.sendShutdownStart(0);
-            // shutdown HU
-            mSystemInterface.shutdown();
-        }
+        Log.i(CarLog.TAG_POWER,
+                (newState.mCanPostpone
+                ? "starting shutdown prepare with Garage Mode"
+                        : "starting shutdown prepare without Garage Mode"));
+        sendPowerManagerEvent(CarPowerStateListener.SHUTDOWN_PREPARE);
+        mHal.sendShutdownPrepare();
+        doHandlePreprocessing();
     }
 
     // Simulate system shutdown to Deep Sleep
@@ -556,7 +598,9 @@ public class CarPowerManagementService extends ICarPower.Stub implements
         sendPowerManagerEvent(state.mCarPowerStateListenerState);
         int wakeupSec;
         synchronized (mLock) {
-            wakeupSec = mNextWakeupSec;
+            // If we're shutting down immediately, don't schedule
+            // a wakeup time.
+            wakeupSec = mGarageModeShouldExitImmediately ? 0 : mNextWakeupSec;
         }
         switch (state.mCarPowerStateListenerState) {
             case CarPowerStateListener.SUSPEND_ENTER:
@@ -590,6 +634,8 @@ public class CarPowerManagementService extends ICarPower.Stub implements
                 throw new AssertionError("Should not return from PowerManager.reboot()");
             }
         }
+        setVoiceInteractionDisabled(true);
+
         if (mustShutDown) {
             // shutdown HU
             mSystemInterface.shutdown();
@@ -597,6 +643,14 @@ public class CarPowerManagementService extends ICarPower.Stub implements
             doHandleDeepSleep(simulatedMode);
         }
         mShutdownOnNextSuspend = false;
+    }
+
+    private void setVoiceInteractionDisabled(boolean disabled) {
+        try {
+            mVoiceInteractionManagerService.setDisabled(disabled);
+        } catch (RemoteException e) {
+            Log.w(TAG, "setVoiceIntefactionDisabled(" + disabled + ") failed", e);
+        }
     }
 
     @GuardedBy("mLock")
@@ -708,18 +762,18 @@ public class CarPowerManagementService extends ICarPower.Stub implements
             simulateSleepByWaiting();
             nextListenerState = CarPowerStateListener.SHUTDOWN_CANCELLED;
         } else {
-            boolean sleepSucceeded = mSystemInterface.enterDeepSleep();
+            boolean sleepSucceeded = suspendWithRetries();
             if (!sleepSucceeded) {
-                // Suspend failed! VHAL should transition CPMS to shutdown.
-                Log.e(CarLog.TAG_POWER, "Sleep did not succeed. Now attempting to shut down.");
-                mSystemInterface.shutdown();
+                // Suspend failed and we shut down instead.
+                // We either won't get here at all or we will power off very soon.
                 return;
             }
+            // We suspended and have now resumed
             nextListenerState = CarPowerStateListener.SUSPEND_EXIT;
         }
-        // On resume, reset nextWakeup time. If not set again, system will suspend/shutdown forever.
         synchronized (mLock) {
             mIsResuming = true;
+            // Any wakeup time from before is no longer valid.
             mNextWakeupSec = 0;
         }
         Log.i(CarLog.TAG_POWER, "Resuming after suspending");
@@ -910,10 +964,10 @@ public class CarPowerManagementService extends ICarPower.Stub implements
     }
 
     private void finishedImpl(IBinder binder) {
-        boolean allAreComplete = false;
+        boolean allAreComplete;
         synchronized (mLock) {
-            boolean oneWasRemoved = mListenersWeAreWaitingFor.remove(binder);
-            allAreComplete = oneWasRemoved && mListenersWeAreWaitingFor.isEmpty();
+            mListenersWeAreWaitingFor.remove(binder);
+            allAreComplete = mListenersWeAreWaitingFor.isEmpty();
         }
         if (allAreComplete) {
             signalComplete();
@@ -1043,6 +1097,37 @@ public class CarPowerManagementService extends ICarPower.Stub implements
                 }
             }
         }
+    }
+
+    // Send the command to enter Suspend to RAM.
+    // If the command is not successful, try again.
+    // If it fails repeatedly, send the command to shut down.
+    // Returns true if we successfully suspended.
+    private boolean suspendWithRetries() {
+        final int maxTries = 3;
+        final long retryIntervalMs = 10;
+        int tryCount = 0;
+
+        while (true) {
+            Log.i(CarLog.TAG_POWER, "Entering Suspend to RAM");
+            boolean suspendSucceeded = mSystemInterface.enterDeepSleep();
+            if (suspendSucceeded) {
+                return true;
+            }
+            tryCount++;
+            if (tryCount >= maxTries) {
+                break;
+            }
+            // We failed to suspend. Block the thread briefly and try again.
+            Log.w(CarLog.TAG_POWER, "Failed to Suspend; will retry later.");
+            try {
+                Thread.sleep(retryIntervalMs);
+            } catch (InterruptedException ignored) { }
+        }
+        // Too many failures trying to suspend. Shut down.
+        Log.w(CarLog.TAG_POWER, "Could not Suspend to RAM. Shutting down.");
+        mSystemInterface.shutdown();
+        return false;
     }
 
     private static class CpmsState {
@@ -1209,6 +1294,7 @@ public class CarPowerManagementService extends ICarPower.Stub implements
         synchronized (mSimulationWaitObject) {
             mInSimulatedDeepSleepMode = true;
             mWakeFromSimulatedSleep = false;
+            mGarageModeShouldExitImmediately = false;
         }
         PowerHandler handler;
         synchronized (mLock) {

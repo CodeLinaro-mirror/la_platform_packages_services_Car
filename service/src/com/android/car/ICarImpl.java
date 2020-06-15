@@ -208,7 +208,7 @@ public class ICarImpl extends ICar.Stub {
                 mCarUserService);
         mPerUserCarServiceHelper = new PerUserCarServiceHelper(serviceContext, mCarUserService);
         mCarBluetoothService = new CarBluetoothService(serviceContext, mPerUserCarServiceHelper);
-        mCarInputService = new CarInputService(serviceContext, mHal.getInputHal());
+        mCarInputService = new CarInputService(serviceContext, mHal.getInputHal(), mCarUserService);
         mCarProjectionService = new CarProjectionService(
                 serviceContext, null /* handler */, mCarInputService, mCarBluetoothService);
         mGarageModeService = new GarageModeService(mContext);
@@ -268,6 +268,7 @@ public class ICarImpl extends ICar.Stub {
         CarLocalServices.addService(FixedActivityService.class, mFixedActivityService);
         CarLocalServices.addService(VmsBrokerService.class, mVmsBrokerService);
         CarLocalServices.addService(CarOccupantZoneService.class, mCarOccupantZoneService);
+        CarLocalServices.addService(AppFocusService.class, mAppFocusService);
 
         // Be careful with order. Service depending on other service should be inited later.
         List<CarServiceBase> allServices = new ArrayList<>();

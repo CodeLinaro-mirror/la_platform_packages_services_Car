@@ -18,10 +18,17 @@ package android.car.userlib;
 import static com.android.internal.util.Preconditions.checkArgument;
 
 import android.annotation.NonNull;
+import android.annotation.UserIdInt;
+import android.app.ActivityManager;
 import android.car.userlib.HalCallback.HalCallbackStatus;
 import android.content.pm.UserInfo;
 import android.content.pm.UserInfo.UserInfoFlag;
+import android.hardware.automotive.vehicle.V2_0.CreateUserRequest;
 import android.hardware.automotive.vehicle.V2_0.InitialUserInfoRequestType;
+import android.hardware.automotive.vehicle.V2_0.InitialUserInfoResponse;
+import android.hardware.automotive.vehicle.V2_0.InitialUserInfoResponseAction;
+import android.hardware.automotive.vehicle.V2_0.RemoveUserRequest;
+import android.hardware.automotive.vehicle.V2_0.SwitchUserRequest;
 import android.hardware.automotive.vehicle.V2_0.UserFlags;
 import android.hardware.automotive.vehicle.V2_0.UserIdentificationAssociation;
 import android.hardware.automotive.vehicle.V2_0.UserIdentificationAssociationSetValue;
@@ -35,8 +42,15 @@ import android.hardware.automotive.vehicle.V2_0.UsersInfo;
 import android.hardware.automotive.vehicle.V2_0.VehiclePropValue;
 import android.os.SystemClock;
 import android.os.UserHandle;
+import android.os.UserManager;
+import android.text.TextUtils;
 import android.util.DebugUtils;
+import android.util.Log;
 
+import com.android.internal.util.Preconditions;
+
+import java.util.Arrays;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -44,7 +58,17 @@ import java.util.Objects;
  */
 public final class UserHalHelper {
 
+    private static final String TAG = UserHalHelper.class.getSimpleName();
+    private static final boolean DEBUG = false;
+
+    public static final int INITIAL_USER_INFO_PROPERTY = 299896583;
+    public static final int SWITCH_USER_PROPERTY = 299896584;
+    public static final int CREATE_USER_PROPERTY = 299896585;
+    public static final int REMOVE_USER_PROPERTY = 299896586;
     public static final int USER_IDENTIFICATION_ASSOCIATION_PROPERTY = 299896587;
+
+
+    private static final String STRING_SEPARATOR = "\\|\\|";
 
     /**
      * Gets user-friendly representation of the status.
@@ -114,6 +138,16 @@ public final class UserHalHelper {
         }
 
         return flags;
+    }
+
+    /**
+     * Converts Android user flags to HALs.
+     */
+    public static int getFlags(@NonNull UserManager um, @UserIdInt int userId) {
+        Preconditions.checkArgument(um != null, "UserManager cannot be null");
+        UserInfo user = um.getUserInfo(userId);
+        Preconditions.checkArgument(user != null, "No user with id %d", userId);
+        return convertFlags(user);
     }
 
     /**
@@ -194,6 +228,11 @@ public final class UserHalHelper {
 
     /**
      * Adds users information to prop value.
+     *
+     * <p><b>NOTE: </b>it does not validate the semantics of {@link UsersInfo} content (for example,
+     * if the current user is present in the list of users or if the flags are valid), only the
+     * basic correctness (like number of users matching existing users list size). Use
+     * {@link #checkValid(UsersInfo)} for a full check.
      */
     public static void addUsersInfo(@NonNull VehiclePropValue propRequest,
                 @NonNull UsersInfo usersInfo) {
@@ -268,6 +307,8 @@ public final class UserHalHelper {
     /**
      * Creates a {@link UserIdentificationResponse} from a generic {@link VehiclePropValue} sent by
      * HAL.
+     *
+     * @throws IllegalArgumentException if the HAL property doesn't have the proper format.
      */
     @NonNull
     public static UserIdentificationResponse toUserIdentificationResponse(
@@ -276,7 +317,7 @@ public final class UserHalHelper {
         checkArgument(prop.prop == USER_IDENTIFICATION_ASSOCIATION_PROPERTY,
                 "invalid prop on %s", prop);
         // need at least 4: request_id, number associations, type1, value1
-        checkArgument(prop.value.int32Values.size() >= 4, "not enough int32Values on %s", prop);
+        assertMinimumSize(prop, 4);
 
         int requestId = prop.value.int32Values.get(0);
         checkArgument(requestId > 0, "invalid request id (%d) on %s", requestId, prop);
@@ -312,8 +353,73 @@ public final class UserHalHelper {
     }
 
     /**
+     * Creates a {@link InitialUserInfoResponse} from a generic {@link VehiclePropValue} sent by
+     * HAL.
+     *
+     * @throws IllegalArgumentException if the HAL property doesn't have the proper format.
+     */
+    @NonNull
+    public static InitialUserInfoResponse toInitialUserInfoResponse(
+            @NonNull VehiclePropValue prop) {
+        if (DEBUG) Log.d(TAG, "toInitialUserInfoResponse(): " + prop);
+        Objects.requireNonNull(prop, "prop cannot be null");
+        checkArgument(prop.prop == INITIAL_USER_INFO_PROPERTY, "invalid prop on %s", prop);
+
+        // need at least 2: request_id, action_type
+        assertMinimumSize(prop, 2);
+
+        int requestId = prop.value.int32Values.get(0);
+        checkArgument(requestId > 0, "invalid request id (%d) on %s", requestId, prop);
+
+        InitialUserInfoResponse response = new InitialUserInfoResponse();
+        response.requestId = requestId;
+        response.action = prop.value.int32Values.get(1);
+
+        String[] stringValues = null;
+        if (!TextUtils.isEmpty(prop.value.stringValue)) {
+            stringValues = TextUtils.split(prop.value.stringValue, STRING_SEPARATOR);
+            if (DEBUG) {
+                Log.d(TAG, "toInitialUserInfoResponse(): values=" + Arrays.toString(stringValues)
+                        + " length: " + stringValues.length);
+            }
+        }
+        if (stringValues != null && stringValues.length > 0) {
+            response.userLocales = stringValues[0];
+        }
+
+        switch (response.action) {
+            case InitialUserInfoResponseAction.DEFAULT:
+                response.userToSwitchOrCreate.userId = UserHandle.USER_NULL;
+                response.userToSwitchOrCreate.flags = UserFlags.NONE;
+                break;
+            case InitialUserInfoResponseAction.SWITCH:
+                assertMinimumSize(prop, 3);
+                response.userToSwitchOrCreate.userId = prop.value.int32Values.get(2);
+                response.userToSwitchOrCreate.flags = UserFlags.NONE;
+                break;
+            case InitialUserInfoResponseAction.CREATE:
+                assertMinimumSize(prop, 3);
+                response.userToSwitchOrCreate.userId = UserHandle.USER_NULL;
+                response.userToSwitchOrCreate.flags = prop.value.int32Values.get(2);
+                if (stringValues.length > 1) {
+                    response.userNameToCreate = stringValues[1];
+                }
+                break;
+            default:
+                throw new IllegalArgumentException(
+                        "Invalid response action (" + response.action + " on " + prop);
+        }
+
+        if (DEBUG) Log.d(TAG, "returning : " + response);
+
+        return response;
+    }
+
+    /**
      * Creates a generic {@link VehiclePropValue} (that can be sent to HAL) from a
      * {@link UserIdentificationGetRequest}.
+     *
+     * @throws IllegalArgumentException if the request doesn't have the proper format.
      */
     @NonNull
     public static VehiclePropValue toVehiclePropValue(
@@ -343,6 +449,8 @@ public final class UserHalHelper {
     /**
      * Creates a generic {@link VehiclePropValue} (that can be sent to HAL) from a
      * {@link UserIdentificationSetRequest}.
+     *
+     * @throws IllegalArgumentException if the request doesn't have the proper format.
      */
     @NonNull
     public static VehiclePropValue toVehiclePropValue(
@@ -370,6 +478,177 @@ public final class UserHalHelper {
         }
 
         return propValue;
+    }
+
+    /**
+     * Creates a generic {@link VehiclePropValue} (that can be sent to HAL) from a
+     * {@link CreateUserRequest}.
+     *
+     * @throws IllegalArgumentException if the request doesn't have the proper format.
+     */
+    @NonNull
+    public static VehiclePropValue toVehiclePropValue(@NonNull CreateUserRequest request) {
+        Objects.requireNonNull(request, "request cannot be null");
+        checkArgument(request.requestId > 0, "invalid requestId on %s", request);
+        checkValid(request.usersInfo);
+        checkArgument(request.newUserName != null, "newUserName cannot be null (should be empty "
+                + "instead) on %s", request);
+
+        boolean hasNewUser = false;
+        int newUserFlags = UserFlags.NONE;
+        for (int i = 0; i < request.usersInfo.existingUsers.size(); i++) {
+            android.hardware.automotive.vehicle.V2_0.UserInfo user =
+                    request.usersInfo.existingUsers.get(i);
+            if (user.userId == request.newUserInfo.userId) {
+                hasNewUser = true;
+                newUserFlags = user.flags;
+                break;
+            }
+        }
+        Preconditions.checkArgument(hasNewUser,
+                "new user's id not present on existing users on request %s", request);
+        Preconditions.checkArgument(request.newUserInfo.flags == newUserFlags,
+                "new user flags mismatch on existing users on %s", request);
+
+        VehiclePropValue propValue = createPropRequest(CREATE_USER_PROPERTY,
+                request.requestId);
+        propValue.value.stringValue = request.newUserName;
+        addUserInfo(propValue, request.newUserInfo);
+        addUsersInfo(propValue, request.usersInfo);
+
+        return propValue;
+    }
+
+    /**
+     * Creates a generic {@link VehiclePropValue} (that can be sent to HAL) from a
+     * {@link SwitchUserRequest}.
+     *
+     * @throws IllegalArgumentException if the request doesn't have the proper format.
+     */
+    @NonNull
+    public static VehiclePropValue toVehiclePropValue(@NonNull SwitchUserRequest request) {
+        Objects.requireNonNull(request, "request cannot be null");
+        checkArgument(request.messageType > 0, "invalid messageType on %s", request);
+        android.hardware.automotive.vehicle.V2_0.UserInfo targetInfo = request.targetUser;
+        UsersInfo usersInfo = request.usersInfo;
+        Objects.requireNonNull(targetInfo);
+        checkValid(usersInfo);
+
+        VehiclePropValue propValue = createPropRequest(SWITCH_USER_PROPERTY, request.requestId,
+                request.messageType);
+        addUserInfo(propValue, targetInfo);
+        addUsersInfo(propValue, usersInfo);
+        return propValue;
+    }
+
+    /**
+     * Creates a generic {@link VehiclePropValue} (that can be sent to HAL) from a
+     * {@link RemoveUserRequest}.
+     *
+     * @throws IllegalArgumentException if the request doesn't have the proper format.
+     */
+    @NonNull
+    public static VehiclePropValue toVehiclePropValue(@NonNull RemoveUserRequest request) {
+        checkArgument(request.requestId > 0, "invalid requestId on %s", request);
+        android.hardware.automotive.vehicle.V2_0.UserInfo removedUserInfo = request.removedUserInfo;
+        Objects.requireNonNull(removedUserInfo);
+        UsersInfo usersInfo = request.usersInfo;
+        checkValid(usersInfo);
+
+        VehiclePropValue propValue = createPropRequest(REMOVE_USER_PROPERTY, request.requestId);
+        addUserInfo(propValue, removedUserInfo);
+        addUsersInfo(propValue, usersInfo);
+        return propValue;
+    }
+
+    /**
+     * Creates a {@link UsersInfo} instance populated with the current users, using
+     * {@link ActivityManager#getCurrentUser()} as the current user.
+     */
+    @NonNull
+    public static UsersInfo newUsersInfo(@NonNull UserManager um) {
+        return newUsersInfo(um, ActivityManager.getCurrentUser());
+    }
+
+    /**
+     * Creates a {@link UsersInfo} instance populated with the current users, using
+     * {@code userId} as the current user.
+     */
+    @NonNull
+    public static UsersInfo newUsersInfo(@NonNull UserManager um, @UserIdInt int userId) {
+        Preconditions.checkArgument(um != null, "UserManager cannot be null");
+
+        List<UserInfo> users = um.getUsers(/*excludeDying= */ true);
+
+        if (users == null || users.isEmpty()) {
+            Log.w(TAG, "newUsersInfo(): no users");
+            return emptyUsersInfo();
+        }
+
+        UsersInfo usersInfo = new UsersInfo();
+        usersInfo.currentUser.userId = userId;
+        UserInfo currentUser = null;
+        usersInfo.numberUsers = users.size();
+
+        for (int i = 0; i < usersInfo.numberUsers; i++) {
+            UserInfo user = users.get(i);
+            if (user.id == usersInfo.currentUser.userId) {
+                currentUser = user;
+            }
+            android.hardware.automotive.vehicle.V2_0.UserInfo halUser =
+                    new android.hardware.automotive.vehicle.V2_0.UserInfo();
+            halUser.userId = user.id;
+            halUser.flags = convertFlags(user);
+            usersInfo.existingUsers.add(halUser);
+        }
+
+        if (currentUser != null) {
+            usersInfo.currentUser.flags = convertFlags(currentUser);
+        } else {
+            Log.w(TAG, "newUsersInfo(): could not get flags for current user ("
+                    + usersInfo.currentUser.userId + ")");
+        }
+
+        return usersInfo;
+    }
+
+    /**
+     * Checks if the given {@code usersInfo} is valid.
+     *
+     * @throws IllegalArgumentException if it isn't.
+     */
+    public static void checkValid(@NonNull UsersInfo usersInfo) {
+        Preconditions.checkArgument(usersInfo != null);
+        Preconditions.checkArgument(usersInfo.numberUsers == usersInfo.existingUsers.size(),
+                "sizes mismatch: numberUsers=%d, existingUsers.size=%d", usersInfo.numberUsers,
+                usersInfo.existingUsers.size());
+        boolean hasCurrentUser = false;
+        int currentUserFlags = UserFlags.NONE;
+        for (int i = 0; i < usersInfo.numberUsers; i++) {
+            android.hardware.automotive.vehicle.V2_0.UserInfo user = usersInfo.existingUsers.get(i);
+            if (user.userId == usersInfo.currentUser.userId) {
+                hasCurrentUser = true;
+                currentUserFlags = user.flags;
+                break;
+            }
+        }
+        Preconditions.checkArgument(hasCurrentUser,
+                "current user not found on existing users on %s", usersInfo);
+        Preconditions.checkArgument(usersInfo.currentUser.flags == currentUserFlags,
+                "current user flags mismatch on existing users on %s", usersInfo);
+    }
+
+    @NonNull
+    private static UsersInfo emptyUsersInfo() {
+        UsersInfo usersInfo = new UsersInfo();
+        usersInfo.currentUser.userId = UserHandle.USER_NULL;
+        usersInfo.currentUser.flags = UserFlags.NONE;
+        return usersInfo;
+    }
+
+    private static void assertMinimumSize(@NonNull VehiclePropValue prop, int minSize) {
+        checkArgument(prop.value.int32Values.size() >= minSize,
+                "not enough int32Values (minimum is %d) on %s", minSize, prop);
     }
 
     private UserHalHelper() {
