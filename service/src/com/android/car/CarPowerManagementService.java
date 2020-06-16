@@ -186,20 +186,6 @@ public class CarPowerManagementService extends ICarPower.Stub implements
         mNewGuestName = newGuestName;
     }
 
-    /**
-     * Create a dummy instance for unit testing purpose only. Instance constructed in this way
-     * is not safe as members expected to be non-null are null.
-     */
-    @VisibleForTesting
-    protected CarPowerManagementService() {
-        mContext = null;
-        mHal = null;
-        mSystemInterface = null;
-        mHandlerThread = null;
-        mHandler = new PowerHandler(Looper.getMainLooper());
-        mCarUserManagerHelper = null;
-    }
-
     @VisibleForTesting
     protected static void setShutdownPrepareTimeout(int timeoutMs) {
         // Override the timeout to keep testing time short
