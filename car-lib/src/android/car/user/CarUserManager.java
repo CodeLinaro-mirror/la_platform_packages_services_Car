@@ -202,7 +202,6 @@ public final class CarUserManager extends CarManagerBase {
      */
     @RequiresPermission(android.Manifest.permission.MANAGE_USERS)
     public AndroidFuture<UserSwitchResult> switchUser(@UserIdInt int targetUserId) {
-        // TODO(b/155311595): add permission check integration test
         int uid = myUid();
         try {
             AndroidFuture<UserSwitchResult> future = new AndroidFuture<UserSwitchResult>() {
@@ -318,7 +317,6 @@ public final class CarUserManager extends CarManagerBase {
     @RequiresPermission(android.Manifest.permission.MANAGE_USERS)
     public UserIdentificationAssociationResponse getUserIdentificationAssociation(
             @NonNull int... types) {
-        // TODO(b/155311595): add permission check integration test
         Preconditions.checkArgument(!ArrayUtils.isEmpty(types), "must have at least one type");
         EventLog.writeEvent(EventLogTags.CAR_USER_MGR_GET_USER_AUTH_REQ, types.length);
         try {
@@ -340,9 +338,9 @@ public final class CarUserManager extends CarManagerBase {
      * @hide
      */
     @NonNull
+    @RequiresPermission(android.Manifest.permission.MANAGE_USERS)
     public AndroidFuture<UserIdentificationAssociationResponse> setUserIdentificationAssociation(
             @NonNull int[] types, @NonNull int[] values) {
-        // TODO(b/155311595): add permission check integration test
         Preconditions.checkArgument(!ArrayUtils.isEmpty(types), "must have at least one type");
         Preconditions.checkArgument(!ArrayUtils.isEmpty(values), "must have at least one value");
         if (types.length != values.length) {
@@ -393,6 +391,7 @@ public final class CarUserManager extends CarManagerBase {
      *
      * @hide
      */
+    @RequiresPermission(android.Manifest.permission.MANAGE_USERS)
     public void setUserSwitchUiCallback(@NonNull UserSwitchUiCallback callback) {
         Preconditions.checkArgument(callback != null, "Null callback");
         UserSwitchUiCallbackReceiver userSwitchUiCallbackReceiver =

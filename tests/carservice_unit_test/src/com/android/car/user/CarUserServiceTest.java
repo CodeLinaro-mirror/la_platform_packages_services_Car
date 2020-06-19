@@ -16,6 +16,7 @@
 
 package com.android.car.user;
 
+import static android.car.test.mocks.AndroidMockitoHelper.getResult;
 import static android.car.test.mocks.AndroidMockitoHelper.mockUmGetSystemUser;
 import static android.car.test.mocks.AndroidMockitoHelper.mockUmGetUserInfo;
 import static android.car.test.mocks.AndroidMockitoHelper.mockUmGetUsers;
@@ -41,7 +42,6 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.testng.Assert.assertThrows;
@@ -70,6 +70,7 @@ import android.car.userlib.HalCallback;
 import android.car.userlib.UserHalHelper;
 import android.car.userlib.UserHelper;
 import android.content.Context;
+import android.content.pm.PackageManager;
 import android.content.pm.UserInfo;
 import android.content.res.Resources;
 import android.graphics.drawable.Drawable;
@@ -85,10 +86,12 @@ import android.hardware.automotive.vehicle.V2_0.UserIdentificationResponse;
 import android.hardware.automotive.vehicle.V2_0.UserIdentificationSetRequest;
 import android.hardware.automotive.vehicle.V2_0.UsersInfo;
 import android.location.LocationManager;
+import android.os.Binder;
 import android.os.Bundle;
 import android.os.RemoteException;
 import android.os.UserHandle;
 import android.os.UserManager;
+import android.sysprop.CarProperties;
 import android.util.Log;
 import android.util.SparseArray;
 
@@ -111,9 +114,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
 /**
  * This class contains unit tests for the {@link CarUserService}.
@@ -145,9 +147,10 @@ public final class CarUserServiceTest extends AbstractExtendedMockitoTestCase {
     @Mock private Drawable mMockedDrawable;
     @Mock private UserMetrics mUserMetrics;
     @Mock IResultReceiver mSwitchUserUiReceiver;
+    @Mock PackageManager mPackageManager;
 
     private final BlockingUserLifecycleListener mUserLifecycleListener =
-            BlockingUserLifecycleListener.newDefaultListener();
+            BlockingUserLifecycleListener.forAnyEvent().build();
 
     @Captor private ArgumentCaptor<UsersInfo> mUsersInfoCaptor;
 
@@ -184,7 +187,8 @@ public final class CarUserServiceTest extends AbstractExtendedMockitoTestCase {
             // TODO(b/156299496): it cannot spy on UserManager, as it would slow down the tests
             // considerably (more than 5 minutes total, instead of just a couple seconds). So, it's
             // mocking UserHelper.isHeadlessSystemUser() (on mockIsHeadlessSystemUser()) instead...
-            .spyStatic(UserHelper.class);
+            .spyStatic(UserHelper.class)
+            .spyStatic(CarProperties.class);
     }
 
     /**
@@ -203,6 +207,7 @@ public final class CarUserServiceTest extends AbstractExtendedMockitoTestCase {
         doReturn(mMockedDrawable).when(mMockedDrawable).mutate();
         doReturn(1).when(mMockedDrawable).getIntrinsicWidth();
         doReturn(1).when(mMockedDrawable).getIntrinsicHeight();
+        doReturn(Optional.of(mAsyncCallTimeoutMs)).when(() -> CarProperties.user_hal_timeout());
         mCarUserService =
                 new CarUserService(
                         mMockContext,
@@ -264,7 +269,7 @@ public final class CarUserServiceTest extends AbstractExtendedMockitoTestCase {
 
     private void verifyListenerOnEventInvoked(int expectedNewUserId, int expectedEventType)
             throws Exception {
-        UserLifecycleEvent actualEvent = mUserLifecycleListener.waitForEvent();
+        UserLifecycleEvent actualEvent = mUserLifecycleListener.waitForAnyEvent();
         assertThat(actualEvent.getEventType()).isEqualTo(expectedEventType);
         assertThat(actualEvent.getUserId()).isEqualTo(expectedNewUserId);
     }
@@ -526,34 +531,37 @@ public final class CarUserServiceTest extends AbstractExtendedMockitoTestCase {
     }
 
     @Test
-    public void testSwitchDriver() throws RemoteException {
-        int currentId = 11;
-        int targetId = 12;
-        mockGetCurrentUser(currentId);
-        doReturn(true).when(mMockedIActivityManager).switchUser(targetId);
-        doReturn(false).when(mMockedUserManager)
-                .hasUserRestriction(UserManager.DISALLOW_USER_SWITCH);
-        assertTrue(mCarUserService.switchDriver(targetId));
+    public void testSwitchDriver() throws Exception {
+        mockExistingUsersAndCurrentUser(mAdminUser);
+        int requestId = 42;
+        mSwitchUserResponse.status = SwitchUserStatus.SUCCESS;
+        mSwitchUserResponse.requestId = requestId;
+        mockHalSwitch(mAdminUser.id, mRegularUser, mSwitchUserResponse);
+        mockAmSwitchUser(mRegularUser, true);
+        when(mMockedUserManager.hasUserRestriction(UserManager.DISALLOW_USER_SWITCH))
+                .thenReturn(false);
+        mCarUserService.switchDriver(mRegularUser.id, mUserSwitchFuture);
+        assertThat(getUserSwitchResult().getStatus())
+                .isEqualTo(UserSwitchResult.STATUS_SUCCESSFUL);
     }
 
     @Test
-    public void testSwitchDriver_IfUserSwitchIsNotAllowed() throws RemoteException {
-        int currentId = 11;
-        int targetId = 12;
-        mockGetCurrentUser(currentId);
-        doReturn(true).when(mMockedIActivityManager).switchUser(targetId);
-        doReturn(UserManager.SWITCHABILITY_STATUS_USER_SWITCH_DISALLOWED).when(mMockedUserManager)
-                .getUserSwitchability();
-        assertFalse(mCarUserService.switchDriver(targetId));
+    public void testSwitchDriver_IfUserSwitchIsNotAllowed() throws Exception {
+        when(mMockedUserManager.getUserSwitchability())
+                .thenReturn(UserManager.SWITCHABILITY_STATUS_USER_SWITCH_DISALLOWED);
+        mCarUserService.switchDriver(mRegularUser.id, mUserSwitchFuture);
+        assertThat(getUserSwitchResult().getStatus())
+                .isEqualTo(UserSwitchResult.STATUS_INVALID_REQUEST);
     }
 
     @Test
-    public void testSwitchDriver_IfSwitchedToCurrentUser() throws RemoteException {
-        int currentId = 11;
-        mockGetCurrentUser(currentId);
-        doReturn(false).when(mMockedUserManager)
-                .hasUserRestriction(UserManager.DISALLOW_USER_SWITCH);
-        assertTrue(mCarUserService.switchDriver(11));
+    public void testSwitchDriver_IfSwitchedToCurrentUser() throws Exception {
+        mockExistingUsersAndCurrentUser(mAdminUser);
+        when(mMockedUserManager.hasUserRestriction(UserManager.DISALLOW_USER_SWITCH))
+                .thenReturn(false);
+        mCarUserService.switchDriver(mAdminUser.id, mUserSwitchFuture);
+        assertThat(getUserSwitchResult().getStatus())
+                .isEqualTo(UserSwitchResult.STATUS_ALREADY_REQUESTED_USER);
     }
 
     @Test
@@ -757,7 +765,8 @@ public final class CarUserServiceTest extends AbstractExtendedMockitoTestCase {
         assertThat(getResult(futureNewRequest).getStatus())
                 .isEqualTo(UserSwitchResult.STATUS_SUCCESSFUL);
         assertNoPostSwitch();
-        assertHalSwitch(mAdminUser.id, mGuestUser.id, mAdminUser.id, mRegularUser.id);
+        assertHalSwitch(mAdminUser.id, mGuestUser.id);
+        assertHalSwitch(mAdminUser.id, mRegularUser.id);
     }
 
     @Test
@@ -786,7 +795,8 @@ public final class CarUserServiceTest extends AbstractExtendedMockitoTestCase {
         assertThat(getResult(futureNewRequest).getStatus())
                 .isEqualTo(UserSwitchResult.STATUS_SUCCESSFUL);
         assertPostSwitch(newRequestId, mRegularUser.id, mRegularUser.id);
-        assertHalSwitch(mAdminUser.id, mGuestUser.id, mAdminUser.id, mRegularUser.id);
+        assertHalSwitch(mAdminUser.id, mGuestUser.id);
+        assertHalSwitch(mAdminUser.id, mRegularUser.id);
     }
 
     @Test
@@ -811,7 +821,8 @@ public final class CarUserServiceTest extends AbstractExtendedMockitoTestCase {
         assertThat(getResult(futureNewRequest).getStatus())
                 .isEqualTo(UserSwitchResult.STATUS_SUCCESSFUL);
         assertNoPostSwitch();
-        assertHalSwitch(mAdminUser.id, mGuestUser.id, mAdminUser.id, mRegularUser.id);
+        assertHalSwitch(mAdminUser.id, mGuestUser.id);
+        assertHalSwitch(mAdminUser.id, mRegularUser.id);
     }
 
     @Test
@@ -838,7 +849,8 @@ public final class CarUserServiceTest extends AbstractExtendedMockitoTestCase {
         assertThat(getResult(futureNewRequest).getStatus())
                 .isEqualTo(UserSwitchResult.STATUS_SUCCESSFUL);
         assertPostSwitch(newRequestId, mRegularUser.id, mRegularUser.id);
-        assertHalSwitch(mAdminUser.id, mGuestUser.id, mAdminUser.id, mRegularUser.id);
+        assertHalSwitch(mAdminUser.id, mGuestUser.id);
+        assertHalSwitch(mAdminUser.id, mRegularUser.id);
     }
 
     @Test
@@ -871,7 +883,8 @@ public final class CarUserServiceTest extends AbstractExtendedMockitoTestCase {
         assertThat(getResult(futureNewRequest).getStatus())
                 .isEqualTo(UserSwitchResult.STATUS_SUCCESSFUL);
         assertPostSwitch(newRequestId, mRegularUser.id, mRegularUser.id);
-        assertHalSwitch(mAdminUser.id, mGuestUser.id, mAdminUser.id, mRegularUser.id);
+        assertHalSwitch(mAdminUser.id, mGuestUser.id);
+        assertHalSwitch(mAdminUser.id, mRegularUser.id);
     }
 
     @Test
@@ -979,6 +992,8 @@ public final class CarUserServiceTest extends AbstractExtendedMockitoTestCase {
     @Test
     public void testSetSwitchUserUI_receiverSetAndCalled() throws Exception {
         mockExistingUsersAndCurrentUser(mAdminUser);
+        int callerId = Binder.getCallingUid();
+        mockCallerUid(callerId, true);
         int requestId = 42;
         mSwitchUserResponse.status = SwitchUserStatus.SUCCESS;
         mSwitchUserResponse.requestId = requestId;
@@ -990,6 +1005,15 @@ public final class CarUserServiceTest extends AbstractExtendedMockitoTestCase {
 
         // update current user due to successful user switch
         verify(mSwitchUserUiReceiver).send(mGuestUser.id, null);
+    }
+
+    @Test
+    public void testSetSwitchUserUI_nonCarSysUiCaller() throws Exception {
+        int callerId = Binder.getCallingUid();
+        mockCallerUid(callerId, false);
+
+        assertThrows(SecurityException.class,
+                () -> mCarUserService.setUserSwitchUiCallback(mSwitchUserUiReceiver));
     }
 
     @Test
@@ -1042,6 +1066,24 @@ public final class CarUserServiceTest extends AbstractExtendedMockitoTestCase {
         Bundle resultData = mReceiver.getResultData();
         assertThat(resultData).isNotNull();
         assertInitialInfoAction(resultData, mGetUserInfoResponse.action);
+        assertInitialInfoUserLocales(resultData, null);
+    }
+
+    @Test
+    public void testGetUserInfo_defaultResponse_withLocale() throws Exception {
+        mockExistingUsersAndCurrentUser(mAdminUser);
+
+        mGetUserInfoResponse.action = InitialUserInfoResponseAction.DEFAULT;
+        mGetUserInfoResponse.userLocales = "LOL";
+        mockGetInitialInfo(mAdminUser.id, mGetUserInfoResponse);
+
+        mCarUserService.getInitialUserInfo(mGetUserInfoRequestType, mAsyncCallTimeoutMs, mReceiver);
+
+        assertThat(mReceiver.getResultCode()).isEqualTo(HalCallback.STATUS_OK);
+        Bundle resultData = mReceiver.getResultData();
+        assertThat(resultData).isNotNull();
+        assertInitialInfoAction(resultData, mGetUserInfoResponse.action);
+        assertInitialInfoUserLocales(resultData, "LOL");
     }
 
     @Test
@@ -1324,15 +1366,6 @@ public final class CarUserServiceTest extends AbstractExtendedMockitoTestCase {
         return getResult(mUserAssociationRespFuture);
     }
 
-    @NonNull
-    private <T> T getResult(@NonNull AndroidFuture<T> future) throws Exception {
-        try {
-            return future.get(mAsyncCallTimeoutMs, TimeUnit.MILLISECONDS);
-        } catch (TimeoutException e) {
-            throw new IllegalStateException("not called in " + mAsyncCallTimeoutMs + "ms", e);
-        }
-    }
-
     /**
      * This method must be called for cases where the service infers the user id of the caller
      * using Binder - it's not worth the effort of mocking such (native) calls.
@@ -1392,6 +1425,20 @@ public final class CarUserServiceTest extends AbstractExtendedMockitoTestCase {
     private void mockHalSwitch(@UserIdInt int currentUserId, @NonNull UserInfo androidTargetUser,
             @Nullable SwitchUserResponse response) {
         mockHalSwitch(currentUserId, HalCallback.STATUS_OK, response, androidTargetUser);
+    }
+
+    private void mockCallerUid(int uid, boolean returnCorrectUid) throws Exception {
+        String packageName = "packageName";
+        String className = "className";
+        when(mMockedResources.getString(anyInt())).thenReturn(packageName + "/" + className);
+        when(mMockContext.createContextAsUser(any(), anyInt())).thenReturn(mMockContext);
+        when(mMockContext.getPackageManager()).thenReturn(mPackageManager);
+
+        if (returnCorrectUid) {
+            when(mPackageManager.getPackageUid(any(), anyInt())).thenReturn(uid);
+        } else {
+            when(mPackageManager.getPackageUid(any(), anyInt())).thenReturn(uid + 1);
+        }
     }
 
     private BlockingAnswer<Void> mockHalSwitchLateResponse(@UserIdInt int currentUserId,
@@ -1611,6 +1658,13 @@ public final class CarUserServiceTest extends AbstractExtendedMockitoTestCase {
                 .isEqualTo(expectedAction);
     }
 
+    private void assertInitialInfoUserLocales(Bundle resultData, String expectedLocales) {
+        String actualLocales = resultData.getString(CarUserService.BUNDLE_USER_LOCALES);
+        assertWithMessage("wrong locales on bundle extra %s",
+                CarUserService.BUNDLE_USER_LOCALES).that(actualLocales)
+                .isEqualTo(expectedLocales);
+    }
+
     private void assertNoPostSwitch() {
         verify(mUserHal, never()).postSwitchResponse(anyInt(), any(), any());
     }
@@ -1626,28 +1680,20 @@ public final class CarUserServiceTest extends AbstractExtendedMockitoTestCase {
         assertThat(usersInfo.getValue().currentUser.userId).isEqualTo(currentId);
     }
 
-    // TODO(b/154966308): Refactor to use argument matcher
     private void assertHalSwitch(int currentId, int targetId) {
-        ArgumentCaptor<android.hardware.automotive.vehicle.V2_0.UserInfo> targetUser =
-                ArgumentCaptor.forClass(android.hardware.automotive.vehicle.V2_0.UserInfo.class);
-        ArgumentCaptor<UsersInfo> usersInfo = ArgumentCaptor.forClass(UsersInfo.class);
-        verify(mUserHal).switchUser(targetUser.capture(), eq(mAsyncCallTimeoutMs),
-                usersInfo.capture(), any());
-        assertThat(targetUser.getValue().userId).isEqualTo(targetId);
-        assertThat(usersInfo.getValue().currentUser.userId).isEqualTo(currentId);
+        verify(mUserHal).switchUser(isHalUser(targetId), eq(mAsyncCallTimeoutMs),
+                isHalCurrentUser(currentId), any());
     }
 
-    // TODO(b/154966308): Refactor to use argument matcher
-    private void assertHalSwitch(int currentId1, int targetId1, int currentId2, int targetId2) {
-        ArgumentCaptor<android.hardware.automotive.vehicle.V2_0.UserInfo> targetUser =
-                ArgumentCaptor.forClass(android.hardware.automotive.vehicle.V2_0.UserInfo.class);
-        ArgumentCaptor<UsersInfo> usersInfo = ArgumentCaptor.forClass(UsersInfo.class);
-        verify(mUserHal, times(2)).switchUser(targetUser.capture(), eq(mAsyncCallTimeoutMs),
-                usersInfo.capture(), any());
-        assertThat(targetUser.getAllValues().get(0).userId).isEqualTo(targetId1);
-        assertThat(usersInfo.getAllValues().get(0).currentUser.userId).isEqualTo(currentId1);
-        assertThat(targetUser.getAllValues().get(1).userId).isEqualTo(targetId2);
-        assertThat(usersInfo.getAllValues().get(1).currentUser.userId).isEqualTo(currentId2);
+    @NonNull
+    private static android.hardware.automotive.vehicle.V2_0.UserInfo isHalUser(
+            @UserIdInt int userId) {
+        return argThat(new UserInfoMatcher(userId));
+    }
+
+    @NonNull
+    private static UsersInfo isHalCurrentUser(@UserIdInt int userId) {
+        return argThat(new UsersInfoCurrentUserIdMatcher(userId));
     }
 
     static final class FakeCarOccupantZoneService {
@@ -1769,6 +1815,58 @@ public final class CarUserServiceTest extends AbstractExtendedMockitoTestCase {
             return "isUserIdentificationGetRequest(userId=" + mUserId + ", flags="
                     + UserHalHelper.userFlagsToString(mHalFlags) + ", types="
                     + Arrays.toString(mTypes) + ")";
+        }
+    }
+
+    private static final class UserInfoMatcher
+            implements ArgumentMatcher<android.hardware.automotive.vehicle.V2_0.UserInfo> {
+
+        private static final String MY_TAG =
+                android.hardware.automotive.vehicle.V2_0.UserInfo.class.getSimpleName();
+
+        private final @UserIdInt int mUserId;
+
+        private UserInfoMatcher(@UserIdInt int userId) {
+            mUserId = userId;
+        }
+
+        @Override
+        public boolean matches(android.hardware.automotive.vehicle.V2_0.UserInfo argument) {
+            if (argument == null) {
+                Log.w(MY_TAG, "null argument");
+                return false;
+            }
+            if (argument.userId != mUserId) {
+                Log.w(MY_TAG, "wrong user id on " + argument + "; expected " + mUserId);
+                return false;
+            }
+            Log.d(MY_TAG, "Good News, Everyone! " + argument + " matches " + this);
+            return true;
+        }
+    }
+
+    private static final class UsersInfoCurrentUserIdMatcher implements ArgumentMatcher<UsersInfo> {
+
+        private static final String MY_TAG = UsersInfo.class.getSimpleName();
+
+        private final @UserIdInt int mUserId;
+
+        private UsersInfoCurrentUserIdMatcher(@UserIdInt int userId) {
+            mUserId = userId;
+        }
+
+        @Override
+        public boolean matches(UsersInfo argument) {
+            if (argument == null) {
+                Log.w(MY_TAG, "null argument");
+                return false;
+            }
+            if (argument.currentUser.userId != mUserId) {
+                Log.w(MY_TAG, "wrong user id on " + argument + "; expected " + mUserId);
+                return false;
+            }
+            Log.d(MY_TAG, "Good News, Everyone! " + argument + " matches " + this);
+            return true;
         }
     }
 }

@@ -27,14 +27,13 @@ import org.junit.Test;
 
 public final class PreInstalledPackagesTest {
 
-    @FlakyTest // TODO(b/154112291): remove once it's passing on acloud
     @Test
     public void testNoCriticalErrors_currentMode() {
         assertNoCriticalErrors(/* enforceMode= */ false);
     }
 
-    @FlakyTest // TODO(b/154112291): remove once it's passing on acloud
     @Test
+    @FlakyTest // TODO(b/157271963): failing on cuttlefish
     public void testNoCriticalErrors_enforceMode() {
         assertNoCriticalErrors(/* enforceMode= */ true);
     }
@@ -44,7 +43,7 @@ public final class PreInstalledPackagesTest {
         String mode =  enforceMode ? " --mode 1" : "";
         String result = runShellCommand(cmd, mode);
         if (!TextUtils.isEmpty(result)) {
-            fail("Command '" + cmd + " reported errors:\n" + result);
+            fail("Command '" + String.format(cmd, mode) + "' reported errors:\n" + result);
         }
     }
 }
