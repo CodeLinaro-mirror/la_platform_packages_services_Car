@@ -44,6 +44,11 @@
     <!--  Service responsible for displaying information on the car instrument cluster. -->
     <string name="instrumentClusterRendererService" translatable="false">android.car.cluster/.ClusterRenderingService</string>
 
+    <!--  Service responsible for handling the rotary controller input. This service will start
+          on boot or on user switch. Set this string to empty if you don't want to start this
+          service. -->
+    <string name="rotaryService" translatable="false">com.android.car.rotary/com.android.car.rotary.RotaryService</string>
+
     <!--  Whether to enable Activity blocking for safety. When Activity blocking is enabled,
           only whitelisted safe Activities will be allowed while car is not parked. -->
     <bool name="enableActivityBlockingForSafety">true</bool>
@@ -268,6 +273,20 @@
     <string-array translatable="false" name="config_occupant_display_mapping">
     </string-array>
 
+    <!--
+        Specifies whether CarLaunchParamControl prefers source. If prefer-source is enabled,
+        CarLaunchParamControl tries to launch Activities without any desiganted display to
+        the display where the source is located.
+
+        This can be configured 3 ways:
+        A. No items - don't prefer source for any components.
+        B. 1 items with "*" - prefer source for all components.
+        C. enumerate items of "packageName/activityName" - prefer source for the specified ones.
+    -->
+    <string-array translatable="false" name="config_sourcePreferredComponents">
+        <item>com.google.android.apps.maps/com.google.android.maps.MapsActivity</item>
+    </string-array>
+
     <!-- Specifies notice UI that will be launched when user starts a car or do user
          switching. It is recommended to use dialog with at least TYPE_APPLICATION_OVERLAY window
          type to show the UI regardless of activity launches. Target package will be auto-granted
@@ -310,6 +329,7 @@
         The default list defined below will enable all optional features defined.
     -->
     <string-array translatable="false" name="config_allowed_optional_car_features">
+        <item>car_navigation_service</item>
         <item>com.android.car.user.CarUserNoticeService</item>
         <item>diagnostic</item>
         <item>storage_monitoring</item>
@@ -329,7 +349,15 @@
          button. -->
     <bool name="enableLongPressBluetoothVoiceRecognition" translatable="false">true</bool>
 
+    <!-- Switch guest user into new guest user before going to sleep. If this is false, it will
+         be done after waking up from sleep. This only affects if the current user is a guest user.
+         -->
+    <bool name="config_switchGuestUserBeforeGoingSleep" translate="false">true</bool>
+
     <!-- Enable profile user assignment per each CarOccupantZone for per display android user
          assignments. This feature is still experimental. -->
     <bool name="enableProfileUserAssignmentForMultiDisplay" translatable="false">false</bool>
+
+    <!-- The ComponentName of the media source that will be selected as the default -->
+    <string name="config_defaultMediaSource">com.android.bluetooth/com.android.bluetooth.avrcpcontroller.BluetoothMediaBrowserService</string>
 </resources>

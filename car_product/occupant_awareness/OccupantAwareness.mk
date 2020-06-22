@@ -1,7 +1,3 @@
 # Occupant Awareness SELinux policy variable definitions
-LOCAL_PATH:= $(call my-dir)
-
-BOARD_PLAT_PUBLIC_SEPOLICY_DIR += $(LOCAL_PATH)/sepolicy/public
-BOARD_PLAT_PRIVATE_SEPOLICY_DIR += $(LOCAL_PATH)/sepolicy/private
-
-BOARD_SEPOLICY_DIRS += $(LOCAL_PATH)/sepolicy
+PRODUCT_PUBLIC_SEPOLICY_DIRS += packages/services/Car/car_product/occupant_awareness/sepolicy/public
+PRODUCT_PRIVATE_SEPOLICY_DIRS += packages/services/Car/car_product/occupant_awareness/sepolicy/private

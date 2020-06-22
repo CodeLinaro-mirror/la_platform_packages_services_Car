@@ -27,7 +27,13 @@
          up to this many users can be running in garage mode.
          3 = headless user 0 + two primary users or 1 primary + 1 guest -->
     <integer name="config_multiuserMaxRunningUsers">3</integer>
-    <!-- Use delay loccking mode always for automotive -->
+    <!-- Show multiuser switcher by default, unless the user specifically disables it. -->
+    <bool name="config_showUserSwitcherByDefault">true</bool>
+    <!-- Flag specifying whether user-switch operations have custom UI. When false, user-switch
+         UI is handled by ActivityManagerService. On AAOS, this value should be true since the
+         UserSwitchUi is implemented by Car SystemUI.-->
+    <bool name="config_customUserSwitchUi">true</bool>
+    <!-- Use delay locking mode always for automotive -->
     <bool name="config_multiuserDelayUserDataLocking">true</bool>
     <!-- If true, all guest users created on the device will be ephemeral. -->
     <bool name="config_guestUserEphemeral">true</bool>
@@ -90,6 +96,8 @@
     <bool name="config_supportsSystemDecorsOnSecondaryDisplays">false</bool>
 
     <string name="config_dataUsageSummaryComponent">com.android.car.settings/com.android.car.settings.datausage.DataWarningAndLimitActivity</string>
+
+    <string name="config_defaultTrustAgent" translatable="false">com.android.car.companiondevicesupport/.feature.trust.TrustedDeviceAgentService</string>
 
     <!-- Controls whether system buttons use all caps for text -->
     <bool name="config_buttonTextAllCaps">false</bool>

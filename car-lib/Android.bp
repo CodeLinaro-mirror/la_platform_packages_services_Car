@@ -88,6 +88,7 @@ java_library {
         "src/android/car/storagemonitoring/IoStatsEntry.aidl",
     ],
     static_libs: [
+        "android.car.internal.event-log-tags",
         "carwatchdog_aidl_interface-java",
     ],
     product_variables: {
@@ -138,9 +139,7 @@ genrule {
 droidstubs {
     name: "android.car-stubs-docs",
     defaults: ["android.car-docs-default"],
-    api_tag_name: "ANDROID_CAR",
-    api_filename: "api.txt",
-    removed_api_filename: "removed.txt",
+    removed_dex_api_filename: "removed-dex.txt",
     args: "--hide UnavailableSymbol --no-docs --stub-packages android.car* ",
     installable: false,
     check_api: {
@@ -168,9 +167,7 @@ droidstubs {
 droidstubs {
     name: "android.car-system-stubs-docs",
     defaults: ["android.car-docs-default"],
-    api_tag_name: "ANDROID_CAR_SYSTEM",
-    api_filename: "api.txt",
-    removed_api_filename: "removed.txt",
+    removed_dex_api_filename: "system-removed-dex.txt",
     args: "--hide UnavailableSymbol --no-docs --stub-packages android.car* " +
         "--show-annotation android.annotation.SystemApi ",
     installable: false,
@@ -199,10 +196,7 @@ droidstubs {
 droidstubs {
     name: "android.car-test-stubs-docs",
     defaults: ["android.car-docs-default"],
-    api_tag_name: "ANDROID_CAR_SYSTEM",
-    api_filename: "api.txt",
-    removed_api_filename: "removed.txt",
-    args: "--hide UnavailableSymbol --no-docs --stub-packages android.car* " +
+    args: "--hide HiddenSuperclass --hide UnavailableSymbol --no-docs --stub-packages android.car* " +
         "--show-annotation android.annotation.TestApi ",
     installable: false,
     check_api: {
@@ -224,9 +218,8 @@ droidstubs {
     libs: [
         "android.car",
     ],
-    api_tag_name: "ANDROID_CAR_STUB",
     api_filename: "api.txt",
-    args: "--hide UnavailableSymbol --no-docs --stub-packages android.car* ",
+    args: "--hide HiddenSuperclass --hide UnavailableSymbol --no-docs --stub-packages android.car* ",
     installable: false,
     product_variables: {
         pdk: {

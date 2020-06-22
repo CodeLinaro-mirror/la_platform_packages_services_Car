@@ -14,12 +14,38 @@
  * limitations under the License.
  */
 
-#include <android-base/logging.h>
-#include <hwbinder/IPCThreadState.h>
-#include <cutils/android_filesystem_config.h>
-
 #include "Enumerator.h"
 #include "HalDisplay.h"
+
+#include <android-base/chrono_utils.h>
+#include <android-base/file.h>
+#include <android-base/logging.h>
+#include <android-base/parseint.h>
+#include <android-base/strings.h>
+#include <android-base/stringprintf.h>
+#include <cutils/android_filesystem_config.h>
+#include <hwbinder/IPCThreadState.h>
+
+namespace {
+
+    const char* kSingleIndent = "\t";
+    const char* kDumpOptionAll = "all";
+    const char* kDumpDeviceCamera = "camera";
+    const char* kDumpDeviceDisplay = "display";
+
+    const char* kDumpCameraCommandCurrent = "--current";
+    const char* kDumpCameraCommandCollected = "--collected";
+    const char* kDumpCameraCommandCustom = "--custom";
+    const char* kDumpCameraCommandCustomStart = "start";
+    const char* kDumpCameraCommandCustomStop = "stop";
+
+    const int kDumpCameraMinNumArgs = 4;
+    const int kOptionDumpDeviceTypeIndex = 1;
+    const int kOptionDumpCameraTypeIndex = 2;
+    const int kOptionDumpCameraCommandIndex = 3;
+    const int kOptionDumpCameraArgsStartIndex = 4;
+
+}
 
 namespace android {
 namespace automotive {
@@ -27,6 +53,11 @@ namespace evs {
 namespace V1_1 {
 namespace implementation {
 
+using ::android::base::Error;
+using ::android::base::EqualsIgnoreCase;
+using ::android::base::StringAppendF;
+using ::android::base::StringPrintf;
+using ::android::base::WriteStringToFd;
 using CameraDesc_1_0 = ::android::hardware::automotive::evs::V1_0::CameraDesc;
 using CameraDesc_1_1 = ::android::hardware::automotive::evs::V1_1::CameraDesc;
 
@@ -40,13 +71,30 @@ bool Enumerator::init(const char* hardwareServiceName) {
         // Get an internal display identifier.
         mHwEnumerator->getDisplayIdList(
             [this](const auto& displayPorts) {
-                if (displayPorts.size() > 0) {
-                    mInternalDisplayPort = displayPorts[0];
-                } else {
+                for (auto& port : displayPorts) {
+                    mDisplayPorts.push_back(port);
+                }
+
+                // The first element is the internal display
+                mInternalDisplayPort = mDisplayPorts.front();
+                if (mDisplayPorts.size() < 1) {
                     LOG(WARNING) << "No display is available to EVS service.";
                 }
             }
         );
+    }
+
+    // Starts the statistics collection
+    mMonitorEnabled = false;
+    mClientsMonitor = new StatsCollector();
+    if (mClientsMonitor != nullptr) {
+        auto result = mClientsMonitor->startCollection();
+        if (!result.ok()) {
+            LOG(ERROR) << "Failed to start the usage monitor: "
+                       << result.error();
+        } else {
+            mMonitorEnabled = true;
+        }
     }
 
     return result;
@@ -185,7 +233,10 @@ Return<sp<IEvsCamera_1_0>> Enumerator::openCamera(const hidl_string& cameraId) {
         if (device == nullptr) {
             LOG(ERROR) << "Failed to open hardware camera " << cameraId;
         } else {
-            hwCamera = new HalCamera(device, cameraId);
+            // Calculates the usage statistics record identifier
+            auto fn = mCameraDevices.hash_function();
+            auto recordId = fn(cameraId) & 0xFF;
+            hwCamera = new HalCamera(device, cameraId, recordId);
             if (hwCamera == nullptr) {
                 LOG(ERROR) << "Failed to allocate camera wrapper object";
                 mHwEnumerator->closeCamera(device);
@@ -236,6 +287,9 @@ Return<void> Enumerator::closeCamera(const ::android::sp<IEvsCamera_1_0>& client
             // NOTE:  This should drop our last reference to the camera, resulting in its
             //        destruction.
             mActiveCameras.erase(halCamera->getId());
+            if (mMonitorEnabled) {
+                mClientsMonitor->unregisterClientToMonitor(halCamera->getId());
+            }
         }
     }
 
@@ -274,7 +328,10 @@ Return<sp<IEvsCamera_1_1>> Enumerator::openCamera_1_1(const hidl_string& cameraI
                 success = false;
                 break;
             } else {
-                hwCamera = new HalCamera(device, id, streamCfg);
+                // Calculates the usage statistics record identifier
+                auto fn = mCameraDevices.hash_function();
+                auto recordId = fn(id) & 0xFF;
+                hwCamera = new HalCamera(device, id, recordId, streamCfg);
                 if (hwCamera == nullptr) {
                     LOG(ERROR) << "Failed to allocate camera wrapper object";
                     mHwEnumerator->closeCamera(device);
@@ -292,6 +349,10 @@ Return<sp<IEvsCamera_1_1>> Enumerator::openCamera_1_1(const hidl_string& cameraI
 
             // Add the hardware camera to our list, which will keep it alive via ref count
             mActiveCameras.try_emplace(id, hwCamera);
+            if (mMonitorEnabled) {
+                mClientsMonitor->registerClientToMonitor(hwCamera);
+            }
+
             sourceCameras.push_back(hwCamera);
         } else {
             if (it->second->getStreamConfig().id != streamCfg.id) {
@@ -389,7 +450,7 @@ Return<sp<IEvsDisplay_1_0>> Enumerator::openDisplay() {
     // TODO: Because of b/129284474, an additional class, HalDisplay, has been defined and
     // wraps the IEvsDisplay object the driver returns.  We may want to remove this
     // additional class when it is fixed properly.
-    sp<IEvsDisplay_1_0> pHalDisplay = new HalDisplay(pActiveDisplay);
+    sp<IEvsDisplay_1_0> pHalDisplay = new HalDisplay(pActiveDisplay, mInternalDisplayPort);
     mActiveDisplay = pHalDisplay;
 
     return pHalDisplay;
@@ -441,6 +502,11 @@ Return<sp<IEvsDisplay_1_1>> Enumerator::openDisplay_1_1(uint8_t id) {
         return nullptr;
     }
 
+    if (std::find(mDisplayPorts.begin(), mDisplayPorts.end(), id) == mDisplayPorts.end()) {
+        LOG(ERROR) << "No display is available on the port " << static_cast<int32_t>(id);
+        return nullptr;
+    }
+
     // We simply keep track of the most recently opened display instance.
     // In the underlying layers we expect that a new open will cause the previous
     // object to be destroyed.  This avoids any race conditions associated with
@@ -459,7 +525,7 @@ Return<sp<IEvsDisplay_1_1>> Enumerator::openDisplay_1_1(uint8_t id) {
     // TODO: Because of b/129284474, an additional class, HalDisplay, has been defined and
     // wraps the IEvsDisplay object the driver returns.  We may want to remove this
     // additional class when it is fixed properly.
-    sp<IEvsDisplay_1_1> pHalDisplay = new HalDisplay(pActiveDisplay);
+    sp<IEvsDisplay_1_1> pHalDisplay = new HalDisplay(pActiveDisplay, id);
     mActiveDisplay = pHalDisplay;
 
     return pHalDisplay;
@@ -493,6 +559,296 @@ Return<void> Enumerator::closeUltrasonicsArray(
         const ::android::sp<IEvsUltrasonicsArray>& evsUltrasonicsArray)  {
     (void)evsUltrasonicsArray;
     return Void();
+}
+
+
+Return<void> Enumerator::debug(const hidl_handle& fd,
+                               const hidl_vec<hidl_string>& options) {
+    if (fd.getNativeHandle() != nullptr && fd->numFds > 0) {
+        cmdDump(fd->data[0], options);
+    } else {
+        LOG(ERROR) << "Given file descriptor is not valid.";
+    }
+
+    return {};
+}
+
+
+void Enumerator::cmdDump(int fd, const hidl_vec<hidl_string>& options) {
+    if (options.size() == 0) {
+        WriteStringToFd("No option is given.\n", fd);
+        cmdHelp(fd);
+        return;
+    }
+
+    const std::string option = options[0];
+    if (EqualsIgnoreCase(option, "--help")) {
+        cmdHelp(fd);
+    } else if (EqualsIgnoreCase(option, "--list")) {
+        cmdList(fd, options);
+    } else if (EqualsIgnoreCase(option, "--dump")) {
+        cmdDumpDevice(fd, options);
+    } else {
+        WriteStringToFd(StringPrintf("Invalid option: %s\n", option.c_str()),
+                        fd);
+    }
+}
+
+
+void Enumerator::cmdHelp(int fd) {
+    WriteStringToFd("--help: shows this help.\n"
+                    "--list [all|camera|display]: lists camera or display devices or both "
+                    "available to EVS manager.\n"
+                    "--dump camera [all|device_id] --[current|collected|custom] [args]\n"
+                    "\tcurrent: shows the current status\n"
+                    "\tcollected: shows 10 most recent periodically collected camera usage "
+                    "statistics\n"
+                    "\tcustom: starts/stops collecting the camera usage statistics\n"
+                    "\t\tstart [interval] [duration]: starts collecting usage statistics "
+                    "at every [interval] during [duration].  Interval and duration are in "
+                    "milliseconds.\n"
+                    "\t\tstop: stops collecting usage statistics and shows collected records.\n"
+                    "--dump display: shows current status of the display\n", fd);
+}
+
+
+void Enumerator::cmdList(int fd, const hidl_vec<hidl_string>& options) {
+    bool listCameras = true;
+    bool listDisplays = true;
+    if (options.size() > 1) {
+        const std::string option = options[1];
+        const bool listAll = EqualsIgnoreCase(option, kDumpOptionAll);
+        listCameras = listAll || EqualsIgnoreCase(option, kDumpDeviceCamera);
+        listDisplays = listAll || EqualsIgnoreCase(option, kDumpDeviceDisplay);
+        if (!listCameras && !listDisplays) {
+            WriteStringToFd(StringPrintf("Unrecognized option, %s, is ignored.\n",
+                                         option.c_str()),
+                            fd);
+
+            // Nothing to show, return
+            return;
+        }
+    }
+
+    std::string buffer;
+    if (listCameras) {
+        StringAppendF(&buffer,"Camera devices available to EVS service:\n");
+        if (mCameraDevices.size() < 1) {
+            // Camera devices may not be enumerated yet.  This may fail if the
+            // user is not permitted to use EVS service.
+            getCameraList_1_1(
+                [](const auto cameras) {
+                    if (cameras.size() < 1) {
+                        LOG(WARNING) << "No camera device is available to EVS.";
+                    }
+                });
+        }
+
+        for (auto& [id, desc] : mCameraDevices) {
+            StringAppendF(&buffer, "%s%s\n", kSingleIndent, id.c_str());
+        }
+
+        StringAppendF(&buffer, "%sCamera devices currently in use:\n", kSingleIndent);
+        for (auto& [id, ptr] : mActiveCameras) {
+            StringAppendF(&buffer, "%s%s\n", kSingleIndent, id.c_str());
+        }
+        StringAppendF(&buffer, "\n");
+    }
+
+    if (listDisplays) {
+        if (mHwEnumerator != nullptr) {
+            StringAppendF(&buffer, "Display devices available to EVS service:\n");
+            // Get an internal display identifier.
+            mHwEnumerator->getDisplayIdList(
+                [&](const auto& displayPorts) {
+                    for (auto&& port : displayPorts) {
+                        StringAppendF(&buffer, "%sdisplay port %u\n",
+                                               kSingleIndent,
+                                               static_cast<unsigned>(port));
+                    }
+                }
+            );
+        } else {
+            LOG(WARNING) << "EVS HAL implementation is not available.";
+        }
+    }
+
+    WriteStringToFd(buffer, fd);
+}
+
+
+void Enumerator::cmdDumpDevice(int fd, const hidl_vec<hidl_string>& options) {
+    // Dumps both cameras and displays if the target device type is not given
+    bool dumpCameras = false;
+    bool dumpDisplays = false;
+    const auto numOptions = options.size();
+    if (numOptions > kOptionDumpDeviceTypeIndex) {
+        const std::string target = options[kOptionDumpDeviceTypeIndex];
+        dumpCameras = EqualsIgnoreCase(target, kDumpDeviceCamera);
+        dumpDisplays = EqualsIgnoreCase(target, kDumpDeviceDisplay);
+        if (!dumpCameras && !dumpDisplays) {
+            WriteStringToFd(StringPrintf("Unrecognized option, %s, is ignored.\n",
+                                         target.c_str()),
+                            fd);
+            cmdHelp(fd);
+            return;
+        }
+    } else {
+        WriteStringToFd(StringPrintf("Necessary arguments are missing.  "
+                                     "Please check the usages:\n"),
+                        fd);
+        cmdHelp(fd);
+        return;
+    }
+
+    if (dumpCameras) {
+        // --dump camera [all|device_id] --[current|collected|custom] [args]
+        if (numOptions < kDumpCameraMinNumArgs) {
+            WriteStringToFd(StringPrintf("Necessary arguments are missing.  "
+                                         "Please check the usages:\n"),
+                            fd);
+            cmdHelp(fd);
+            return;
+        }
+
+        const std::string deviceId = options[kOptionDumpCameraTypeIndex];
+        auto target = mActiveCameras.find(deviceId);
+        const bool dumpAllCameras = EqualsIgnoreCase(deviceId,
+                                                     kDumpOptionAll);
+        if (!dumpAllCameras && target == mActiveCameras.end()) {
+            // Unknown camera identifier
+            WriteStringToFd(StringPrintf("Given camera ID %s is unknown or not active.\n",
+                                         deviceId.c_str()),
+                            fd);
+            return;
+        }
+
+        const std::string command = options[kOptionDumpCameraCommandIndex];
+        std::string cameraInfo;
+        if (EqualsIgnoreCase(command, kDumpCameraCommandCurrent)) {
+            // Active stream configuration from each active HalCamera objects
+            if (!dumpAllCameras) {
+                StringAppendF(&cameraInfo, "HalCamera: %s\n%s",
+                                           deviceId.c_str(),
+                                           target->second->toString(kSingleIndent).c_str());
+            } else {
+                for (auto&& [id, handle] : mActiveCameras) {
+                    // Appends the current status
+                    cameraInfo += handle->toString(kSingleIndent);
+                }
+            }
+        } else if (EqualsIgnoreCase(command, kDumpCameraCommandCollected)) {
+            // Reads the usage statistics from active HalCamera objects
+            std::unordered_map<std::string, std::string> usageStrings;
+            if (mMonitorEnabled) {
+                auto result = mClientsMonitor->toString(&usageStrings, kSingleIndent);
+                if (!result.ok()) {
+                    LOG(ERROR) << "Failed to get the monitoring result";
+                    return;
+                }
+
+                if (!dumpAllCameras) {
+                    cameraInfo += usageStrings[deviceId];
+                } else {
+                    for (auto&& [id, stats] : usageStrings) {
+                        cameraInfo += stats;
+                    }
+                }
+            } else {
+                WriteStringToFd(StringPrintf("Client monitor is not available.\n"),
+                                fd);
+                return;
+            }
+        } else if (EqualsIgnoreCase(command, kDumpCameraCommandCustom)) {
+            // Additional arguments are expected for this command:
+            // --dump camera device_id --custom start [interval] [duration]
+            // or, --dump camera device_id --custom stop
+            if (numOptions < kDumpCameraMinNumArgs + 1) {
+                WriteStringToFd(StringPrintf("Necessary arguments are missing. "
+                                             "Please check the usages:\n"),
+                                fd);
+                cmdHelp(fd);
+                return;
+            }
+
+            if (!mMonitorEnabled) {
+                WriteStringToFd(StringPrintf("Client monitor is not available."), fd);
+                return;
+            }
+
+            const std::string subcommand = options[kOptionDumpCameraArgsStartIndex];
+            if (EqualsIgnoreCase(subcommand, kDumpCameraCommandCustomStart)) {
+                using std::chrono::nanoseconds;
+                using std::chrono::milliseconds;
+                using std::chrono::duration_cast;
+                nanoseconds interval = 0ns;
+                nanoseconds duration = 0ns;
+                if (numOptions > kOptionDumpCameraArgsStartIndex + 2) {
+                    duration = duration_cast<nanoseconds>(
+                            milliseconds(
+                                    std::stoi(options[kOptionDumpCameraArgsStartIndex + 2])
+                            ));
+                }
+
+                if (numOptions > kOptionDumpCameraArgsStartIndex + 1) {
+                    interval = duration_cast<nanoseconds>(
+                            milliseconds(
+                                    std::stoi(options[kOptionDumpCameraArgsStartIndex + 1])
+                            ));
+                }
+
+                // Starts a custom collection
+                auto result = mClientsMonitor->startCustomCollection(interval, duration);
+                if (!result) {
+                    LOG(ERROR) << "Failed to start a custom collection.  "
+                               << result.error();
+                    StringAppendF(&cameraInfo, "Failed to start a custom collection. %s\n",
+                                               result.error().message().c_str());
+                }
+            } else if (EqualsIgnoreCase(subcommand, kDumpCameraCommandCustomStop)) {
+                if (!mMonitorEnabled) {
+                    WriteStringToFd(StringPrintf("Client monitor is not available."), fd);
+                    return;
+                }
+
+                auto result = mClientsMonitor->stopCustomCollection(deviceId);
+                if (!result) {
+                    LOG(ERROR) << "Failed to stop a custom collection.  "
+                               << result.error();
+                    StringAppendF(&cameraInfo, "Failed to stop a custom collection. %s\n",
+                                               result.error().message().c_str());
+                } else {
+                    // Pull the custom collection
+                    cameraInfo += *result;
+                }
+            } else {
+                WriteStringToFd(StringPrintf("Unknown argument: %s\n",
+                                             subcommand.c_str()),
+                                fd);
+                cmdHelp(fd);
+                return;
+            }
+        } else {
+            WriteStringToFd(StringPrintf("Unknown command: %s\n"
+                                         "Please check the usages:\n", command.c_str()),
+                            fd);
+            cmdHelp(fd);
+            return;
+        }
+
+        // Outputs the report
+        WriteStringToFd(cameraInfo, fd);
+    }
+
+    if (dumpDisplays) {
+        HalDisplay* pDisplay =
+            reinterpret_cast<HalDisplay*>(mActiveDisplay.promote().get());
+        if (!pDisplay) {
+            WriteStringToFd("No active display is found.\n", fd);
+        } else {
+            WriteStringToFd(pDisplay->toString(kSingleIndent), fd);
+        }
+    }
 }
 
 } // namespace implementation

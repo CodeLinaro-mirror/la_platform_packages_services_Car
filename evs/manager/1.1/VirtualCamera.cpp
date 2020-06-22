@@ -18,10 +18,14 @@
 #include "HalCamera.h"
 #include "Enumerator.h"
 
+#include <android/hardware_buffer.h>
+#include <android-base/file.h>
 #include <android-base/logging.h>
-#include <ui/GraphicBufferAllocator.h>
-#include <ui/GraphicBufferMapper.h>
+#include <android-base/stringprintf.h>
 
+using ::android::base::StringAppendF;
+using ::android::base::StringPrintf;
+using ::android::base::WriteStringToFd;
 using ::android::hardware::automotive::evs::V1_0::DisplayState;
 
 
@@ -86,10 +90,10 @@ void VirtualCamera::shutdown() {
         }
 
         mFramesHeld.clear();
-    }
 
-    // Drop our reference to our associated hardware camera
-    mHalCamera.clear();
+        // Drop our reference to our associated hardware camera
+        mHalCamera.clear();
+    }
 }
 
 
@@ -892,6 +896,31 @@ VirtualCamera::importExternalBuffers(const hidl_vec<BufferDesc_1_1>& buffers,
     _hidl_cb(EvsResult::OK, delta);
     return {};
 }
+
+
+std::string VirtualCamera::toString(const char* indent) const {
+    std::string buffer;
+    StringAppendF(&buffer, "%sLogical camera device: %s\n"
+                           "%sFramesAllowed: %u\n"
+                           "%sFrames in use:\n",
+                           indent, mHalCamera.size() > 1 ? "T" : "F",
+                           indent, mFramesAllowed,
+                           indent);
+
+    std::string next_indent(indent);
+    next_indent += "\t";
+    for (auto&& [id, queue] : mFramesHeld) {
+        StringAppendF(&buffer, "%s%s: %d\n",
+                               next_indent.c_str(),
+                               id.c_str(),
+                               static_cast<int>(queue.size()));
+    }
+    StringAppendF(&buffer, "%sCurrent stream state: %d\n",
+                                 indent, mStreamState);
+
+    return buffer;
+}
+
 
 } // namespace implementation
 } // namespace V1_1

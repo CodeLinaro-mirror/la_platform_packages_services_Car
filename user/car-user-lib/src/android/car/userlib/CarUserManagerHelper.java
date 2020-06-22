@@ -17,24 +17,21 @@
 package android.car.userlib;
 
 import android.Manifest;
+import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.UserIdInt;
 import android.app.ActivityManager;
-import android.app.IActivityManager;
+import android.car.settings.CarSettings;
 import android.content.Context;
 import android.content.pm.UserInfo;
 import android.graphics.Bitmap;
-import android.os.RemoteException;
-import android.os.Trace;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.provider.Settings;
 import android.sysprop.CarProperties;
 import android.util.Log;
-import android.util.TimingsTraceLog;
 
-import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.UserIcons;
 
 import com.google.android.collect.Sets;
@@ -53,13 +50,15 @@ import java.util.Set;
  * <p>This class provides method for user management, including creating, removing, adding
  * and switching users. Methods related to get users will exclude system user by default.
  *
+ * <p><b>Note: </b>this class is in the process of being removed.  Use {@link UserManager} APIs
+ * directly or {@link android.car.user.CarUserManager.CarUserManager} instead.
+ *
  * @hide
- * @deprecated In the process of being removed.  Use {@link UserManager} APIs directly instead.
  */
-@Deprecated
 public final class CarUserManagerHelper {
     private static final String TAG = "CarUserManagerHelper";
 
+    private static final boolean DEBUG = false;
     private static final int BOOT_USER_NOT_FOUND = -1;
 
     /**
@@ -91,8 +90,8 @@ public final class CarUserManagerHelper {
      * @param context Application Context
      */
     public CarUserManagerHelper(Context context) {
-        mContext = context.getApplicationContext();
-        mUserManager = (UserManager) mContext.getSystemService(Context.USER_SERVICE);
+        mContext = context;
+        mUserManager = UserManager.get(mContext);
         mActivityManager = (ActivityManager) mContext.getSystemService(Context.ACTIVITY_SERVICE);
     }
 
@@ -100,14 +99,41 @@ public final class CarUserManagerHelper {
      * Sets the last active user.
      */
     public void setLastActiveUser(@UserIdInt int userId) {
-        Settings.Global.putInt(
-                mContext.getContentResolver(), Settings.Global.LAST_ACTIVE_USER_ID, userId);
+        if (UserHelper.isHeadlessSystemUser(userId)) {
+            if (DEBUG) Log.d(TAG, "setLastActiveUser(): ignoring headless system user " + userId);
+            return;
+        }
+        setUserIdGlobalProperty(CarSettings.Global.LAST_ACTIVE_USER_ID, userId);
+
+        // TODO(b/155918094): change method to receive a UserInfo instead
+        UserInfo user = mUserManager.getUserInfo(userId);
+        if (user == null) {
+            Log.w(TAG, "setLastActiveUser(): user " + userId + " doesn't exist");
+            return;
+        }
+        if (!user.isEphemeral()) {
+            setUserIdGlobalProperty(CarSettings.Global.LAST_ACTIVE_PERSISTENT_USER_ID, userId);
+        }
     }
 
-    private int getLastActiveUser() {
-        return Settings.Global.getInt(
-            mContext.getContentResolver(), Settings.Global.LAST_ACTIVE_USER_ID,
-            /* default user id= */ UserHandle.USER_SYSTEM);
+    private void setUserIdGlobalProperty(@NonNull String name, @UserIdInt int userId) {
+        if (DEBUG) Log.d(TAG, "setting global property " + name + " to " + userId);
+
+        Settings.Global.putInt(mContext.getContentResolver(), name, userId);
+    }
+
+    private int getUserIdGlobalProperty(@NonNull String name) {
+        int userId = Settings.Global.getInt(mContext.getContentResolver(), name,
+                UserHandle.USER_NULL);
+        if (DEBUG) Log.d(TAG, "getting global property " + name + ": " + userId);
+
+        return userId;
+    }
+
+    private void resetUserIdGlobalProperty(@NonNull String name) {
+        if (DEBUG) Log.d(TAG, "resetting global property " + name);
+
+        Settings.Global.putInt(mContext.getContentResolver(), name, UserHandle.USER_NULL);
     }
 
     /**
@@ -128,13 +154,6 @@ public final class CarUserManagerHelper {
      * @return user id of the initial user to boot into on the device, or
      * {@link UserHandle#USER_NULL} if there is no user available.
      */
-    public int getInitialUser() {
-        return getInitialUser(/* usesOverrideUserIdProperty= */ true);
-    }
-
-    // TODO(b/151758646): get rid of the public one / add javadoc here once not used externally
-    // anymore
-    @VisibleForTesting
     int getInitialUser(boolean usesOverrideUserIdProperty) {
 
         List<Integer> allUsers = userInfoListToUserIdList(getAllUsers());
@@ -157,18 +176,29 @@ public final class CarUserManagerHelper {
         }
 
         // If the last active user is not the SYSTEM user and is a real user, return it
-        int lastActiveUser = getLastActiveUser();
-        if (lastActiveUser != UserHandle.USER_SYSTEM
-                && allUsers.contains(lastActiveUser)) {
-            Log.i(TAG, "Last active user loaded for initial user, user id: "
-                    + lastActiveUser);
+        int lastActiveUser = getUserIdGlobalProperty(CarSettings.Global.LAST_ACTIVE_USER_ID);
+        if (allUsers.contains(lastActiveUser)) {
+            Log.i(TAG, "Last active user loaded for initial user: " + lastActiveUser);
             return lastActiveUser;
         }
+        resetUserIdGlobalProperty(CarSettings.Global.LAST_ACTIVE_USER_ID);
+
+        int lastPersistentUser = getUserIdGlobalProperty(
+                CarSettings.Global.LAST_ACTIVE_PERSISTENT_USER_ID);
+        if (allUsers.contains(lastPersistentUser)) {
+            Log.i(TAG, "Last active, persistent user loaded for initial user: "
+                    + lastPersistentUser);
+            return lastPersistentUser;
+        }
+        resetUserIdGlobalProperty(CarSettings.Global.LAST_ACTIVE_PERSISTENT_USER_ID);
 
         // If all else fails, return the smallest user id
         int returnId = Collections.min(allUsers);
-        Log.i(TAG, "Saved ids were invalid. Returning smallest user id, user id: "
-                + returnId);
+        // TODO(b/158101909): the smallest user id is not always the initial user; a better approach
+        // would be looking for the first ADMIN user, or keep track of all last active users (not
+        // just the very last)
+        Log.w(TAG, "Last active user (" + lastActiveUser + ") not found. Returning smallest user id"
+                + " instead: " + returnId);
         return returnId;
     }
 
@@ -226,8 +256,6 @@ public final class CarUserManagerHelper {
         return users;
     }
 
-    // Current process user restriction accessors
-
     /**
      * Grants admin permissions to the user.
      *
@@ -255,7 +283,10 @@ public final class CarUserManagerHelper {
      *
      * @param userName Name to give to the newly created user.
      * @return Newly created non-admin user, null if failed to create a user.
+     *
+     * @deprecated non-admin restrictions should be set by resources overlay
      */
+    @Deprecated
     @Nullable
     public UserInfo createNewNonAdminUser(String userName) {
         UserInfo user = mUserManager.createUser(userName, 0);
@@ -275,7 +306,10 @@ public final class CarUserManagerHelper {
      *
      * @param userInfo User to set restrictions on.
      * @param enable If true, restriction is ON, If false, restriction is OFF.
+     *
+     * @deprecated non-admin restrictions should be set by resources overlay
      */
+    @Deprecated
     public void setDefaultNonAdminRestrictions(UserInfo userInfo, boolean enable) {
         for (String restriction : DEFAULT_NON_ADMIN_RESTRICTIONS) {
             mUserManager.setUserRestriction(restriction, enable, userInfo.getUserHandle());
@@ -299,9 +333,12 @@ public final class CarUserManagerHelper {
      *
      * @param id User id to switch to.
      * @return {@code true} if user switching succeed.
+     *
+     * @deprecated should use {@link android.car.user.CarUserManager.CarUserManager} instead
      */
+    @Deprecated
     public boolean switchToUserId(int id) {
-        if (id == UserHandle.USER_SYSTEM && UserManager.isHeadlessSystemUserMode()) {
+        if (UserHelper.isHeadlessSystemUser(id)) {
             // System User doesn't associate with real person, can not be switched to.
             return false;
         }
@@ -315,59 +352,14 @@ public final class CarUserManagerHelper {
     }
 
     /**
-     * Streamlined version of {@code switchUser()} - should only be called on boot / resume.
-     */
-    public boolean startForegroundUser(@UserIdInt int userId) {
-        if (userId == UserHandle.USER_SYSTEM && UserManager.isHeadlessSystemUserMode()) {
-            // System User doesn't associate with real person, can not be switched to.
-            return false;
-        }
-        try {
-            return ActivityManager.getService().startUserInForegroundWithListener(userId, null);
-        } catch (RemoteException e) {
-            Log.w(TAG, "failed to start user " + userId, e);
-            return false;
-        }
-    }
-
-    @VisibleForTesting
-    void unlockSystemUser() {
-        Log.i(TAG, "unlocking system user");
-        IActivityManager am = ActivityManager.getService();
-
-        TimingsTraceLog t = new TimingsTraceLog(TAG, Trace.TRACE_TAG_SYSTEM_SERVER);
-        t.traceBegin("UnlockSystemUser");
-        try {
-            // This is for force changing state into RUNNING_LOCKED. Otherwise unlock does not
-            // update the state and USER_SYSTEM unlock happens twice.
-            t.traceBegin("am.startUser");
-            boolean started = am.startUserInBackground(UserHandle.USER_SYSTEM);
-            t.traceEnd();
-            if (!started) {
-                Log.w(TAG, "could not restart system user in foreground; trying unlock instead");
-                t.traceBegin("am.unlockUser");
-                boolean unlocked = am.unlockUser(UserHandle.USER_SYSTEM, /* token= */ null,
-                        /* secret= */ null, /* listener= */ null);
-                t.traceEnd();
-                if (!unlocked) {
-                    Log.w(TAG, "could not unlock system user neither");
-                    return;
-                }
-            }
-        } catch (RemoteException e) {
-            // should not happen for local call.
-            Log.wtf("RemoteException from AMS", e);
-        } finally {
-            t.traceEnd();
-        }
-    }
-
-    /**
      * Switches (logs in) to another user.
      *
      * @param userInfo User to switch to.
      * @return {@code true} if user switching succeed.
+     *
+     * @deprecated should use {@link android.car.user.CarUserManager.CarUserManager} instead
      */
+    @Deprecated
     public boolean switchToUser(UserInfo userInfo) {
         return switchToUserId(userInfo.id);
     }

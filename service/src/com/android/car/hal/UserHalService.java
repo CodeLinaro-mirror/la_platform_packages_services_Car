@@ -15,22 +15,35 @@
  */
 package com.android.car.hal;
 
+import static android.car.VehiclePropertyIds.CREATE_USER;
 import static android.car.VehiclePropertyIds.INITIAL_USER_INFO;
+import static android.car.VehiclePropertyIds.REMOVE_USER;
 import static android.car.VehiclePropertyIds.SWITCH_USER;
+import static android.car.VehiclePropertyIds.USER_IDENTIFICATION_ASSOCIATION;
 
 import static com.android.internal.util.function.pooled.PooledLambda.obtainMessage;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.app.ActivityManager;
 import android.car.hardware.property.CarPropertyManager;
+import android.car.user.CarUserManager;
 import android.car.userlib.HalCallback;
 import android.car.userlib.UserHalHelper;
+import android.car.userlib.UserHelper;
+import android.hardware.automotive.vehicle.V2_0.CreateUserRequest;
+import android.hardware.automotive.vehicle.V2_0.CreateUserResponse;
+import android.hardware.automotive.vehicle.V2_0.CreateUserStatus;
 import android.hardware.automotive.vehicle.V2_0.InitialUserInfoResponse;
-import android.hardware.automotive.vehicle.V2_0.InitialUserInfoResponseAction;
+import android.hardware.automotive.vehicle.V2_0.RemoveUserRequest;
 import android.hardware.automotive.vehicle.V2_0.SwitchUserMessageType;
+import android.hardware.automotive.vehicle.V2_0.SwitchUserRequest;
 import android.hardware.automotive.vehicle.V2_0.SwitchUserResponse;
 import android.hardware.automotive.vehicle.V2_0.SwitchUserStatus;
-import android.hardware.automotive.vehicle.V2_0.UserFlags;
+import android.hardware.automotive.vehicle.V2_0.UserIdentificationAssociationType;
+import android.hardware.automotive.vehicle.V2_0.UserIdentificationGetRequest;
+import android.hardware.automotive.vehicle.V2_0.UserIdentificationResponse;
+import android.hardware.automotive.vehicle.V2_0.UserIdentificationSetRequest;
 import android.hardware.automotive.vehicle.V2_0.UserInfo;
 import android.hardware.automotive.vehicle.V2_0.UsersInfo;
 import android.hardware.automotive.vehicle.V2_0.VehiclePropConfig;
@@ -38,17 +51,23 @@ import android.hardware.automotive.vehicle.V2_0.VehiclePropValue;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.ServiceSpecificException;
-import android.os.UserHandle;
 import android.sysprop.CarProperties;
+import android.text.TextUtils;
+import android.util.EventLog;
 import android.util.Log;
-import android.util.Pair;
-import android.util.Slog;
 import android.util.SparseArray;
+import android.util.SparseBooleanArray;
 
+import com.android.car.CarLocalServices;
+import com.android.car.user.CarUserService;
 import com.android.internal.annotations.GuardedBy;
+import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.car.EventLogTags;
+import com.android.internal.util.FunctionalUtils;
 import com.android.internal.util.Preconditions;
 
 import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
@@ -59,17 +78,28 @@ import java.util.Optional;
  */
 public final class UserHalService extends HalServiceBase {
 
-    private static final String UNSUPPORTED_MSG = "Vehicle HAL does not support user management";
-
     private static final String TAG = UserHalService.class.getSimpleName();
 
+    private static final String UNSUPPORTED_MSG = "Vehicle HAL does not support user management";
+    private static final String USER_ASSOCIATION_UNSUPPORTED_MSG =
+            "Vehicle HAL does not support user association";
+
     private static final int[] SUPPORTED_PROPERTIES = new int[]{
+            CREATE_USER,
             INITIAL_USER_INFO,
-            SWITCH_USER
+            REMOVE_USER,
+            SWITCH_USER,
+            USER_IDENTIFICATION_ASSOCIATION
     };
 
-    // TODO(b/150413515): STOPSHIP - change to false before R is launched
-    private static final boolean DBG = true;
+    private static final int[] CORE_PROPERTIES = new int[]{
+            CREATE_USER,
+            INITIAL_USER_INFO,
+            REMOVE_USER,
+            SWITCH_USER,
+    };
+
+    private static final boolean DBG = false;
 
     private final Object mLock = new Object();
 
@@ -82,7 +112,7 @@ public final class UserHalService extends HalServiceBase {
     // This handler handles 2 types of messages:
     // - "Anonymous" messages (what=0) containing runnables.
     // - "Identifiable" messages used to check for timeouts (whose 'what' is the request id).
-    private final Handler mHandler = new Handler(Looper.getMainLooper());
+    private final Handler mHandler;
 
     /**
      * Value used on the next request.
@@ -94,10 +124,16 @@ public final class UserHalService extends HalServiceBase {
      * Map of callbacks by request id.
      */
     @GuardedBy("mLock")
-    private SparseArray<Pair<Class<?>, HalCallback<?>>> mPendingCallbacks = new SparseArray<>();
+    private final SparseArray<PendingRequest<?, ?>> mPendingRequests = new SparseArray<>();
 
     public UserHalService(VehicleHal hal) {
+        this(hal, new Handler(Looper.getMainLooper()));
+    }
+
+    @VisibleForTesting
+    UserHalService(VehicleHal hal, Handler handler) {
         mHal = hal;
+        mHandler = handler;
     }
 
     @Override
@@ -136,10 +172,21 @@ public final class UserHalService extends HalServiceBase {
                     break;
                 case SWITCH_USER:
                     mHandler.sendMessage(obtainMessage(
-                            UserHalService::handleOnSwicthUserResponse, this, value));
+                            UserHalService::handleOnSwitchUserResponse, this, value));
+                    break;
+                case CREATE_USER:
+                    mHandler.sendMessage(obtainMessage(
+                            UserHalService::handleOnCreateUserResponse, this, value));
+                    break;
+                case REMOVE_USER:
+                    Log.w(TAG, "Received REMOVE_USER HAL event: " + value);
+                    break;
+                case USER_IDENTIFICATION_ASSOCIATION:
+                    mHandler.sendMessage(obtainMessage(
+                            UserHalService::handleOnUserIdentificationAssociation, this, value));
                     break;
                 default:
-                    Slog.w(TAG, "received unsupported event from HAL: " + value);
+                    Log.w(TAG, "received unsupported event from HAL: " + value);
             }
         }
     }
@@ -147,7 +194,7 @@ public final class UserHalService extends HalServiceBase {
     @Override
     public void onPropertySetError(int property, int area,
             @CarPropertyManager.CarSetPropertyErrorCode int errorCode) {
-        if (DBG)Log.d(TAG, "handlePropertySetError(" + property + "/" + area + ")");
+        if (DBG) Log.d(TAG, "handlePropertySetError(" + property + "/" + area + ")");
     }
 
     @Override
@@ -161,8 +208,7 @@ public final class UserHalService extends HalServiceBase {
             Log.w(TAG, UNSUPPORTED_MSG);
             return;
         }
-        // TODO(b/150413515): increase capacity as more properties are added
-        SparseArray<VehiclePropConfig> supportedProperties = new SparseArray<>(2);
+        SparseArray<VehiclePropConfig> supportedProperties = new SparseArray<>(5);
         for (VehiclePropConfig config : properties) {
             supportedProperties.put(config.prop, config);
         }
@@ -172,11 +218,29 @@ public final class UserHalService extends HalServiceBase {
     }
 
     /**
-     * Checks if the Vehicle HAL supports user management.
+     * Checks if the Vehicle HAL supports core user management actions.
      */
     public boolean isSupported() {
         synchronized (mLock) {
-            return mProperties != null;
+            if (mProperties == null) return false;
+
+            for (int i = 0; i < CORE_PROPERTIES.length; i++) {
+                if (mProperties.get(CORE_PROPERTIES[i]) == null) {
+                    return false;
+                }
+            }
+            return true;
+        }
+    }
+
+    /**
+     * Checks if the Vehicle HAL supports core user management actions.
+     */
+    public boolean isUserAssociationSupported() {
+        synchronized (mLock) {
+            if (mProperties == null) return false;
+            if (mProperties.get(USER_IDENTIFICATION_ASSOCIATION) == null) return false;
+            return true;
         }
     }
 
@@ -184,6 +248,12 @@ public final class UserHalService extends HalServiceBase {
     private void checkSupportedLocked() {
         Preconditions.checkState(isSupported(), UNSUPPORTED_MSG);
     }
+
+    @GuardedBy("mLock")
+    private void checkUserAssociationSupportedLocked() {
+        Preconditions.checkState(isUserAssociationSupported(), USER_ASSOCIATION_UNSUPPORTED_MSG);
+    }
+
 
     /**
      * Calls HAL to asynchronously get info about the initial user.
@@ -202,7 +272,7 @@ public final class UserHalService extends HalServiceBase {
         if (DBG) Log.d(TAG, "getInitialInfo(" + requestType + ")");
         Preconditions.checkArgumentPositive(timeoutMs, "timeout must be positive");
         Objects.requireNonNull(usersInfo);
-        // TODO(b/150413515): use helper method to check usersInfo is valid
+        UserHalHelper.checkValid(usersInfo);
         Objects.requireNonNull(callback);
 
         VehiclePropValue propRequest;
@@ -210,22 +280,29 @@ public final class UserHalService extends HalServiceBase {
         synchronized (mLock) {
             checkSupportedLocked();
             if (hasPendingRequestLocked(InitialUserInfoResponse.class, callback)) return;
-            requestId = mNextRequestId++;
-            propRequest = UserHalHelper.createPropRequest(requestId, requestType,
-                    INITIAL_USER_INFO);
+            requestId = getNextRequestId();
+            EventLog.writeEvent(EventLogTags.CAR_USER_HAL_INITIAL_USER_INFO_REQ, requestId,
+                    requestType, timeoutMs);
+            propRequest = UserHalHelper.createPropRequest(INITIAL_USER_INFO, requestId,
+                    requestType);
             UserHalHelper.addUsersInfo(propRequest, usersInfo);
             addPendingRequestLocked(requestId, InitialUserInfoResponse.class, callback);
         }
 
+        sendHalRequest(requestId, timeoutMs, propRequest, callback);
+    }
+
+    private void sendHalRequest(int requestId, int timeoutMs, @NonNull VehiclePropValue request,
+            @NonNull HalCallback<?> callback) {
         mHandler.sendMessageDelayed(obtainMessage(
                 UserHalService::handleCheckIfRequestTimedOut, this, requestId).setWhat(requestId),
                 timeoutMs);
         try {
-            if (DBG) Log.d(TAG, "Calling hal.set(): " + propRequest);
-            mHal.set(propRequest);
+            if (DBG) Log.d(TAG, "Calling hal.set(): " + request);
+            mHal.set(request);
         } catch (ServiceSpecificException e) {
             handleRemovePendingRequest(requestId);
-            Log.w(TAG, "Failed to set INITIAL_USER_INFO", e);
+            Log.w(TAG, "Failed to set " + request, e);
             callback.onResponse(HalCallback.STATUS_HAL_SET_TIMEOUT, null);
         }
     }
@@ -233,59 +310,366 @@ public final class UserHalService extends HalServiceBase {
     /**
      * Calls HAL to asynchronously switch user.
      *
-     * @param targetInfo target user for user switching
+     * @param request metadata
      * @param timeoutMs how long to wait (in ms) for the property change event.
-     * @param usersInfo current state of Android users.
      * @param callback to handle the response.
      *
      * @throws IllegalStateException if the HAL does not support user management (callers should
      * call {@link #isSupported()} first to avoid this exception).
      */
-    public void switchUser(@NonNull UserInfo targetInfo, int timeoutMs,
-            @NonNull UsersInfo usersInfo, @NonNull HalCallback<SwitchUserResponse> callback) {
-        if (DBG) Log.d(TAG, "switchUser(" + targetInfo + ")");
+    public void switchUser(@NonNull SwitchUserRequest request, int timeoutMs,
+            @NonNull HalCallback<SwitchUserResponse> callback) {
         Preconditions.checkArgumentPositive(timeoutMs, "timeout must be positive");
-        Objects.requireNonNull(usersInfo);
-        // TODO(b/150413515): use helper method to check usersInfo is valid
-        Objects.requireNonNull(callback);
+        Objects.requireNonNull(callback, "callback cannot be null");
 
+        if (DBG) Log.d(TAG, "switchUser(" + request + ")");
         VehiclePropValue propRequest;
         int requestId;
         synchronized (mLock) {
             checkSupportedLocked();
             if (hasPendingRequestLocked(SwitchUserResponse.class, callback)) return;
-            requestId = mNextRequestId++;
-            propRequest = UserHalHelper.createPropRequest(requestId,
-                        SwitchUserMessageType.ANDROID_SWITCH, SWITCH_USER);
-            propRequest.value.int32Values.add(targetInfo.userId);
-            propRequest.value.int32Values.add(targetInfo.flags);
-            UserHalHelper.addUsersInfo(propRequest, usersInfo);
+            requestId = getNextRequestId();
+            request.requestId = requestId;
+            request.messageType = SwitchUserMessageType.ANDROID_SWITCH;
+            propRequest = UserHalHelper.toVehiclePropValue(request);
+            EventLog.writeEvent(EventLogTags.CAR_USER_HAL_SWITCH_USER_REQ, requestId,
+                    request.targetUser.userId, timeoutMs);
             addPendingRequestLocked(requestId, SwitchUserResponse.class, callback);
         }
 
-        mHandler.sendMessageDelayed(
-                obtainMessage(UserHalService::handleCheckIfRequestTimedOut, this, requestId)
-                        .setWhat(requestId),
-                timeoutMs);
+        sendHalRequest(requestId, timeoutMs, propRequest, callback);
+    }
+
+    /**
+     * Calls HAL to remove user.
+     *
+     * @throws IllegalStateException if the HAL does not support user management (callers should
+     * call {@link #isSupported()} first to avoid this exception).
+     */
+    public void removeUser(@NonNull RemoveUserRequest request) {
+        Objects.requireNonNull(request, "request cannot be null");
+
+        if (DBG) Log.d(TAG, "removeUser(" + request.removedUserInfo.userId + ")");
+        EventLog.writeEvent(EventLogTags.CAR_USER_HAL_REMOVE_USER_REQ,
+                request.removedUserInfo.userId, request.usersInfo.currentUser.userId);
+
+        VehiclePropValue propRequest;
+        synchronized (mLock) {
+            checkSupportedLocked();
+            request.requestId = getNextRequestId();
+            propRequest = UserHalHelper.toVehiclePropValue(request);
+
+        }
+        try {
+            if (DBG) Log.d(TAG, "Calling hal.set(): " + propRequest);
+            mHal.set(propRequest);
+        } catch (ServiceSpecificException e) {
+            Log.w(TAG, "Failed to set REMOVE USER", e);
+        }
+    }
+
+    /**
+     * Calls HAL to indicate an Android user was created.
+     *
+     * @param request info agout the created user.
+     * @param timeoutMs how long to wait (in ms) for the property change event.
+     * @param callback to handle the response.
+     *
+     * @throws IllegalStateException if the HAL does not support user management (callers should
+     * call {@link #isSupported()} first to avoid this exception).
+     */
+    public void createUser(@NonNull CreateUserRequest request, int timeoutMs,
+            @NonNull HalCallback<CreateUserResponse> callback) {
+        if (DBG) Log.d(TAG, "createUser(): req=" + request + ", timeout=" + timeoutMs);
+
+        Objects.requireNonNull(request);
+        Preconditions.checkArgumentPositive(timeoutMs, "timeout must be positive");
+        Objects.requireNonNull(callback);
+
+        VehiclePropValue propRequest;
+        synchronized (mLock) {
+            checkSupportedLocked();
+            if (hasPendingRequestLocked(CreateUserResponse.class, callback)) return;
+            request.requestId = getNextRequestId();
+            propRequest = UserHalHelper.toVehiclePropValue(request);
+            EventLog.writeEvent(EventLogTags.CAR_USER_HAL_CREATE_USER_REQ, request.requestId,
+                    UserHelper.safeName(request.newUserName), request.newUserInfo.flags, timeoutMs);
+            addPendingRequestLocked(request.requestId, CreateUserResponse.class, callback);
+        }
+
+        sendHalRequest(request.requestId, timeoutMs, propRequest, callback);
+    }
+
+    /**
+     * Calls HAL after android user switch.
+     */
+    public void postSwitchResponse(@NonNull SwitchUserRequest request) {
+        EventLog.writeEvent(EventLogTags.CAR_USER_HAL_POST_SWITCH_USER_REQ, request.requestId,
+                request.targetUser.userId, request.usersInfo.currentUser.userId);
+        if (DBG) Log.d(TAG, "postSwitchResponse(" + request + ")");
+
+        VehiclePropValue propRequest;
+        synchronized (mLock) {
+            checkSupportedLocked();
+            request.messageType = SwitchUserMessageType.ANDROID_POST_SWITCH;
+            propRequest = UserHalHelper.toVehiclePropValue(request);
+        }
 
         try {
             if (DBG) Log.d(TAG, "Calling hal.set(): " + propRequest);
             mHal.set(propRequest);
         } catch (ServiceSpecificException e) {
-            handleRemovePendingRequest(requestId);
-            Log.w(TAG, "Failed to set ANDROID SWITCH", e);
-            callback.onResponse(HalCallback.STATUS_HAL_SET_TIMEOUT, null);
+            Log.w(TAG, "Failed to set ANDROID POST SWITCH", e);
+        }
+    }
+
+    /**
+     * Calls HAL to switch user after legacy Android user switch. Legacy Android user switch means
+     * user switch is not requested by {@link CarUserManager} or OEM, and user switch is directly
+     * requested by {@link ActivityManager}
+     */
+    public void legacyUserSwitch(@NonNull SwitchUserRequest request) {
+        if (DBG) Log.d(TAG, "userSwitchLegacy(" + request + ")");
+
+        VehiclePropValue propRequest;
+        synchronized (mLock) {
+            checkSupportedLocked();
+            request.requestId = getNextRequestId();
+            EventLog.writeEvent(EventLogTags.CAR_USER_HAL_LEGACY_SWITCH_USER_REQ, request.requestId,
+                    request.targetUser.userId, request.usersInfo.currentUser.userId);
+            request.messageType = SwitchUserMessageType.LEGACY_ANDROID_SWITCH;
+            propRequest = UserHalHelper.toVehiclePropValue(request);
+        }
+
+        try {
+            if (DBG) Log.d(TAG, "Calling hal.set(): " + propRequest);
+            mHal.set(propRequest);
+        } catch (ServiceSpecificException e) {
+            Log.w(TAG, "Failed to set LEGACY ANDROID SWITCH", e);
+        }
+    }
+
+    // TODO(b/157699720): move to UserHalHelper
+    private static VehiclePropValue getPropRequestForSwitchUserLocked(int requestId,
+            int requestType, @NonNull UserInfo targetInfo, @NonNull UsersInfo usersInfo) {
+        VehiclePropValue propRequest =
+                UserHalHelper.createPropRequest(SWITCH_USER, requestId, requestType);
+        UserHalHelper.addUserInfo(propRequest, targetInfo);
+        UserHalHelper.addUsersInfo(propRequest, usersInfo);
+        return propRequest;
+    }
+
+    /**
+     * Calls HAL to get the value of the user identifications associated with the given user.
+     *
+     * @return HAL response or {@code null} if it was invalid (for example, mismatch on the
+     * requested number of associations).
+     *
+     * @throws IllegalArgumentException if request is invalid (mismatch on number of associations,
+     *   duplicated association, invalid association type values, etc).
+     */
+    @Nullable
+    public UserIdentificationResponse getUserAssociation(
+            @NonNull UserIdentificationGetRequest request) {
+        Objects.requireNonNull(request, "request cannot be null");
+        synchronized (mLock) {
+            checkUserAssociationSupportedLocked();
+        }
+
+        // Check that it doesn't have dupes
+        SparseBooleanArray types = new SparseBooleanArray(request.numberAssociationTypes);
+        for (int i = 0; i < request.numberAssociationTypes; i++) {
+            int type = request.associationTypes.get(i);
+            Preconditions.checkArgument(!types.get(type), "type %s found more than once on %s",
+                    UserIdentificationAssociationType.toString(type), request);
+            types.put(type, true);
+        }
+
+        request.requestId = getNextRequestId();
+
+        if (DBG) Log.d(TAG, "getUserAssociation(): req=" + request);
+
+        VehiclePropValue requestAsPropValue = UserHalHelper.toVehiclePropValue(request);
+        EventLog.writeEvent(EventLogTags.CAR_USER_HAL_GET_USER_AUTH_REQ,
+                requestAsPropValue.value.int32Values.toArray());
+
+        VehiclePropValue responseAsPropValue = mHal.get(requestAsPropValue);
+        if (responseAsPropValue == null) {
+            Log.w(TAG, "HAL returned null for request " + requestAsPropValue);
+            return null;
+        }
+
+        logEventWithErrorMessage(EventLogTags.CAR_USER_HAL_GET_USER_AUTH_RESP, responseAsPropValue);
+        if (DBG) Log.d(TAG, "getUserAssociation(): responseAsPropValue=" + responseAsPropValue);
+
+        UserIdentificationResponse response;
+        try {
+            response = UserHalHelper.toUserIdentificationResponse(responseAsPropValue);
+        } catch (IllegalArgumentException e) {
+            Log.w(TAG, "invalid response from HAL for " + requestAsPropValue, e);
+            return null;
+        }
+        if (DBG) Log.d(TAG, "getUserAssociation(): response=" + response);
+
+        // Validate the response according to the request
+        if (response.requestId != request.requestId) {
+            Log.w(TAG, "invalid request id (should be " + request.requestId + ") on HAL response: "
+                    + response);
+            return null;
+        }
+        if (response.numberAssociation != request.numberAssociationTypes) {
+            Log.w(TAG, "Wrong number of association types on HAL response (expected "
+                    + request.numberAssociationTypes + ") for request " + requestAsPropValue
+                    + ": " + response);
+            return null;
+        }
+        for (int i = 0; i < request.numberAssociationTypes; i++) {
+            int expectedType = request.associationTypes.get(i);
+            int actualType = response.associations.get(i).type;
+            if (actualType != expectedType) {
+                Log.w(TAG, "Wrong type on index " + i + " of HAL response (" + response + ") for "
+                        + "request " + requestAsPropValue + " : expected "
+                        + UserIdentificationAssociationType.toString(expectedType)
+                        + ", got " + UserIdentificationAssociationType.toString(actualType));
+                return null;
+            }
+        }
+
+        return response;
+    }
+
+    /**
+     * Calls HAL to set the value of the user identifications associated with the given user.
+     *
+     * @throws IllegalArgumentException if request is invalid (mismatch on number of associations,
+     *   duplicated association, invalid association type values, etc).
+     */
+    public void setUserAssociation(int timeoutMs, @NonNull UserIdentificationSetRequest request,
+            @NonNull HalCallback<UserIdentificationResponse> callback) {
+        Preconditions.checkArgumentPositive(timeoutMs, "timeout must be positive");
+        Objects.requireNonNull(request, "request cannot be null");
+        Objects.requireNonNull(callback, "callback cannot be null");
+        if (DBG) Log.d(TAG, "setUserAssociation(" + request + ")");
+
+        // Check that it doesn't have dupes
+        SparseBooleanArray types = new SparseBooleanArray(request.numberAssociations);
+        for (int i = 0; i < request.numberAssociations; i++) {
+            int type = request.associations.get(i).type;
+            Preconditions.checkArgument(!types.get(type), "type %s found more than once on %s",
+                    UserIdentificationAssociationType.toString(type), request);
+            types.put(type, true);
+        }
+
+        VehiclePropValue propRequest;
+        int requestId;
+        synchronized (mLock) {
+            checkUserAssociationSupportedLocked();
+            if (hasPendingRequestLocked(UserIdentificationResponse.class, callback)) return;
+            requestId = request.requestId = getNextRequestId();
+            propRequest = UserHalHelper.toVehiclePropValue(request);
+            EventLog.writeEvent(EventLogTags.CAR_USER_HAL_SET_USER_AUTH_REQ,
+                    propRequest.value.int32Values.toArray());
+
+            addPendingRequestLocked(requestId, UserIdentificationSetRequest.class,
+                    UserIdentificationResponse.class, request, callback);
+        }
+        sendHalRequest(requestId, timeoutMs, propRequest, callback);
+    }
+
+    private void handleOnUserIdentificationAssociation(@NonNull VehiclePropValue value) {
+        logEventWithErrorMessage(EventLogTags.CAR_USER_HAL_SET_USER_AUTH_RESP, value);
+        if (DBG) Log.d(TAG, "handleOnUserIdentificationAssociation(): " + value);
+
+        int requestId = value.value.int32Values.get(0);
+        HalCallback<UserIdentificationResponse> callback = handleGetPendingCallback(requestId,
+                UserIdentificationResponse.class);
+        if (callback == null) {
+            Log.w(TAG, "no callback for requestId " + requestId + ": " + value);
+            return;
+        }
+        PendingRequest<?, ?> pendingRequest = handleRemovePendingRequest(requestId);
+        UserIdentificationResponse response;
+        try {
+            response = UserHalHelper.toUserIdentificationResponse(value);
+        } catch (RuntimeException e) {
+            Log.w(TAG, "error parsing UserIdentificationResponse (" + value + ")", e);
+            callback.onResponse(HalCallback.STATUS_WRONG_HAL_RESPONSE, null);
+            return;
+        }
+
+        // Validate the response according to the request
+        UserIdentificationSetRequest request = PendingRequest.getRequest(pendingRequest,
+                UserIdentificationSetRequest.class, requestId);
+
+        if (request == null) {
+            // already logged on PendingRequest.getRequest
+            callback.onResponse(HalCallback.STATUS_WRONG_HAL_RESPONSE, null);
+        }
+
+        if (response.numberAssociation != request.numberAssociations) {
+            Log.w(TAG, "Wrong number of association types on HAL response (expected "
+                    + request.numberAssociations + ") for request " + request
+                    + ": " + response);
+            callback.onResponse(HalCallback.STATUS_WRONG_HAL_RESPONSE, null);
+            return;
+        }
+
+        for (int i = 0; i < request.numberAssociations; i++) {
+            int expectedType = request.associations.get(i).type;
+            int actualType = response.associations.get(i).type;
+            if (actualType != expectedType) {
+                Log.w(TAG, "Wrong type on index " + i + " of HAL response (" + response + ") for "
+                        + "request " + value + " : expected "
+                        + UserIdentificationAssociationType.toString(expectedType)
+                        + ", got " + UserIdentificationAssociationType.toString(actualType));
+                callback.onResponse(HalCallback.STATUS_WRONG_HAL_RESPONSE, null);
+                return;
+            }
+        }
+
+
+        if (DBG) Log.d(TAG, "replying to request " + requestId + " with " + response);
+        callback.onResponse(HalCallback.STATUS_OK, response);
+    }
+
+    private static void logEventWithErrorMessage(int eventTag, @NonNull VehiclePropValue value) {
+        if (TextUtils.isEmpty(value.value.stringValue)) {
+            EventLog.writeEvent(eventTag, value.value.int32Values.toArray());
+        } else {
+            // Must manually append the error message to the array of values
+            int size = value.value.int32Values.size();
+            Object[] list = new Object[size + 1];
+            value.value.int32Values.toArray(list);
+            list[list.length - 1] = value.value.stringValue;
+            EventLog.writeEvent(eventTag, list);
+        }
+    }
+
+    @VisibleForTesting
+    int getNextRequestId() {
+        synchronized (mLock) {
+            return ++mNextRequestId;
         }
     }
 
     @GuardedBy("mLock")
-    private void addPendingRequestLocked(int requestId, @NonNull Class<?> responseClass,
-            @NonNull HalCallback<?> callback) {
+    private <REQ, RESP> void addPendingRequestLocked(int requestId,
+            @NonNull Class<REQ> requestClass, @NonNull Class<RESP> responseClass,
+            @NonNull REQ request, @NonNull HalCallback<RESP> callback) {
+        PendingRequest<?, RESP> pendingRequest = new PendingRequest<>(responseClass, request,
+                callback);
         if (DBG) {
-            Log.d(TAG, "adding pending callback (of type " + responseClass.getName()
-                    + ") for request " + requestId);
+            Log.d(TAG, "adding pending request (" + pendingRequest + ") for requestId "
+                    + requestId);
         }
-        mPendingCallbacks.put(requestId, new Pair<>(responseClass, callback));
+        mPendingRequests.put(requestId, pendingRequest);
+    }
+
+    @GuardedBy("mLock")
+    private <RESP> void addPendingRequestLocked(int requestId, @NonNull Class<RESP> responseClass,
+            @NonNull HalCallback<RESP> callback) {
+        addPendingRequestLocked(requestId, Void.class, responseClass, /* request= */ null,
+                callback);
     }
 
     /**
@@ -293,12 +677,12 @@ public final class UserHalService extends HalServiceBase {
      * with {@link HalCallback#STATUS_CONCURRENT_OPERATION} when there is.
      */
     @GuardedBy("mLock")
-    private boolean hasPendingRequestLocked(@NonNull Class<?> requestClass,
+    private boolean hasPendingRequestLocked(@NonNull Class<?> responseClass,
             @NonNull HalCallback<?> callback) {
-        for (int i = 0; i < mPendingCallbacks.size(); i++) {
-            Pair<Class<?>, HalCallback<?>> pair = mPendingCallbacks.valueAt(i);
-            if (pair.first == requestClass) {
-                Log.w(TAG, "Already have pending request of type " + requestClass);
+        for (int i = 0; i < mPendingRequests.size(); i++) {
+            PendingRequest<?, ?> pendingRequest = mPendingRequests.valueAt(i);
+            if (pendingRequest.responseClass == responseClass) {
+                Log.w(TAG, "Already have pending request of type " + responseClass);
                 callback.onResponse(HalCallback.STATUS_CONCURRENT_OPERATION, null);
                 return true;
             }
@@ -309,73 +693,117 @@ public final class UserHalService extends HalServiceBase {
     /**
      * Removes the pending request and its timeout callback.
      */
-    private void handleRemovePendingRequest(int requestId) {
+    @Nullable
+    private PendingRequest<?, ?> handleRemovePendingRequest(int requestId) {
         if (DBG) Log.d(TAG, "Removing pending request #" + requestId);
         mHandler.removeMessages(requestId);
+        PendingRequest<?, ?> pendingRequest;
         synchronized (mLock) {
-            mPendingCallbacks.remove(requestId);
+            pendingRequest = mPendingRequests.get(requestId);
+            mPendingRequests.remove(requestId);
         }
+        return pendingRequest;
     }
 
     private void handleCheckIfRequestTimedOut(int requestId) {
-        Pair<Class<?>, HalCallback<?>> pair = getPendingCallback(requestId);
-        if (pair == null) return;
+        PendingRequest<?, ?> pendingRequest = getPendingRequest(requestId);
+        if (pendingRequest == null) return;
 
         Log.w(TAG, "Request #" + requestId + " timed out");
         handleRemovePendingRequest(requestId);
-        pair.second.onResponse(HalCallback.STATUS_HAL_RESPONSE_TIMEOUT, null);
+        pendingRequest.callback.onResponse(HalCallback.STATUS_HAL_RESPONSE_TIMEOUT, null);
     }
 
     @Nullable
-    private Pair<Class<?>, HalCallback<?>> getPendingCallback(int requestId) {
+    private PendingRequest<?, ?> getPendingRequest(int requestId) {
         synchronized (mLock) {
-            return mPendingCallbacks.get(requestId);
+            return mPendingRequests.get(requestId);
         }
     }
 
     private void handleOnInitialUserInfoResponse(VehiclePropValue value) {
-        // TODO(b/150413515): record (for dumping()) the last N responses.
         int requestId = value.value.int32Values.get(0);
         HalCallback<InitialUserInfoResponse> callback = handleGetPendingCallback(requestId,
                 InitialUserInfoResponse.class);
         if (callback == null) {
+            EventLog.writeEvent(EventLogTags.CAR_USER_HAL_INITIAL_USER_INFO_RESP, requestId,
+                    HalCallback.STATUS_INVALID);
             Log.w(TAG, "no callback for requestId " + requestId + ": " + value);
             return;
         }
         handleRemovePendingRequest(requestId);
-        InitialUserInfoResponse response = new InitialUserInfoResponse();
-        // TODO(b/150413515): use helper method to convert prop value to proper response
-        response.requestId = requestId;
-        response.action = value.value.int32Values.get(1);
-        switch (response.action) {
-            case InitialUserInfoResponseAction.DEFAULT:
-                response.userToSwitchOrCreate.userId = UserHandle.USER_NULL;
-                response.userToSwitchOrCreate.flags = UserFlags.NONE;
-                break;
-            case InitialUserInfoResponseAction.SWITCH:
-                response.userToSwitchOrCreate.userId = value.value.int32Values.get(2);
-                response.userToSwitchOrCreate.flags = UserFlags.NONE;
-                break;
-            case InitialUserInfoResponseAction.CREATE:
-                response.userToSwitchOrCreate.userId = UserHandle.USER_NULL;
-                response.userToSwitchOrCreate.flags = value.value.int32Values.get(2);
-                response.userNameToCreate = value.value.stringValue;
-                break;
-            default:
-                Log.e(TAG, "invalid action (" + response.action + ") from HAL: " + value);
-                callback.onResponse(HalCallback.STATUS_WRONG_HAL_RESPONSE, null);
-                return;
-        }
 
+        InitialUserInfoResponse response;
+        try {
+            response = UserHalHelper.toInitialUserInfoResponse(value);
+        } catch (RuntimeException e) {
+            Log.e(TAG, "invalid response (" + value + ") from HAL", e);
+            EventLog.writeEvent(EventLogTags.CAR_USER_HAL_INITIAL_USER_INFO_RESP, requestId,
+                    HalCallback.STATUS_WRONG_HAL_RESPONSE);
+            callback.onResponse(HalCallback.STATUS_WRONG_HAL_RESPONSE, null);
+            return;
+        }
+        EventLog.writeEvent(EventLogTags.CAR_USER_HAL_INITIAL_USER_INFO_RESP, requestId,
+                HalCallback.STATUS_OK, response.action,
+                response.userToSwitchOrCreate.userId, response.userToSwitchOrCreate.flags,
+                response.userNameToCreate, response.userLocales);
         if (DBG) Log.d(TAG, "replying to request " + requestId + " with " + response);
         callback.onResponse(HalCallback.STATUS_OK, response);
     }
 
-    private void handleOnSwicthUserResponse(VehiclePropValue value) {
+    private void handleOnSwitchUserResponse(VehiclePropValue value) {
+        int requestId = value.value.int32Values.get(0);
+        int messageType = value.value.int32Values.get(1);
+
+        if (messageType == SwitchUserMessageType.VEHICLE_RESPONSE) {
+            handleOnSwitchUserVehicleResponse(value);
+            return;
+        }
+
+        if (messageType == SwitchUserMessageType.VEHICLE_REQUEST) {
+            handleOnSwitchUserVehicleRequest(value);
+            return;
+        }
+
+        Log.e(TAG, "handleOnSwitchUserResponse invalid message type (" + messageType
+                + ") from HAL: " + value);
+
+        // check if a callback exists for the request ID
+        HalCallback<SwitchUserResponse> callback =
+                handleGetPendingCallback(requestId, SwitchUserResponse.class);
+        if (callback != null) {
+            handleRemovePendingRequest(requestId);
+            EventLog.writeEvent(EventLogTags.CAR_USER_HAL_SWITCH_USER_RESP, requestId,
+                    HalCallback.STATUS_WRONG_HAL_RESPONSE);
+            callback.onResponse(HalCallback.STATUS_WRONG_HAL_RESPONSE, null);
+            return;
+        }
+    }
+
+    private void handleOnSwitchUserVehicleRequest(VehiclePropValue value) {
+        int requestId = value.value.int32Values.get(0);
+        // Index 1 is message type, which is not required in this call.
+        int targetUserId = value.value.int32Values.get(2);
+        EventLog.writeEvent(EventLogTags.CAR_USER_HAL_OEM_SWITCH_USER_REQ, requestId, targetUserId);
+
+        // HAL vehicle request should have negative request ID
+        if (requestId >= 0) {
+            Log.e(TAG, "handleVehicleRequest invalid requestId (" + requestId + ") from HAL: "
+                    + value);
+            return;
+        }
+
+        CarUserService userService = CarLocalServices.getService(CarUserService.class);
+        userService.switchAndroidUserFromHal(requestId, targetUserId);
+    }
+
+    private void handleOnSwitchUserVehicleResponse(VehiclePropValue value) {
         int requestId = value.value.int32Values.get(0);
         HalCallback<SwitchUserResponse> callback =
                 handleGetPendingCallback(requestId, SwitchUserResponse.class);
         if (callback == null) {
+            EventLog.writeEvent(EventLogTags.CAR_USER_HAL_SWITCH_USER_RESP, requestId,
+                    HalCallback.STATUS_INVALID);
             Log.w(TAG, "no callback for requestId " + requestId + ": " + value);
             return;
         }
@@ -383,36 +811,67 @@ public final class UserHalService extends HalServiceBase {
         SwitchUserResponse response = new SwitchUserResponse();
         response.requestId = requestId;
         response.messageType = value.value.int32Values.get(1);
-        if (response.messageType != SwitchUserMessageType.VEHICLE_RESPONSE) {
-            Log.e(TAG, "invalid message type (" + response.messageType + ") from HAL: " + value);
-            callback.onResponse(HalCallback.STATUS_WRONG_HAL_RESPONSE, null);
-            return;
-        }
         response.status = value.value.int32Values.get(2);
+        response.errorMessage = value.value.stringValue;
         if (response.status == SwitchUserStatus.SUCCESS
                 || response.status == SwitchUserStatus.FAILURE) {
             if (DBG) {
                 Log.d(TAG, "replying to request " + requestId + " with " + response);
             }
+            EventLog.writeEvent(EventLogTags.CAR_USER_HAL_SWITCH_USER_RESP, requestId,
+                    HalCallback.STATUS_OK, response.status, response.errorMessage);
             callback.onResponse(HalCallback.STATUS_OK, response);
         } else {
+            EventLog.writeEvent(EventLogTags.CAR_USER_HAL_SWITCH_USER_RESP, requestId,
+                    HalCallback.STATUS_WRONG_HAL_RESPONSE, response.status, response.errorMessage);
+            Log.e(TAG, "invalid status (" + response.status + ") from HAL: " + value);
+            callback.onResponse(HalCallback.STATUS_WRONG_HAL_RESPONSE, null);
+        }
+    }
+
+    private void handleOnCreateUserResponse(VehiclePropValue value) {
+        int requestId = value.value.int32Values.get(0);
+        HalCallback<CreateUserResponse> callback =
+                handleGetPendingCallback(requestId, CreateUserResponse.class);
+        if (callback == null) {
+            EventLog.writeEvent(EventLogTags.CAR_USER_HAL_CREATE_USER_RESP, requestId,
+                    HalCallback.STATUS_INVALID);
+            Log.w(TAG, "no callback for requestId " + requestId + ": " + value);
+            return;
+        }
+        handleRemovePendingRequest(requestId);
+        CreateUserResponse response = new CreateUserResponse();
+        response.requestId = requestId;
+        response.status = value.value.int32Values.get(1);
+        response.errorMessage = value.value.stringValue;
+        if (response.status == CreateUserStatus.SUCCESS
+                || response.status == CreateUserStatus.FAILURE) {
+            if (DBG) {
+                Log.d(TAG, "replying to request " + requestId + " with " + response);
+            }
+            EventLog.writeEvent(EventLogTags.CAR_USER_HAL_CREATE_USER_RESP, requestId,
+                    HalCallback.STATUS_OK, response.status, response.errorMessage);
+            callback.onResponse(HalCallback.STATUS_OK, response);
+        } else {
+            EventLog.writeEvent(EventLogTags.CAR_USER_HAL_CREATE_USER_RESP, requestId,
+                    HalCallback.STATUS_WRONG_HAL_RESPONSE, response.status, response.errorMessage);
             Log.e(TAG, "invalid status (" + response.status + ") from HAL: " + value);
             callback.onResponse(HalCallback.STATUS_WRONG_HAL_RESPONSE, null);
         }
     }
 
     private <T> HalCallback<T> handleGetPendingCallback(int requestId, Class<T> clazz) {
-        Pair<Class<?>, HalCallback<?>> pair = getPendingCallback(requestId);
-        if (pair == null) return null;
+        PendingRequest<?, ?> pendingRequest = getPendingRequest(requestId);
+        if (pendingRequest == null) return null;
 
-        if (pair.first != clazz) {
-            Slog.e(TAG, "Invalid callback class for request " + requestId + ": expected" + clazz
-                    + ", but got is " + pair.first);
+        if (pendingRequest.responseClass != clazz) {
+            Log.e(TAG, "Invalid callback class for request " + requestId + ": expected" + clazz
+                    + ", but got is " + pendingRequest.responseClass);
             // TODO(b/150413515): add unit test for this scenario once it supports other properties
             return null;
         }
         @SuppressWarnings("unchecked")
-        HalCallback<T> callback = (HalCallback<T>) pair.second;
+        HalCallback<T> callback = (HalCallback<T>) pendingRequest.callback;
         return callback;
     }
 
@@ -437,18 +896,81 @@ public final class UserHalService extends HalServiceBase {
             }
             writer.printf("next request id: %d\n", mNextRequestId);
 
-            if (mPendingCallbacks.size() == 0) {
+            int numberPendingCallbacks = mPendingRequests.size();
+            if (numberPendingCallbacks == 0) {
                 writer.println("no pending callbacks");
             } else {
-                writer.printf("pending callbacks: %s\n", mPendingCallbacks);
+                writer.printf("%d pending callbacks: %s\n", numberPendingCallbacks);
+                for (int i = 0; i < numberPendingCallbacks; i++) {
+                    writer.print(indent);
+                    mPendingRequests.valueAt(i).dump(writer);
+                    writer.println();
+                }
             }
         }
     }
 
-    private void dumpSystemProperty(@NonNull PrintWriter writer, @NonNull String indent,
+    private static void dumpSystemProperty(@NonNull PrintWriter writer, @NonNull String indent,
             @NonNull String name, Optional<?> prop) {
         String value = prop.isPresent() ? prop.get().toString() : "<NOT SET>";
         writer.printf("%s%s=%s\n", indent, name, value);
+    }
+
+    private static final class PendingRequest<REQ, RESP> {
+        @NonNull
+        public final Class<RESP> responseClass;
+
+        @Nullable
+        public final REQ request;
+
+        @NonNull
+        public final HalCallback<RESP> callback;
+
+        PendingRequest(@NonNull Class<RESP> responseClass, @Nullable REQ request,
+                @NonNull HalCallback<RESP> callback) {
+            this.responseClass = responseClass;
+            this.request = request;
+            this.callback = callback;
+        }
+
+        /**
+         * Gets the safely cast request for a given pending request.
+         */
+        @Nullable
+        private static <T> T getRequest(@Nullable PendingRequest<?, ?> pendingRequest,
+                @NonNull Class<T> clazz, int requestId) {
+            if (pendingRequest == null) {
+                Log.e(TAG, "No pending request for id " + requestId);
+                return null;
+
+            }
+            Object request = pendingRequest.request;
+            if (!clazz.isInstance(request)) {
+                Log.e(TAG, "Wrong pending request for id " + requestId + ": " + pendingRequest);
+                return null;
+            }
+            return clazz.cast(request);
+        }
+
+        public void dump(@NonNull PrintWriter pw) {
+            pw.printf("Class: %s Callback: %s", responseClass.getSimpleName(),
+                    FunctionalUtils.getLambdaName(callback));
+            if (request != null) {
+                pw.printf(" Request: %s", request);
+            }
+        }
+
+        @Override
+        public String toString() {
+            StringWriter sw = new StringWriter();
+            PrintWriter pw = new PrintWriter(sw);
+            pw.print("[PendingRequest: ");
+            dump(pw);
+            pw.print("]");
+            pw.flush();
+            return sw.toString();
+        }
+
     }
 
 }

@@ -161,7 +161,7 @@ public final class Car {
     public static final String AUDIO_SERVICE = "audio";
 
     /** Service name for {@link CarNavigationStatusManager} */
-    @MandatoryFeature
+    @OptionalFeature
     public static final String CAR_NAVIGATION_SERVICE = "car_navigation_service";
 
     /** Service name for {@link CarOccupantZoneManager} */
@@ -988,6 +988,10 @@ public final class Car {
 
     /**
      * A factory method that creates Car instance for all Car API access.
+     *
+     * <p>Instance created with this should be disconnected from car service by calling
+     * {@link #disconnect()} before the passed {code Context} is released.
+     *
      * @param context App's Context. This should not be null. If you are passing
      *                {@link ContextWrapper}, make sure that its base Context is non-null as well.
      *                Otherwise it will throw {@link java.lang.NullPointerException}.
@@ -1020,6 +1024,9 @@ public final class Car {
      * A factory method that creates Car instance for all Car API access using main thread {@code
      * Looper}.
      *
+     * <p>Instance created with this should be disconnected from car service by calling
+     * {@link #disconnect()} before the passed {code Context} is released.
+     *
      * @see #createCar(Context, ServiceConnection, Handler)
      *
      * @deprecated use {@link #createCar(Context, Handler)} instead.
@@ -1032,6 +1039,9 @@ public final class Car {
     /**
      * Creates new {@link Car} object which connected synchronously to Car Service and ready to use.
      *
+     * <p>Instance created with this should be disconnected from car service by calling
+     * {@link #disconnect()} before the passed {code Context} is released.
+     *
      * @param context application's context
      *
      * @return Car object if operation succeeded, otherwise null.
@@ -1043,6 +1053,9 @@ public final class Car {
 
     /**
      * Creates new {@link Car} object which connected synchronously to Car Service and ready to use.
+     *
+     * <p>Instance created with this should be disconnected from car service by calling
+     * {@link #disconnect()} before the passed {code Context} is released.
      *
      * @param context App's Context. This should not be null. If you are passing
      *                {@link ContextWrapper}, make sure that its base Context is non-null as well.
@@ -1110,6 +1123,9 @@ public final class Car {
 
     /**
      * Creates new {@link Car} object with {@link CarServiceLifecycleListener}.
+     *
+     * <p>Instance created with this should be disconnected from car service by calling
+     * {@link #disconnect()} before the passed {code Context} is released.
      *
      * <p> If car service is ready inside this call and if the caller is running in the main thread,
      * {@link CarServiceLifecycleListener#onLifecycleChanged(Car, boolean)} will be called
@@ -1565,12 +1581,14 @@ public final class Car {
     }
 
     /** @hide */
-    Handler getEventHandler() {
+    @VisibleForTesting
+    public Handler getEventHandler() {
         return mEventHandler;
     }
 
     /** @hide */
-    <T> T handleRemoteExceptionFromCarService(RemoteException e, T returnValue) {
+    @VisibleForTesting
+    public <T> T handleRemoteExceptionFromCarService(RemoteException e, T returnValue) {
         handleRemoteExceptionFromCarService(e);
         return returnValue;
     }

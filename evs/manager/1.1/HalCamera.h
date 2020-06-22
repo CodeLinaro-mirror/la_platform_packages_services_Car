@@ -17,19 +17,21 @@
 #ifndef ANDROID_AUTOMOTIVE_EVS_V1_1_HALCAMERA_H
 #define ANDROID_AUTOMOTIVE_EVS_V1_1_HALCAMERA_H
 
-#include <android/hardware/automotive/evs/1.1/types.h>
-#include <android/hardware/automotive/evs/1.1/IEvsCamera.h>
-#include <android/hardware/automotive/evs/1.1/IEvsCameraStream.h>
-#include <ui/GraphicBuffer.h>
-
-#include <thread>
-#include <list>
-#include <deque>
-#include <unordered_map>
-
+#include "stats/CameraUsageStats.h"
 #include "sync/unique_fd.h"
 #include "sync/unique_fence.h"
 #include "sync/unique_timeline.h"
+
+#include <deque>
+#include <list>
+#include <thread>
+#include <unordered_map>
+
+#include <android/hardware/automotive/evs/1.1/types.h>
+#include <android/hardware/automotive/evs/1.1/IEvsCamera.h>
+#include <android/hardware/automotive/evs/1.1/IEvsCameraStream.h>
+#include <utils/Mutex.h>
+#include <utils/SystemClock.h>
 
 using namespace ::android::hardware::automotive::evs::V1_1;
 using ::android::hardware::camera::device::V3_2::Stream;
@@ -59,14 +61,21 @@ class VirtualCamera;    // From VirtualCamera.h
 // stream from the hardware camera and distribute it to the associated VirtualCamera objects.
 class HalCamera : public IEvsCameraStream_1_1 {
 public:
-    HalCamera(sp<IEvsCamera_1_1> hwCamera, std::string deviceId = "", Stream cfg = {})
+    HalCamera(sp<IEvsCamera_1_1> hwCamera,
+              std::string deviceId = "",
+              int32_t recordId = 0,
+              Stream cfg = {})
         : mHwCamera(hwCamera),
           mId(deviceId),
           mStreamConfig(cfg),
-          mSyncSupported(UniqueTimeline::Supported()) {
+          mSyncSupported(UniqueTimeline::Supported()),
+          mTimeCreatedMs(android::uptimeMillis()),
+          mUsageStats(new CameraUsageStats(recordId)) {
         mCurrentRequests = &mFrameRequests[0];
         mNextRequests    = &mFrameRequests[1];
     }
+
+    virtual ~HalCamera();
 
     // Factory methods for client VirtualCameras
     sp<VirtualCamera>     makeVirtualCamera();
@@ -85,7 +94,7 @@ public:
                                         const int64_t timestamp);
 
     Return<EvsResult>   clientStreamStarting();
-    void                clientStreamEnding(sp<VirtualCamera> client);
+    void                clientStreamEnding(const VirtualCamera* client);
     Return<void>        doneWithFrame(const BufferDesc_1_0& buffer);
     Return<void>        doneWithFrame(const BufferDesc_1_1& buffer);
     Return<EvsResult>   setMaster(sp<VirtualCamera> virtualCamera);
@@ -95,6 +104,18 @@ public:
                                      CameraParam id, int32_t& value);
     Return<EvsResult>   getParameter(CameraParam id, int32_t& value);
     bool                isSyncSupported() const { return mSyncSupported; }
+
+    // Returns a snapshot of collected usage statistics
+    CameraUsageStatsRecord getStats() const;
+
+    // Returns active stream configuration
+    Stream getStreamConfiguration() const;
+
+    // Returns a string showing the current status
+    std::string toString(const char* indent = "") const;
+
+    // Returns a string showing current stream configuration
+    static std::string toString(Stream configuration, const char* indent = "");
 
     // Methods from ::android::hardware::automotive::evs::V1_0::IEvsCameraStream follow.
     Return<void> deliverFrame(const BufferDesc_1_0& buffer) override;
@@ -129,13 +150,19 @@ private:
     };
 
     // synchronization
-    std::mutex                mFrameMutex;
+    mutable std::mutex        mFrameMutex;
     std::deque<FrameRequest>  mFrameRequests[2] GUARDED_BY(mFrameMutex);
     std::deque<FrameRequest>* mCurrentRequests  PT_GUARDED_BY(mFrameMutex);
     std::deque<FrameRequest>* mNextRequests     PT_GUARDED_BY(mFrameMutex);
     std::unordered_map<uint64_t,
                        std::unique_ptr<UniqueTimeline>> mTimelines GUARDED_BY(mFrameMutex);
     bool                      mSyncSupported;
+
+    // Time this object was created
+    int64_t mTimeCreatedMs;
+
+    // usage statistics to collect
+    android::sp<CameraUsageStats> mUsageStats;
 };
 
 } // namespace implementation

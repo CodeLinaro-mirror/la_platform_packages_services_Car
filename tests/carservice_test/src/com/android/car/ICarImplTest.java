@@ -17,7 +17,6 @@
 package com.android.car;
 
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doThrow;
-import static com.android.dx.mockito.inline.extended.ExtendedMockito.mockitoSession;
 
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
@@ -28,6 +27,7 @@ import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.spy;
 
 import android.car.Car;
+import android.car.test.mocks.AbstractExtendedMockitoTestCase;
 import android.content.Context;
 import android.content.res.Resources;
 import android.hardware.automotive.vehicle.V2_0.IVehicle;
@@ -56,9 +56,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
-import org.mockito.MockitoSession;
 import org.mockito.junit.MockitoJUnitRunner;
-import org.mockito.quality.Strictness;
 
 import java.io.File;
 import java.io.IOException;
@@ -77,8 +75,8 @@ import java.io.IOException;
  * 7. {@link TimeInterface} provides access to wake lock operations.
  */
 @RunWith(MockitoJUnitRunner.class)
-public class ICarImplTest {
-    private static final String TAG = "ICarImplTest";
+public class ICarImplTest extends AbstractExtendedMockitoTestCase {
+    private static final String TAG = ICarImplTest.class.getSimpleName();
 
     @Mock private ActivityManagerInterface mMockActivityManagerInterface;
     @Mock private DisplayInterface mMockDisplayInterface;
@@ -90,7 +88,6 @@ public class ICarImplTest {
     @Mock private CarWatchdogService mCarWatchdogService;
 
     private Context mContext;
-    private MockitoSession mSession;
     private SystemInterface mFakeSystemInterface;
     private UserManager mUserManager;
 
@@ -101,11 +98,6 @@ public class ICarImplTest {
      */
     @Before
     public void setUp() throws Exception {
-        mSession = mockitoSession()
-                .initMocks(this)
-                .strictness(Strictness.LENIENT)
-                .startMocking();
-
         // InstrumentationTestRunner prepares a looper, but AndroidJUnitRunner does not.
         // http://b/25897652.
         if (Looper.myLooper() == null) {
@@ -146,11 +138,13 @@ public class ICarImplTest {
      */
     @After
     public void tearDown() {
-        if (mMockIOInterface != null) {
-            mMockIOInterface.tearDown();
+        try {
+            if (mMockIOInterface != null) {
+                mMockIOInterface.tearDown();
+            }
+        } finally {
+            CarLocalServices.removeAllServices();
         }
-        mSession.finishMocking();
-        CarLocalServices.removeAllServices();
     }
 
     @Test

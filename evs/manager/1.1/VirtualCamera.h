@@ -21,7 +21,6 @@
 #include <android/hardware/automotive/evs/1.1/IEvsCamera.h>
 #include <android/hardware/automotive/evs/1.1/IEvsCameraStream.h>
 #include <android/hardware/automotive/evs/1.1/IEvsDisplay.h>
-#include <ui/GraphicBuffer.h>
 
 #include <thread>
 #include <deque>
@@ -107,6 +106,9 @@ public:
                                           getExtendedInfo_1_1_cb _hidl_cb) override;
     Return<void>      importExternalBuffers(const hidl_vec<BufferDesc_1_1>& buffers,
                                             importExternalBuffers_cb _hidl_cb) override;
+
+    // Dump current status to a given file descriptor
+    std::string       toString(const char* indent = "") const;
 
 
 private:

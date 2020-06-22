@@ -929,18 +929,52 @@ public final class VehiclePropertyIds {
     /**
      * Property to get the initial settings for multi-user management (such as initial user).
      *
-     * <p>Doesn't require permission because it's not exposed externally.
+     * <p>Doesn't require permission because it's not exposed through
+     * {@link android.car.hardware.property.CarPropertyManager}.
      *
      * @hide
      */
     public static final int INITIAL_USER_INFO = 299896583;
 
     /**
-     *  TODO(b/150409110): javadoc, set pemission, etc...
+     * Property to switch user for multi-user management.
+     *
+     * <p>Doesn't require permission because it's not exposed through
+     * {@link android.car.hardware.property.CarPropertyManager}.
      *
      * @hide
      */
     public static final int SWITCH_USER = 299896584;
+
+    /**
+     * Property to create a new user for multi-user management.
+     *
+     * <p>Doesn't require permission because it's not exposed through
+     * {@link android.car.hardware.property.CarPropertyManager}.
+     *
+     * @hide
+     */
+    public static final int CREATE_USER = 299896585;
+
+    /**
+     * Property to remove a new user for multi-user management.
+     *
+     * <p>Doesn't require permission because it's not exposed through
+     * {@link android.car.hardware.property.CarPropertyManager}.
+     *
+     * @hide
+     */
+    public static final int REMOVE_USER = 299896586;
+
+    /**
+     * Property to get / set the user authentication types associated with an Android user.
+     *
+     * <p>Doesn't require permission because it's not exposed through
+     * {@link android.car.hardware.property.CarPropertyManager}.
+     *
+     * @hide
+     */
+    public static final int USER_IDENTIFICATION_ASSOCIATION = 299896587;
 
     /**
      * Gets a user-friendly representation of a property.
@@ -1215,6 +1249,12 @@ public final class VehiclePropertyIds {
                 return "INITIAL_USER_INFO";
             case SWITCH_USER:
                 return "SWITCH_USER";
+            case CREATE_USER:
+                return "CREATE_USER";
+            case REMOVE_USER:
+                return "REMOVE_USER";
+            case USER_IDENTIFICATION_ASSOCIATION:
+                return "USER_IDENTIFICATION_ASSOCIATION";
             default:
                 return "0x" + Integer.toHexString(property);
         }
