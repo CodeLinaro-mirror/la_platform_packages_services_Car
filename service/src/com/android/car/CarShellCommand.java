@@ -34,16 +34,24 @@ import android.car.Car;
 import android.car.input.CarInputManager;
 import android.car.input.RotaryEvent;
 import android.car.user.CarUserManager;
+import android.car.user.UserCreationResult;
 import android.car.user.UserIdentificationAssociationResponse;
+import android.car.user.UserRemovalResult;
 import android.car.user.UserSwitchResult;
 import android.car.userlib.HalCallback;
 import android.car.userlib.UserHalHelper;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.hardware.automotive.vehicle.V2_0.CreateUserRequest;
+import android.hardware.automotive.vehicle.V2_0.CreateUserStatus;
+import android.hardware.automotive.vehicle.V2_0.InitialUserInfoResponse;
 import android.hardware.automotive.vehicle.V2_0.InitialUserInfoResponseAction;
+import android.hardware.automotive.vehicle.V2_0.RemoveUserRequest;
 import android.hardware.automotive.vehicle.V2_0.SwitchUserMessageType;
+import android.hardware.automotive.vehicle.V2_0.SwitchUserRequest;
 import android.hardware.automotive.vehicle.V2_0.SwitchUserStatus;
+import android.hardware.automotive.vehicle.V2_0.UserFlags;
 import android.hardware.automotive.vehicle.V2_0.UserIdentificationAssociation;
 import android.hardware.automotive.vehicle.V2_0.UserIdentificationAssociationSetValue;
 import android.hardware.automotive.vehicle.V2_0.UserIdentificationAssociationType;
@@ -61,6 +69,7 @@ import android.os.Process;
 import android.os.ShellCommand;
 import android.os.SystemClock;
 import android.os.UserHandle;
+import android.os.UserManager;
 import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.Log;
@@ -85,6 +94,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 final class CarShellCommand extends ShellCommand {
 
@@ -117,6 +127,8 @@ final class CarShellCommand extends ShellCommand {
     private static final String COMMAND_INJECT_ROTARY = "inject-rotary";
     private static final String COMMAND_GET_INITIAL_USER_INFO = "get-initial-user-info";
     private static final String COMMAND_SWITCH_USER = "switch-user";
+    private static final String COMMAND_REMOVE_USER = "remove-user";
+    private static final String COMMAND_CREATE_USER = "create-user";
     private static final String COMMAND_GET_INITIAL_USER = "get-initial-user";
     private static final String COMMAND_SET_USER_ID_TO_OCCUPANT_ZONE =
             "set-occupant-zone-for-user";
@@ -145,6 +157,10 @@ final class CarShellCommand extends ShellCommand {
         USER_BUILD_COMMAND_TO_PERMISSION_MAP.put(COMMAND_GET_INITIAL_USER_INFO,
                 android.Manifest.permission.MANAGE_USERS);
         USER_BUILD_COMMAND_TO_PERMISSION_MAP.put(COMMAND_SWITCH_USER,
+                android.Manifest.permission.MANAGE_USERS);
+        USER_BUILD_COMMAND_TO_PERMISSION_MAP.put(COMMAND_REMOVE_USER,
+                android.Manifest.permission.MANAGE_USERS);
+        USER_BUILD_COMMAND_TO_PERMISSION_MAP.put(COMMAND_CREATE_USER,
                 android.Manifest.permission.MANAGE_USERS);
         USER_BUILD_COMMAND_TO_PERMISSION_MAP.put(COMMAND_GET_USER_AUTH_ASSOCIATION,
                 android.Manifest.permission.MANAGE_USERS);
@@ -287,8 +303,11 @@ final class CarShellCommand extends ShellCommand {
         pw.println("\t  Print this help text.");
         pw.println("\tday-night-mode [day|night|sensor]");
         pw.println("\t  Force into day/night mode or restore to auto.");
-        pw.println("\tinject-vhal-event property [zone] data(can be comma separated list)");
+        pw.println("\tinject-vhal-event property [zone] data(can be comma separated list) "
+                + "[-t delay_time_seconds]");
         pw.println("\t  Inject a vehicle property for testing.");
+        pw.println("\t  delay_time_seconds: the event timestamp is increased by certain second.");
+        pw.println("\t  If not specified, it will be 0.");
         pw.println("\tinject-error-event property zone errorCode");
         pw.println("\t  Inject an error event from VHAL for testing.");
         pw.println("\tenable-uxr true|false");
@@ -346,17 +365,29 @@ final class CarShellCommand extends ShellCommand {
         pw.println("\t  delta_times_ms: a list of delta time (current time minus event time)");
         pw.println("\t                  in descending order. If not specified, it will be 0.");
 
-        pw.printf("\t%s <REQ_TYPE> [--timeout TIMEOUT_MS]\n", COMMAND_GET_INITIAL_USER_INFO);
+        pw.printf("\t%s <REQ_TYPE> [--hal-only] [--timeout TIMEOUT_MS]\n",
+                COMMAND_GET_INITIAL_USER_INFO);
         pw.println("\t  Calls the Vehicle HAL to get the initial boot info, passing the given");
         pw.println("\t  REQ_TYPE (which could be either FIRST_BOOT, FIRST_BOOT_AFTER_OTA, ");
         pw.println("\t  COLD_BOOT, RESUME, or any numeric value that would be passed 'as-is')");
         pw.println("\t  and an optional TIMEOUT_MS to wait for the HAL response (if not set,");
         pw.println("\t  it will use a  default value).");
+        pw.println("\t  The --hal-only option only calls HAL, without using CarUserService.");
 
         pw.printf("\t%s <USER_ID> [--hal-only] [--timeout TIMEOUT_MS]\n", COMMAND_SWITCH_USER);
         pw.println("\t  Switches to user USER_ID using the HAL integration.");
         pw.println("\t  The --hal-only option only calls HAL, without switching the user,");
-        pw.println("\t  while the --timeout defines how long to wait for the HAL response");
+        pw.println("\t  while the --timeout defines how long to wait for the HAL response.");
+
+        pw.printf("\t%s <USER_ID> [--hal-only]\n", COMMAND_REMOVE_USER);
+        pw.println("\t  Removes user with USER_ID using the HAL integration.");
+        pw.println("\t  The --hal-only option only calls HAL, without removing the user,");
+
+        pw.printf("\t%s [--hal-only] [--timeout TIMEOUT_MS] [--type TYPE] [--flags FLAGS] [NAME]\n",
+                COMMAND_CREATE_USER);
+        pw.println("\t  Creates a new user using the HAL integration.");
+        pw.println("\t  The --hal-only uses UserManager to create the user,");
+        pw.println("\t  while the --timeout defines how long to wait for the HAL response.");
 
         pw.printf("\t%s\n", COMMAND_GET_INITIAL_USER);
         pw.printf("\t  Gets the id of the initial user (or %s when it's not available)\n",
@@ -440,9 +471,12 @@ final class CarShellCommand extends ShellCommand {
             case COMMAND_INJECT_VHAL_EVENT:
                 String zone = PARAM_VEHICLE_PROPERTY_AREA_GLOBAL;
                 String data;
-                if (args.length != 3 && args.length != 4) {
+                int argNum = args.length;
+                if (argNum < 3 || argNum > 6) {
                     return showInvalidArguments(writer);
-                } else if (args.length == 4) {
+                }
+                String delayTime = args[argNum - 2].equals("-t") ?  args[argNum - 1] : "0";
+                if (argNum == 4 || argNum == 6) {
                     // Zoned
                     zone = args[2];
                     data = args[3];
@@ -450,7 +484,7 @@ final class CarShellCommand extends ShellCommand {
                     // Global
                     data = args[2];
                 }
-                injectVhalEvent(args[1], zone, data, false, writer);
+                injectVhalEvent(args[1], zone, data, false, delayTime, writer);
                 break;
             case COMMAND_INJECT_ERROR_EVENT:
                 if (args.length != 4) {
@@ -458,7 +492,7 @@ final class CarShellCommand extends ShellCommand {
                 }
                 String errorAreaId = args[2];
                 String errorCode = args[3];
-                injectVhalEvent(args[1], errorAreaId, errorCode, true, writer);
+                injectVhalEvent(args[1], errorAreaId, errorCode, true, "0", writer);
                 break;
             case COMMAND_ENABLE_UXR:
                 if (args.length != 2) {
@@ -583,6 +617,12 @@ final class CarShellCommand extends ShellCommand {
                 break;
             case COMMAND_SWITCH_USER:
                 switchUser(args, writer);
+                break;
+            case COMMAND_REMOVE_USER:
+                removeUser(args, writer);
+                break;
+            case COMMAND_CREATE_USER:
+                createUser(args, writer);
                 break;
             case COMMAND_GET_INITIAL_USER:
                 getInitialUser(writer);
@@ -815,6 +855,7 @@ final class CarShellCommand extends ShellCommand {
         // Gets the request type
         String typeArg = args[1];
         int requestType = UserHalHelper.parseInitialUserInfoRequestType(typeArg);
+        boolean halOnly = false;
 
         int timeout = DEFAULT_HAL_TIMEOUT_MS;
         for (int i = 2; i < args.length; i++) {
@@ -822,6 +863,9 @@ final class CarShellCommand extends ShellCommand {
             switch (arg) {
                 case "--timeout":
                     timeout = Integer.parseInt(args[++i]);
+                    break;
+                case "--hal-only":
+                    halOnly = true;
                     break;
                 default:
                     writer.println("Invalid option at index " + i + ": " + arg);
@@ -833,12 +877,8 @@ final class CarShellCommand extends ShellCommand {
         Log.d(TAG, "handleGetInitialUserInfo(): type=" + requestType + " (" + typeArg
                 + "), timeout=" + timeout);
 
-        UserHalService userHal = mHal.getUserHal();
-        // TODO(b/150413515): use UserHalHelper to populate it with current users
-        UsersInfo usersInfo = new UsersInfo();
         CountDownLatch latch = new CountDownLatch(1);
-
-        userHal.getInitialUserInfo(requestType, timeout, usersInfo, (status, resp) -> {
+        HalCallback<InitialUserInfoResponse> callback = (status, resp) -> {
             try {
                 Log.d(TAG, "GetUserInfoResponse: status=" + status + ", resp=" + resp);
                 writer.printf("Call status: %s\n",
@@ -849,11 +889,38 @@ final class CarShellCommand extends ShellCommand {
                 writer.printf("Request id: %d\n", resp.requestId);
                 writer.printf("Action: %s\n",
                         InitialUserInfoResponseAction.toString(resp.action));
+                if (!TextUtils.isEmpty(resp.userNameToCreate)) {
+                    writer.printf("User name: %s\n", resp.userNameToCreate);
+                }
+                if (resp.userToSwitchOrCreate.userId != UserHandle.USER_NULL) {
+                    writer.printf("User id: %d\n", resp.userToSwitchOrCreate.userId);
+                }
+                if (resp.userToSwitchOrCreate.flags != UserFlags.NONE) {
+                    writer.printf("User flags: %s\n",
+                            UserHalHelper.userFlagsToString(resp.userToSwitchOrCreate.flags));
+                }
+                if (!TextUtils.isEmpty(resp.userLocales)) {
+                    writer.printf("User locales: %s\n", resp.userLocales);
+                }
             } finally {
                 latch.countDown();
             }
-        });
+        };
+        if (halOnly) {
+            UsersInfo usersInfo = generateUsersInfo();
+            mHal.getUserHal().getInitialUserInfo(requestType, timeout, usersInfo, callback);
+        } else {
+            mCarUserService.getInitialUserInfo(requestType, callback);
+        }
         waitForHal(writer, latch, timeout);
+    }
+
+    private UsersInfo generateUsersInfo() {
+        return UserHalHelper.newUsersInfo(UserManager.get(mContext));
+    }
+
+    private int getUserHalFlags(@UserIdInt int userId) {
+        return UserHalHelper.getFlags(UserManager.get(mContext), userId);
     }
 
     private static void waitForHal(PrintWriter writer, CountDownLatch latch, int timeoutMs) {
@@ -893,19 +960,21 @@ final class CarShellCommand extends ShellCommand {
             }
         }
 
-        Log.d(TAG, "handleSwitchUser(): target=" + targetUserId + ", halOnly=" + halOnly
+        Log.d(TAG, "switchUser(): target=" + targetUserId + ", halOnly=" + halOnly
                 + ", timeout=" + timeout);
 
         if (halOnly) {
             CountDownLatch latch = new CountDownLatch(1);
             UserHalService userHal = mHal.getUserHal();
-            // TODO(b/150413515): use UserHalHelper to populate it with current users
-            UsersInfo usersInfo = new UsersInfo();
             UserInfo targetUserInfo = new UserInfo();
             targetUserInfo.userId = targetUserId;
-            // TODO(b/150413515): use UserHalHelper to set user flags
+            targetUserInfo.flags = getUserHalFlags(targetUserId);
 
-            userHal.switchUser(targetUserInfo, timeout, usersInfo, (status, resp) -> {
+            SwitchUserRequest request = new SwitchUserRequest();
+            request.targetUser = targetUserInfo;
+            request.usersInfo = generateUsersInfo();
+
+            userHal.switchUser(request, timeout, (status, resp) -> {
                 try {
                     Log.d(TAG, "SwitchUserResponse: status=" + status + ", resp=" + resp);
                     writer.printf("Call Status: %s\n",
@@ -921,8 +990,12 @@ final class CarShellCommand extends ShellCommand {
                     if (!TextUtils.isEmpty(errorMessage)) {
                         writer.printf("Error message: %s", errorMessage);
                     }
-                    // TODO(b/150409110): If HAL returned OK, make a "post-switch" call to the HAL
-                    // indicating an Android error. This is to "rollback" the HAL switch.
+                    // If HAL returned OK, make a "post-switch" call to the HAL indicating an
+                    // Android error. This is to "rollback" the HAL switch.
+                    if (status == HalCallback.STATUS_OK
+                            && resp.status == SwitchUserStatus.SUCCESS) {
+                        userHal.postSwitchResponse(request);
+                    }
                 } finally {
                     latch.countDown();
                 }
@@ -934,12 +1007,166 @@ final class CarShellCommand extends ShellCommand {
         AndroidFuture<UserSwitchResult> future = carUserManager.switchUser(targetUserId);
         UserSwitchResult result = waitForFuture(writer, future, timeout);
         if (result == null) return;
-        writer.printf("UserSwitchResult: status = %s\n",
+        writer.printf("UserSwitchResult: status=%s",
                 UserSwitchResult.statusToString(result.getStatus()));
         String msg = result.getErrorMessage();
-        if (msg != null && !msg.isEmpty()) {
-            writer.printf("UserSwitchResult: Message = %s\n", msg);
+        if (!TextUtils.isEmpty(msg)) {
+            writer.printf(", errorMessage=%s", msg);
         }
+        writer.println();
+    }
+
+    private void createUser(String[] args, PrintWriter writer) {
+        int timeout = DEFAULT_HAL_TIMEOUT_MS;
+        int flags = 0;
+        boolean halOnly = false;
+        String name = null;
+        String userType = null;
+
+        for (int i = 1; i < args.length; i++) {
+            String arg = args[i];
+            switch (arg) {
+                case "--timeout":
+                    timeout = Integer.parseInt(args[++i]);
+                    break;
+                case "--hal-only":
+                    halOnly = true;
+                    break;
+                case "--flags":
+                    flags = Integer.parseInt(args[++i]);
+                    break;
+                case "--type":
+                    userType = args[++i];
+                    break;
+                default:
+                    if (name != null) {
+                        writer.println("Invalid option at index " + i + ": " + arg);
+                        return;
+                    }
+                    name = arg;
+            }
+        }
+
+        if (userType == null) {
+            userType = android.content.pm.UserInfo.getDefaultUserType(flags);
+        }
+
+        Log.d(TAG, "createUser(): name=" + name + ", userType=" + userType
+                + ", flags=" + UserHalHelper.userFlagsToString(flags)
+                + ", halOnly=" + halOnly + ", timeout=" + timeout);
+
+        if (!halOnly) {
+            CarUserManager carUserManager = getCarUserManager(mContext);
+            AndroidFuture<UserCreationResult> future = carUserManager
+                    .createUser(name, userType, flags);
+
+            UserCreationResult result = waitForFuture(writer, future, timeout);
+            if (result == null) return;
+
+            android.content.pm.UserInfo user = result.getUser();
+            writer.printf("UserCreationResult: status=%s, user=%s",
+                    UserCreationResult.statusToString(result.getStatus()),
+                    user == null ? "N/A" : user.toFullString());
+            String msg = result.getErrorMessage();
+            if (!TextUtils.isEmpty(msg)) {
+                writer.printf(", errorMessage=%s", msg);
+            }
+            writer.println();
+            return;
+        }
+
+        CountDownLatch latch = new CountDownLatch(1);
+        UserHalService userHal = mHal.getUserHal();
+
+        CreateUserRequest request = new CreateUserRequest();
+
+        UserManager um = UserManager.get(mContext);
+        android.content.pm.UserInfo newUser = um.createUser(name, userType, flags);
+        if (newUser == null) {
+            writer.printf("Failed to create user");
+            return;
+        }
+        writer.printf("New user: %s\n", newUser.toFullString());
+        Log.i(TAG, "Created new user: " + newUser.toFullString());
+
+        request.newUserInfo.userId = newUser.id;
+        request.newUserInfo.flags = UserHalHelper.convertFlags(newUser);
+
+        request.usersInfo = generateUsersInfo();
+
+        AtomicBoolean halOk = new AtomicBoolean(false);
+        try {
+            userHal.createUser(request, timeout, (status, resp) -> {
+                Log.d(TAG, "CreateUserResponse: status=" + status + ", resp=" + resp);
+                writer.printf("Call Status: %s\n",
+                        UserHalHelper.halCallbackStatusToString(status));
+                if (status == HalCallback.STATUS_OK) {
+                    halOk.set(resp.status == CreateUserStatus.SUCCESS);
+                    writer.printf("Request id: %d\n", resp.requestId);
+                    writer.printf("Create Status: %s\n", CreateUserStatus.toString(resp.status));
+                    String errorMessage = resp.errorMessage;
+                    if (!TextUtils.isEmpty(errorMessage)) {
+                        writer.printf("Error message: %s", errorMessage);
+                    }
+                }
+                latch.countDown();
+            });
+            waitForHal(writer, latch, timeout);
+        } catch (Exception e) {
+            writer.printf("HAL failed: %s\n", e);
+        } finally {
+            if (!halOk.get()) {
+                writer.printf("Removing user %d due to HAL failure\n", newUser.id);
+                boolean removed = um.removeUser(newUser.id);
+                writer.printf("User removed: %b\n", removed);
+            }
+        }
+    }
+
+    private void removeUser(String[] args, PrintWriter writer) {
+        if (args.length < 2) {
+            writer.println("Insufficient number of args");
+            return;
+        }
+
+        int userId = Integer.parseInt(args[1]);
+        boolean halOnly = false;
+
+        for (int i = 2; i < args.length; i++) {
+            String arg = args[i];
+            switch (arg) {
+                case "--hal-only":
+                    halOnly = true;
+                    break;
+                default:
+                    writer.println("Invalid option at index " + i + ": " + arg);
+                    return;
+            }
+        }
+
+        Log.d(TAG, "handleRemoveUser(): User to remove=" + userId + ", halOnly=" + halOnly);
+
+        if (halOnly) {
+            UserHalService userHal = mHal.getUserHal();
+            UsersInfo usersInfo = generateUsersInfo();
+            UserInfo userInfo = new UserInfo();
+            userInfo.userId = userId;
+            userInfo.flags = getUserHalFlags(userId);
+
+            RemoveUserRequest request = new RemoveUserRequest();
+            request.removedUserInfo = userInfo;
+            request.usersInfo = usersInfo;
+
+            userHal.removeUser(request);
+            writer.printf("User removal sent for HAL only.\n");
+            return;
+        }
+
+        CarUserManager carUserManager = getCarUserManager(mContext);
+        UserRemovalResult result = carUserManager.removeUser(userId);
+        if (result == null) return;
+        writer.printf("UserRemovalResult: status = %s\n",
+                UserRemovalResult.statusToString(result.getStatus()));
     }
 
     private static <T> T waitForFuture(@NonNull PrintWriter writer,
@@ -1002,8 +1229,8 @@ final class CarShellCommand extends ShellCommand {
         int requestSize = request.associationTypes.size();
         if (halOnly) {
             request.numberAssociationTypes = requestSize;
-            // TODO(b/150413515): use UserHalHelper to set user flags
             request.userInfo.userId = userId;
+            request.userInfo.flags = getUserHalFlags(userId);
 
             Log.d(TAG, "getUserAuthAssociation(): user=" + userId + ", halOnly=" + halOnly
                     + ", request=" + request);
@@ -1133,8 +1360,8 @@ final class CarShellCommand extends ShellCommand {
         int requestSize = request.associations.size();
         if (halOnly) {
             request.numberAssociations = requestSize;
-            // TODO(b/150413515): use UserHalHelper to set user flags
             request.userInfo.userId = userId;
+            request.userInfo.flags = getUserHalFlags(userId);
 
             Log.d(TAG, "setUserAuthAssociation(): user=" + userId + ", halOnly=" + halOnly
                     + ", request=" + request);
@@ -1240,10 +1467,11 @@ final class CarShellCommand extends ShellCommand {
      * @param zone     Zone that this event services
      * @param isErrorEvent indicates the type of event
      * @param value    Data value of the event
+     * @param delayTime the event timestamp is increased by delayTime
      * @param writer   PrintWriter
      */
     private void injectVhalEvent(String property, String zone, String value,
-            boolean isErrorEvent, PrintWriter writer) {
+            boolean isErrorEvent, String delayTime, PrintWriter writer) {
         if (zone != null && (zone.equalsIgnoreCase(PARAM_VEHICLE_PROPERTY_AREA_GLOBAL))) {
             if (!isPropertyAreaTypeGlobal(property)) {
                 writer.println("Property area type inconsistent with given zone");
@@ -1254,7 +1482,7 @@ final class CarShellCommand extends ShellCommand {
             if (isErrorEvent) {
                 mHal.injectOnPropertySetError(property, zone, value);
             } else {
-                mHal.injectVhalEvent(property, zone, value);
+                mHal.injectVhalEvent(property, zone, value, delayTime);
             }
         } catch (NumberFormatException e) {
             writer.println("Invalid property Id zone Id or value" + e);

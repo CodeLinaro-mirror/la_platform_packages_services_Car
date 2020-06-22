@@ -108,8 +108,8 @@ public final class CarPackageManager extends CarManagerBase {
     @SystemApi
     public void setAppBlockingPolicy(
             String packageName, CarAppBlockingPolicy policy, @SetPolicyFlags int flags) {
-        if ((flags & FLAG_SET_POLICY_WAIT_FOR_CHANGE) != 0 &&
-                Looper.getMainLooper().isCurrentThread()) {
+        if ((flags & FLAG_SET_POLICY_WAIT_FOR_CHANGE) != 0
+                && Looper.getMainLooper().isCurrentThread()) {
             throw new IllegalStateException(
                     "FLAG_SET_POLICY_WAIT_FOR_CHANGE cannot be used in main thread");
         }
@@ -122,6 +122,8 @@ public final class CarPackageManager extends CarManagerBase {
 
     /**
      * Restarts the requested task. If task with {@code taskId} does not exist, do nothing.
+     *
+     * <p>This requires {@code android.permission.REAL_GET_TASKS} permission.
      *
      * @hide
      */

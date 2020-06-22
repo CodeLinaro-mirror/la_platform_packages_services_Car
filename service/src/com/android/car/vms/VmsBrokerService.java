@@ -41,8 +41,6 @@ import android.util.ArraySet;
 import android.util.Log;
 
 import com.android.car.CarServiceBase;
-import com.android.car.VmsLayersAvailability;
-import com.android.car.VmsPublishersInfo;
 import com.android.car.stats.CarStatsService;
 import com.android.car.stats.VmsClientLogger;
 import com.android.internal.annotations.GuardedBy;
@@ -53,6 +51,7 @@ import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -74,8 +73,8 @@ public class VmsBrokerService extends IVmsBrokerService.Stub implements CarServi
     private final CarStatsService mStatsService;
     private final IntSupplier mGetCallingUid;
 
-    private final VmsPublishersInfo mPublishersInfo = new VmsPublishersInfo();
-    private final VmsLayersAvailability mAvailableLayers = new VmsLayersAvailability();
+    private final VmsProviderInfoStore mProviderInfoStore = new VmsProviderInfoStore();
+    private final VmsLayerAvailability mAvailableLayers = new VmsLayerAvailability();
 
     private final Object mLock = new Object();
     @GuardedBy("mLock")
@@ -111,7 +110,17 @@ public class VmsBrokerService extends IVmsBrokerService.Stub implements CarServi
 
     @Override
     public void dump(PrintWriter writer) {
-        // TODO(b/149125079): Implement dumpsys
+        writer.println("*" + TAG + "*");
+        synchronized (mLock) {
+            writer.println("mAvailableLayers: " + mAvailableLayers.getAvailableLayers());
+            writer.println();
+            writer.println("mSubscriptionState: " + mSubscriptionState);
+            writer.println();
+            writer.println("mClientMap:");
+            mClientMap.values().stream()
+                    .sorted(Comparator.comparingInt(VmsClientInfo::getUid))
+                    .forEach(client -> client.dump(writer, "  "));
+        }
     }
 
     @Override
@@ -125,18 +134,20 @@ public class VmsBrokerService extends IVmsBrokerService.Stub implements CarServi
         mStatsService.getVmsClientLogger(clientUid)
                 .logConnectionState(VmsClientLogger.ConnectionState.CONNECTED);
 
+        IBinder.DeathRecipient deathRecipient;
+        try {
+            deathRecipient = () -> unregisterClient(clientToken,
+                    VmsClientLogger.ConnectionState.DISCONNECTED);
+            callback.asBinder().linkToDeath(deathRecipient, 0);
+        } catch (RemoteException e) {
+            mStatsService.getVmsClientLogger(clientUid)
+                    .logConnectionState(VmsClientLogger.ConnectionState.DISCONNECTED);
+            throw new IllegalStateException("Client callback is already dead");
+        }
+
         synchronized (mLock) {
-            try {
-                callback.asBinder().linkToDeath(
-                        () -> unregisterClient(clientToken,
-                                VmsClientLogger.ConnectionState.DISCONNECTED), 0);
-                mClientMap.put(clientToken, new VmsClientInfo(clientUid, clientPackage, callback,
-                        legacyClient));
-            } catch (RemoteException e) {
-                Log.w(TAG, "Client process is already dead", e);
-                mStatsService.getVmsClientLogger(clientUid)
-                        .logConnectionState(VmsClientLogger.ConnectionState.DISCONNECTED);
-            }
+            mClientMap.put(clientToken, new VmsClientInfo(clientUid, clientPackage, callback,
+                    legacyClient, deathRecipient));
             return new VmsRegistrationInfo(
                     mAvailableLayers.getAvailableLayers(),
                     mSubscriptionState);
@@ -153,7 +164,7 @@ public class VmsBrokerService extends IVmsBrokerService.Stub implements CarServi
     public VmsProviderInfo getProviderInfo(IBinder clientToken, int providerId) {
         assertAnyVmsPermission(mContext);
         getClient(clientToken); // Assert that the client is registered
-        return new VmsProviderInfo(mPublishersInfo.getPublisherInfoOrNull(providerId));
+        return new VmsProviderInfo(mProviderInfoStore.getProviderInfo(providerId));
     }
 
     @Override
@@ -172,12 +183,13 @@ public class VmsBrokerService extends IVmsBrokerService.Stub implements CarServi
     @Override
     public int registerProvider(IBinder clientToken, VmsProviderInfo providerInfo) {
         assertVmsPublisherPermission(mContext);
+        VmsClientInfo client = getClient(clientToken);
+        int providerId;
         synchronized (mLock) {
-            VmsClientInfo client = getClient(clientToken);
-            int publisherId = mPublishersInfo.getIdForInfo(providerInfo.getDescription());
-            client.addProviderId(publisherId);
-            return publisherId;
+            providerId = mProviderInfoStore.getProviderId(providerInfo.getDescription());
         }
+        client.addProviderId(providerId);
+        return providerId;
     }
 
     @Override
@@ -252,15 +264,17 @@ public class VmsBrokerService extends IVmsBrokerService.Stub implements CarServi
     }
 
     private void unregisterClient(IBinder clientToken, int connectionState) {
+        VmsClientInfo client;
         synchronized (mLock) {
-            VmsClientInfo client = mClientMap.remove(clientToken);
-            if (client != null) {
-                mStatsService.getVmsClientLogger(client.getUid())
-                        .logConnectionState(connectionState);
-            }
+            client = mClientMap.remove(clientToken);
         }
-        updateAvailableLayers();
-        updateSubscriptionState();
+        if (client != null) {
+            client.getCallback().asBinder().unlinkToDeath(client.getDeathRecipient(), 0);
+            mStatsService.getVmsClientLogger(client.getUid())
+                    .logConnectionState(connectionState);
+            updateAvailableLayers();
+            updateSubscriptionState();
+        }
     }
 
     private VmsClientInfo getClient(IBinder clientToken) {

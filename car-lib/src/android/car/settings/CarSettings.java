@@ -1,17 +1,17 @@
 /*
  * Copyright (C) 2016 The Android Open Source Project
  *
- *   Licensed under the Apache License, Version 2.0 (the "License");
- *   you may not use this file except in compliance with the License.
- *   You may obtain a copy of the License at
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
  *
- *        http://www.apache.org/licenses/LICENSE-2.0
+ *      http://www.apache.org/licenses/LICENSE-2.0
  *
- *   Unless required by applicable law or agreed to in writing, software
- *   distributed under the License is distributed on an "AS IS" BASIS,
- *   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *   See the License for the specific language governing permissions and
- *   limitations under the License.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 package android.car.settings;
@@ -23,6 +23,7 @@ import android.annotation.SystemApi;
  *
  * @hide
  */
+@SystemApi
 public class CarSettings {
 
     private CarSettings() {
@@ -71,6 +72,32 @@ public class CarSettings {
          */
         public static final String ENABLE_USER_SWITCH_DEVELOPER_MESSAGE =
                 "android.car.ENABLE_USER_SWITCH_DEVELOPER_MESSAGE";
+
+        /**
+         * User id of the last foreground user
+         *
+         * @hide
+         */
+        public static final String LAST_ACTIVE_USER_ID =
+                        "android.car.LAST_ACTIVE_USER_ID";
+
+        /**
+         * User id of the last persistent (i.e, not counting ephemeral guests) foreground user
+         *
+         * @hide
+         */
+        public static final String LAST_ACTIVE_PERSISTENT_USER_ID =
+                        "android.car.LAST_ACTIVE_PERSISTENT_USER_ID";
+
+        /**
+         * Defines global runtime overrides to system bar policy.
+         *
+         * See {@link com.android.systemui.wm.BarControlPolicy} for value format.
+         *
+         * @hide
+         */
+        public static final String SYSTEM_BAR_VISIBILITY_OVERRIDE =
+                "android.car.SYSTEM_BAR_VISIBILITY_OVERRIDE";
     }
 
     /**
