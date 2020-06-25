@@ -68,7 +68,9 @@ public class Controller implements CarPowerStateListenerWithCompletion {
 
     /** release */
     public void release() {
-        mCarPowerManager.clearListener();
+        if (mCarPowerManager != null) {
+            mCarPowerManager.clearListener();
+        }
     }
 
     @Override
@@ -106,10 +108,10 @@ public class Controller implements CarPowerStateListenerWithCompletion {
     }
 
     /**
-     * @return The names of the jobs that Garage Mode is waiting for
+     * @return Garage Mode's status, including what jobs it is waiting for
      */
-    List<String> pendingGarageModeJobs() {
-        return mGarageMode.pendingJobs();
+    List<String> dump() {
+        return mGarageMode.dump();
     }
 
     /**
