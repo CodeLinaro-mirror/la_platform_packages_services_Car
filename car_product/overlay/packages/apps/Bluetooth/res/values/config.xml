@@ -48,4 +48,7 @@
     <bool name="profile_supported_pbapclient">true</bool>
     <bool name="profile_supported_pan">true</bool>
     <bool name="profile_supported_mapmce">true</bool>
+
+    <!-- For supporting emergency call through the hfp client connection service  -->
+    <bool name="hfp_client_connection_service_support_emergency_call">true</bool>
 </resources>
