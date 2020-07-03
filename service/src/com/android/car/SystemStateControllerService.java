@@ -17,6 +17,9 @@ package com.android.car;
 
 import android.content.Context;
 import android.content.res.Resources;
+import android.os.Handler;
+import android.os.Message;
+import android.util.Log;
 
 import com.android.car.CarPowerManagementService.PowerEventProcessingHandler;
 import com.android.car.CarPowerManagementService.PowerServiceEventListener;
@@ -24,16 +27,32 @@ import com.android.car.CarPowerManagementService.PowerServiceEventListener;
 import java.io.PrintWriter;
 
 public class SystemStateControllerService implements CarServiceBase,
-    PowerServiceEventListener, PowerEventProcessingHandler {
+        PowerServiceEventListener, PowerEventProcessingHandler {
 
     private final CarPowerManagementService mCarPowerManagementService;
     private final CarAudioService mCarAudioService;
     private final ICarImpl mICarImpl;
     private final boolean mLockWhenMuting;
 
+    protected static final int MAINTENANCE_SERVICE_TURNOFF_PERIOD = 2 * 1000;
+    private static final int MSG_NOTIFY_PROCESSINGCOMPLETE_EARLY = 0;
+
+    private final SystemStateHandler mHandler = new SystemStateHandler ();
+
+    private class SystemStateHandler extends Handler {
+        @Override
+        public void handleMessage(Message msg) {
+            switch (msg.what) {
+                case MSG_NOTIFY_PROCESSINGCOMPLETE_EARLY:
+                    mCarPowerManagementService.notifyPowerEventProcessingCompletion(
+                            SystemStateControllerService.this);
+                    break;
+            }
+        }
+    }
     public SystemStateControllerService(Context context,
-            CarPowerManagementService carPowerManagementService,
-            CarAudioService carAudioService, ICarImpl carImpl) {
+                                        CarPowerManagementService carPowerManagementService,
+                                        CarAudioService carAudioService, ICarImpl carImpl) {
         mCarPowerManagementService = carPowerManagementService;
         mCarAudioService = carAudioService;
         mICarImpl = carImpl;
@@ -44,7 +63,12 @@ public class SystemStateControllerService implements CarServiceBase,
     @Override
     public long onPrepareShutdown(boolean shuttingDown) {
         //TODO add state saving here for things to restore on power on. bug: 32096079
-        return 0;
+        Log.i(CarLog.TAG_POWER,"onPrepareShutdown, shuttingDown : " + shuttingDown);
+        mHandler.removeMessages(MSG_NOTIFY_PROCESSINGCOMPLETE_EARLY);
+        mHandler.sendMessageDelayed(
+                mHandler.obtainMessage(MSG_NOTIFY_PROCESSINGCOMPLETE_EARLY),
+                MAINTENANCE_SERVICE_TURNOFF_PERIOD);
+        return MAINTENANCE_SERVICE_TURNOFF_PERIOD;
     }
 
     @Override
