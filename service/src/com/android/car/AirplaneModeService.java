@@ -184,9 +184,9 @@ public class AirplaneModeService implements CarServiceBase,
 
         private static final int MAX_NOTIFY_DELAY = 10_000; // 10 seconds
 
-        private static final int MIN_NOTIFY_DELAY = 500;  // ms
+        private static final int MIN_NOTIFY_DELAY = 2000;  // ms
 
-        private static final int MIN_BLUETOOTH_OFF_TIMEOUT = 400;  // ms
+        private static final int MIN_BLUETOOTH_OFF_TIMEOUT = 2500;  // ms
 
         private static final int MIN_WIFI_OFF_TIMEOUT = 1_500;  // 1.5 second
 
