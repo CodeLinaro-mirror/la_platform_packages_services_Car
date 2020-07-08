@@ -38,8 +38,77 @@ cc_test{
         "libutils",
     ],
     required: [
-        "VolvoXC40_low.obj",
-        "VolvoXC40_low.mtl",
+        "sample_car.obj",
+        "sample_car_material.mtl",
+    ],
+}
+
+// Library for IO Module.
+cc_library {
+    name : "libio_module",
+    vendor : true,
+    srcs: [
+        "ConfigReader.cpp",
+        "CarModelConfigReader.cpp",
+        "ConfigReaderUtil.cpp",
+        "IOModule.cpp",
+    ],
+    shared_libs : [
+        "libbase",
+        "libobj_reader",
+        "libtinyxml2",
+    ]
+}
+
+cc_test{
+    name : "io_module_tests",
+    test_suites : ["device-tests"],
+    vendor : true,
+    srcs : [
+        "CarModelConfigReaderTests.cpp",
+        "ConfigReaderTests.cpp",
+    ],
+    shared_libs : [
+        "libbase",
+        "libcutils",
+        "libio_module",
+        "libobj_reader",
+        "libtinyxml2",
+        "libutils",
+    ],
+    required: [
+        "sv_sample_car_model_config.xml",
+        "sv_sample_config.xml",
+    ],
+}
+
+cc_library{
+    name : "libanimation_module",
+    vendor : true,
+    srcs : [
+        "AnimationModule.cpp",
+    ],
+    shared_libs : [
+        "android.hardware.automotive.vehicle@2.0",
+        "libbase",
+        "libhidlbase",
+        "libutils",
+    ],
+}
+
+cc_test{
+    name : "animation_module_tests",
+    test_suites : ["device-tests"],
+    vendor : true,
+    srcs : ["AnimationModuleTests.cpp"],
+    shared_libs : [
+        "android.hardware.automotive.vehicle@2.0",
+        "libanimation_module",
+        "libcutils",
+        "libbase",
+        "libhidlbase",
+        "libhardware",
+        "libutils",
     ],
 }
 
@@ -82,23 +151,22 @@ cc_test{
     ],
 }
 
-cc_binary{
-    name : "android.automotive.sv.service@1.0-impl",
+cc_library{
+    name : "libsvsession",
     vendor : true,
     srcs : [
+        "CameraUtils.cpp",
         "CoreLibSetupHelper.cpp",
-        "SurroundViewService.cpp",
         "SurroundView2dSession.cpp",
         "SurroundView3dSession.cpp",
-        "service.cpp",
-
     ],
-    init_rc : ["android.automotive.sv.service@1.0-impl.rc"],
     shared_libs : [
+        "android.hardware.automotive.evs@1.0",
         "android.hardware.automotive.evs@1.1",
         "android.hardware.automotive.sv@1.0",
         "android.hardware.automotive.vehicle@2.0",
         "android.hidl.memory@1.0",
+        "libanimation_module",
         "libbase",
         "libbinder",
         "libcamera_metadata",
@@ -107,14 +175,125 @@ cc_binary{
         "libhardware",
         "libhidlbase",
         "libhidlmemory",
+        "libio_module",
         "libui",
         "libutils",
+        "libvhal_handler",
     ],
     required : [
         "cam0.png",
         "cam1.png",
         "cam2.png",
         "cam3.png",
+        "sample_car.obj",
+        "sample_car_material.mtl",
+        "sv_sample_config.xml",
+        "sv_sample_car_model_config.xml",
+    ],
+    // Disable builds except for arm64 and emulator devices
+    enabled : false,
+    arch : {
+        arm64 : {
+            enabled : true,
+        },
+        x86 : {
+            enabled : true,
+        },
+        x86_64 : {
+            enabled : true,
+        },
+    },
+}
+
+cc_test{
+    name : "sv_session_tests",
+    test_suites : ["device-tests"],
+    vendor : true,
+    srcs : [
+        "SurroundViewSessionTests.cpp",
+        "mock-evs/MockEvsCamera.cpp",
+        "mock-evs/MockEvsEnumerator.cpp",
+        "mock-evs/MockSurroundViewCallback.cpp",
+    ],
+    include_dirs: [
+        "packages/services/Car/evs/sampleDriver",
+    ],
+    shared_libs : [
+        "android.hardware.automotive.evs@1.0",
+        "android.hardware.automotive.evs@1.1",
+        "android.hardware.automotive.sv@1.0",
+        "android.hardware.automotive.vehicle@2.0",
+        "android.hidl.memory@1.0",
+        "libanimation_module",
+        "libbase",
+        "libbinder",
+        "libcamera_metadata",
+        "libcore_lib_shared",
+        "libcutils",
+        "libevsconfigmanager",
+        "libhardware",
+        "libhidlbase",
+        "libhidlmemory",
+        "libio_module",
+        "libsvsession",
+        "libtinyxml2",
+        "libui",
+        "libutils",
+        "libvhal_handler",
+    ],
+    // Disable builds except for arm64 and emulator devices
+    enabled : false,
+    arch : {
+        arm64 : {
+            enabled : true,
+        },
+        x86 : {
+            enabled : true,
+        },
+        x86_64 : {
+            enabled : true,
+        },
+    },
+}
+
+cc_binary{
+    name : "android.automotive.sv.service@1.0-impl",
+    vendor : true,
+    srcs : [
+        "SurroundViewService.cpp",
+        "service.cpp",
+    ],
+    init_rc : ["android.automotive.sv.service@1.0-impl.rc"],
+    shared_libs : [
+        "android.hardware.automotive.evs@1.1",
+        "android.hardware.automotive.sv@1.0",
+        "android.hardware.automotive.vehicle@2.0",
+        "android.hidl.memory@1.0",
+        "libanimation_module",
+        "libbase",
+        "libbinder",
+        "libcamera_metadata",
+        "libcore_lib_shared",
+        "libcutils",
+        "libhardware",
+        "libhidlbase",
+        "libhidlmemory",
+        "libio_module",
+        "libsvsession",
+        "libui",
+        "libutils",
+        "libvhal_handler",
+    ],
+    cflags: ["-DLOG_TAG=\"SurroundViewService\""],
+    required : [
+        "cam0.png",
+        "cam1.png",
+        "cam2.png",
+        "cam3.png",
+        "sample_car.obj",
+        "sample_car_material.mtl",
+        "sv_sample_config.xml",
+        "sv_sample_car_model_config.xml",
     ],
     // Disable builds except for arm64 and emulator devices
     enabled : false,
@@ -159,35 +338,56 @@ cc_prebuilt_library_shared{
 
 prebuilt_etc{
     name : "cam0.png",
+    soc_specific : true,
     src : "test_data/0.png",
     sub_dir : "automotive/sv",
 }
 
 prebuilt_etc{
     name : "cam1.png",
+    soc_specific : true,
     src : "test_data/1.png",
     sub_dir : "automotive/sv",
 }
 
 prebuilt_etc{
     name : "cam2.png",
+    soc_specific : true,
     src : "test_data/2.png",
     sub_dir : "automotive/sv",
 }
 
 prebuilt_etc {
-name:
-    "cam3.png", src : "test_data/3.png", sub_dir : "automotive/sv",
+    name :"cam3.png",
+    soc_specific : true,
+    src : "test_data/3.png",
+    sub_dir : "automotive/sv",
 }
 
 prebuilt_etc {
-    name: "cube.obj",
-    src: "test_data/cube.obj",
+    name : "sample_car.obj",
+    soc_specific : true,
+    src : "test_data/sample_car.obj",
+    sub_dir : "automotive/sv",
+}
+
+prebuilt_etc {
+    name : "sample_car_material.mtl",
+    soc_specific : true,
+    src: "test_data/sample_car_material.mtl",
     sub_dir: "automotive/sv",
 }
 
 prebuilt_etc {
-    name: "cube.mtl",
-    src: "test_data/cube.mtl",
-    sub_dir: "automotive/sv",
+    name : "sv_sample_config.xml",
+    soc_specific : true,
+    src : "test_data/sv_sample_config.xml",
+    sub_dir : "automotive/sv",
+}
+
+prebuilt_etc {
+    name:"sv_sample_car_model_config.xml",
+    soc_specific : true,
+    src : "test_data/sv_sample_car_model_config.xml",
+    sub_dir : "automotive/sv",
 }

@@ -16,8 +16,6 @@
 
 #pragma once
 
-#include "CoreLibSetupHelper.h"
-
 #include <android/hardware/automotive/evs/1.1/IEvsCamera.h>
 #include <android/hardware/automotive/evs/1.1/IEvsCameraStream.h>
 #include <android/hardware/automotive/evs/1.1/IEvsEnumerator.h>
@@ -28,12 +26,17 @@
 #include <hidl/MQDescriptor.h>
 #include <hidl/Status.h>
 
-#include <ui/GraphicBuffer.h>
+#include "AnimationModule.h"
+#include "CoreLibSetupHelper.h"
+#include "VhalHandler.h"
 
 #include <thread>
 
+#include <ui/GraphicBuffer.h>
+
 using namespace ::android::hardware::automotive::evs::V1_1;
 using namespace ::android::hardware::automotive::sv::V1_0;
+using namespace ::android::hardware::automotive::vehicle::V2_0;
 using namespace ::android_auto::surround_view;
 
 using ::android::hardware::Return;
@@ -79,7 +82,11 @@ class SurroundView3dSession : public ISurroundView3dSession {
     };
 
 public:
-    SurroundView3dSession(sp<IEvsEnumerator> pEvs);
+    // TODO(b/158479099): use strong pointer for VhalHandler
+    SurroundView3dSession(sp<IEvsEnumerator> pEvs,
+                          VhalHandler* vhalHandler,
+                          AnimationModule* animationModule,
+                          IOModuleConfig* pConfig);
     ~SurroundView3dSession();
     bool initialize();
 
@@ -110,6 +117,9 @@ private:
 
     bool handleFrames(int sequenceId);
 
+    bool copyFromBufferToPointers(BufferDesc_1_1 buffer,
+                                  SurroundViewInputBufferPointers pointers);
+
     enum StreamStateValues {
         STOPPED,
         RUNNING,
@@ -123,6 +133,7 @@ private:
     // Instance and metadata for the opened Evs Camera
     sp<IEvsCamera> mCamera;
     CameraDesc mCameraDesc;
+    vector<SurroundViewCameraParams> mCameraParams;
 
     // Stream subscribed for the session.
     sp<ISurroundViewStream> mStream GUARDED_BY(mAccessLock);
@@ -135,16 +146,16 @@ private:
 
     // Used to signal a set of frames is ready
     condition_variable mFramesSignal GUARDED_BY(mAccessLock);
-    bool mFramesAvailable GUARDED_BY(mAccessLock);
+    bool mProcessingEvsFrames GUARDED_BY(mAccessLock);
 
-    int sequenceId;
+    int mSequenceId;
 
     struct FramesRecord {
         SvFramesDesc frames;
         bool inUse = false;
     };
 
-    FramesRecord framesRecord GUARDED_BY(mAccessLock);
+    FramesRecord mFramesRecord GUARDED_BY(mAccessLock);
 
     // Synchronization necessary to deconflict mCaptureThread from the main service thread
     mutex mAccessLock;
@@ -165,6 +176,12 @@ private:
     sp<GraphicBuffer> mSvTexture GUARDED_BY(mAccessLock);
 
     bool mIsInitialized GUARDED_BY(mAccessLock) = false;
+
+    VhalHandler* mVhalHandler;
+    AnimationModule* mAnimationModule;
+    IOModuleConfig* mIOModuleConfig;
+
+    std::vector<VehiclePropValue> mPropertyValues;
 };
 
 }  // namespace implementation
