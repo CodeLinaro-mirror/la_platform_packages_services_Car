@@ -44,6 +44,7 @@ import android.os.Message;
 import android.os.PowerManager;
 import android.os.RemoteCallbackList;
 import android.os.RemoteException;
+import android.os.ServiceManager;
 import android.os.SystemClock;
 import android.os.SystemProperties;
 import android.os.UserHandle;
@@ -59,6 +60,7 @@ import com.android.car.user.CarUserNoticeService;
 import com.android.car.user.CarUserService;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.app.IVoiceInteractionManagerService;
 
 import java.io.PrintWriter;
 import java.lang.ref.WeakReference;
@@ -137,6 +139,8 @@ public class CarPowerManagementService extends ICarPower.Stub implements
     private final CarUserService mUserService;
     private final InitialUserSetter mInitialUserSetter;
 
+    private final IVoiceInteractionManagerService mVoiceInteractionManagerService;
+
     // TODO:  Make this OEM configurable.
     private static final int SHUTDOWN_POLLING_INTERVAL_MS = 2000;
     private static final int SHUTDOWN_EXTEND_MAX_MS = 5000;
@@ -168,13 +172,16 @@ public class CarPowerManagementService extends ICarPower.Stub implements
         this(context, context.getResources(), powerHal, systemInterface, UserManager.get(context),
                 carUserService, new InitialUserSetter(context,
                         (u) -> carUserService.setInitialUser(u),
-                        context.getString(R.string.default_guest_name)));
+                        context.getString(R.string.default_guest_name)),
+                IVoiceInteractionManagerService.Stub.asInterface(
+                        ServiceManager.getService(Context.VOICE_INTERACTION_MANAGER_SERVICE)));
     }
 
     @VisibleForTesting
     public CarPowerManagementService(Context context, Resources resources, PowerHalService powerHal,
             SystemInterface systemInterface, UserManager userManager, CarUserService carUserService,
-            InitialUserSetter initialUserSetter) {
+            InitialUserSetter initialUserSetter,
+            IVoiceInteractionManagerService voiceInteractionService) {
         mContext = context;
         mHal = powerHal;
         mSystemInterface = systemInterface;
@@ -194,6 +201,7 @@ public class CarPowerManagementService extends ICarPower.Stub implements
         }
         mUserService = carUserService;
         mInitialUserSetter = initialUserSetter;
+        mVoiceInteractionManagerService = voiceInteractionService;
     }
 
     @VisibleForTesting
@@ -408,6 +416,7 @@ public class CarPowerManagementService extends ICarPower.Stub implements
 
         mSystemInterface.setDisplayState(true);
         sendPowerManagerEvent(CarPowerStateListener.ON);
+
         mHal.sendOn();
 
         try {
@@ -415,6 +424,8 @@ public class CarPowerManagementService extends ICarPower.Stub implements
         } catch (Exception e) {
             Log.e(CarLog.TAG_POWER, "Could not switch user on resume", e);
         }
+
+        setVoiceInteractionDisabled(false);
     }
 
     @VisibleForTesting // Ideally it should not be exposed, but it speeds up the unit tests
@@ -501,6 +512,9 @@ public class CarPowerManagementService extends ICarPower.Stub implements
                 case HalCallback.STATUS_WRONG_HAL_RESPONSE:
                     switchUserOnResumeUserHalFallback("wrong response");
                     return;
+                case HalCallback.STATUS_HAL_NOT_SUPPORTED:
+                    switchUserOnResumeUserHalFallback("Hal not supported");
+                    return;
                 case HalCallback.STATUS_OK:
                     if (response == null) {
                         switchUserOnResumeUserHalFallback("no response");
@@ -552,6 +566,7 @@ public class CarPowerManagementService extends ICarPower.Stub implements
     }
 
     private void handleShutdownPrepare(CpmsState newState) {
+        setVoiceInteractionDisabled(true);
         mSystemInterface.setDisplayState(false);
         // Shutdown on finish if the system doesn't support deep sleep or doesn't allow it.
         synchronized (mLock) {
@@ -619,6 +634,8 @@ public class CarPowerManagementService extends ICarPower.Stub implements
                 throw new AssertionError("Should not return from PowerManager.reboot()");
             }
         }
+        setVoiceInteractionDisabled(true);
+
         if (mustShutDown) {
             // shutdown HU
             mSystemInterface.shutdown();
@@ -626,6 +643,14 @@ public class CarPowerManagementService extends ICarPower.Stub implements
             doHandleDeepSleep(simulatedMode);
         }
         mShutdownOnNextSuspend = false;
+    }
+
+    private void setVoiceInteractionDisabled(boolean disabled) {
+        try {
+            mVoiceInteractionManagerService.setDisabled(disabled);
+        } catch (RemoteException e) {
+            Log.w(TAG, "setVoiceIntefactionDisabled(" + disabled + ") failed", e);
+        }
     }
 
     @GuardedBy("mLock")
@@ -737,18 +762,18 @@ public class CarPowerManagementService extends ICarPower.Stub implements
             simulateSleepByWaiting();
             nextListenerState = CarPowerStateListener.SHUTDOWN_CANCELLED;
         } else {
-            boolean sleepSucceeded = mSystemInterface.enterDeepSleep();
+            boolean sleepSucceeded = suspendWithRetries();
             if (!sleepSucceeded) {
-                // Suspend failed! VHAL should transition CPMS to shutdown.
-                Log.e(CarLog.TAG_POWER, "Sleep did not succeed. Now attempting to shut down.");
-                mSystemInterface.shutdown();
+                // Suspend failed and we shut down instead.
+                // We either won't get here at all or we will power off very soon.
                 return;
             }
+            // We suspended and have now resumed
             nextListenerState = CarPowerStateListener.SUSPEND_EXIT;
         }
-        // On resume, reset nextWakeup time. If not set again, system will suspend/shutdown forever.
         synchronized (mLock) {
             mIsResuming = true;
+            // Any wakeup time from before is no longer valid.
             mNextWakeupSec = 0;
         }
         Log.i(CarLog.TAG_POWER, "Resuming after suspending");
@@ -1072,6 +1097,37 @@ public class CarPowerManagementService extends ICarPower.Stub implements
                 }
             }
         }
+    }
+
+    // Send the command to enter Suspend to RAM.
+    // If the command is not successful, try again.
+    // If it fails repeatedly, send the command to shut down.
+    // Returns true if we successfully suspended.
+    private boolean suspendWithRetries() {
+        final int maxTries = 3;
+        final long retryIntervalMs = 10;
+        int tryCount = 0;
+
+        while (true) {
+            Log.i(CarLog.TAG_POWER, "Entering Suspend to RAM");
+            boolean suspendSucceeded = mSystemInterface.enterDeepSleep();
+            if (suspendSucceeded) {
+                return true;
+            }
+            tryCount++;
+            if (tryCount >= maxTries) {
+                break;
+            }
+            // We failed to suspend. Block the thread briefly and try again.
+            Log.w(CarLog.TAG_POWER, "Failed to Suspend; will retry later.");
+            try {
+                Thread.sleep(retryIntervalMs);
+            } catch (InterruptedException ignored) { }
+        }
+        // Too many failures trying to suspend. Shut down.
+        Log.w(CarLog.TAG_POWER, "Could not Suspend to RAM. Shutting down.");
+        mSystemInterface.shutdown();
+        return false;
     }
 
     private static class CpmsState {

@@ -3190,7 +3190,7 @@
     <string name="other_sound_settings" msgid="5250376066099818676">"Drugi zvukovi"</string>
     <string name="dial_pad_tones_title" msgid="8877212139988655769">"Tonovi numeričke tastature"</string>
     <string name="screen_locking_sounds_title" msgid="4407110895465866809">"Zvukovi zaključavanja ekrana"</string>
-    <string name="charging_sounds_title" msgid="5070437987230894287">"Menjajući zvuci i vibracija"</string>
+    <string name="charging_sounds_title" msgid="5070437987230894287">"Zvukovi i vibracija punjenja"</string>
     <string name="docking_sounds_title" msgid="2573137471605541366">"Zvukovi montiranja"</string>
     <string name="touch_sounds_title" msgid="165237488496165652">"Zvukovi pri dodiru"</string>
     <string name="vibrate_on_touch_title" msgid="6360155469279157684">"Vibracija pri dodiru"</string>
@@ -3491,7 +3491,7 @@
     <string name="zen_mode_add_time_rule" msgid="5999467757140524729">"Dodajte vremenski raspored"</string>
     <string name="zen_mode_delete_rule" msgid="2292933835997203801">"Izbriši raspored"</string>
     <string name="zen_mode_choose_rule_type" msgid="8877138307319450306">"Odaberite tip rasporeda"</string>
-    <string name="zen_mode_delete_rule_confirmation" msgid="2646596466259025978">"Želite li da izbrišete pravilo „<xliff:g id="RULE">%1$s</xliff:g>“?"</string>
+    <string name="zen_mode_delete_rule_confirmation" msgid="2646596466259025978">"Želite da izbrišete pravilo „<xliff:g id="RULE">%1$s</xliff:g>“?"</string>
     <string name="zen_mode_delete_rule_button" msgid="611058106279881991">"Izbriši"</string>
     <string name="zen_mode_rule_type_unknown" msgid="2819480113355191421">"Nepoznato"</string>
     <string name="zen_mode_app_set_behavior" msgid="8597398780262575571">"Ova podešavanja trenutno ne mogu da se menjaju. Aplikacija (<xliff:g id="APP_NAME">%1$s</xliff:g>) je automatski uključila režim Ne uznemiravaj sa prilagođenim ponašanjem."</string>

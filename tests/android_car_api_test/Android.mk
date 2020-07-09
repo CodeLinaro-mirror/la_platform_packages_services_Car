@@ -41,10 +41,12 @@ LOCAL_STATIC_JAVA_LIBRARIES += \
         android.car.cluster.navigation \
         android.car.cluster.navigation \
         android.car.testapi \
-        compatibility-device-util-axt \
-        testng \
-        truth-prebuilt \
+        android.car.test.utils \
         androidx.test.runner \
+        compatibility-device-util-axt \
+        platform-test-annotations \
+        testng \
+        truth-prebuilt
 
 LOCAL_JAVA_LIBRARIES := android.car android.test.runner android.test.base
 

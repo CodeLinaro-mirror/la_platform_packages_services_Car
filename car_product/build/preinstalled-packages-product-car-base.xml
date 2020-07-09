@@ -154,6 +154,12 @@
         <install-in user-type="SYSTEM" />
     </install-in-user-type>
 
+    <!-- Required for compatibility -->
+    <install-in-user-type package="com.android.statementservice">
+        <install-in user-type="FULL" />
+        <install-in user-type="SYSTEM" />
+    </install-in-user-type>
+
     <!-- Failed to find provider info for downloads error if not installed for system user -->
     <install-in-user-type package="com.android.providers.downloads">
         <install-in user-type="FULL" />
@@ -162,6 +168,12 @@
 
     <!-- Failed to find provider info for calendar error if not installed for system user -->
     <install-in-user-type package="com.android.providers.calendar">
+        <install-in user-type="FULL" />
+        <install-in user-type="SYSTEM" />
+    </install-in-user-type>
+
+    <!-- Failed to pass CTS if not installed for system user -->
+    <install-in-user-type package="com.android.car.ui.sharedlibrary">
         <install-in user-type="FULL" />
         <install-in user-type="SYSTEM" />
     </install-in-user-type>
@@ -258,9 +270,6 @@
         <install-in user-type="FULL" />
     </install-in-user-type>
     <install-in-user-type package="com.android.car.calendar">
-        <install-in user-type="FULL" />
-    </install-in-user-type>
-    <install-in-user-type package="com.android.car.ui.sharedlibrary">
         <install-in user-type="FULL" />
     </install-in-user-type>
     <install-in-user-type package="com.android.wifi.inprocess.overlay.car">

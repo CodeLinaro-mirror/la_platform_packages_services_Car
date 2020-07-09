@@ -46,7 +46,6 @@ import android.media.AudioManager;
 import android.media.AudioPatch;
 import android.media.AudioPlaybackConfiguration;
 import android.media.AudioPortConfig;
-import android.media.AudioSystem;
 import android.media.audiopolicy.AudioPolicy;
 import android.os.IBinder;
 import android.os.Looper;
@@ -56,7 +55,6 @@ import android.telephony.TelephonyManager;
 import android.text.TextUtils;
 import android.util.Log;
 import android.util.SparseIntArray;
-import android.view.DisplayAddress;
 import android.view.KeyEvent;
 
 import com.android.car.CarLocalServices;
@@ -742,13 +740,11 @@ public class CarAudioService extends ICarAudio.Stub implements CarServiceBase {
     }
 
     private void releaseAudioPatchLocked(CarAudioPatchHandle carPatch) {
+        Objects.requireNonNull(carPatch);
         // NOTE:  AudioPolicyService::removeNotificationClient will take care of this automatically
         //        if the client that created a patch quits.
-
-        // FIXME {@link AudioManager#listAudioPatches(ArrayList)} returns old generation of
-        // audio patches after creation
         ArrayList<AudioPatch> patches = new ArrayList<>();
-        int result = AudioSystem.listAudioPatches(patches, new int[1]);
+        int result = mAudioManager.listAudioPatches(patches);
         if (result != AudioManager.SUCCESS) {
             throw new RuntimeException("listAudioPatches failed with code " + result);
         }
@@ -1044,31 +1040,6 @@ public class CarAudioService extends ICarAudio.Stub implements CarServiceBase {
             return false;
         }
         return true;
-    }
-
-    /**
-     * Gets the zone id for the display port id.
-     * @param displayPortId display port id to match
-     * @return zone id for the display port id or
-     * CarAudioManager.PRIMARY_AUDIO_ZONE if none are found
-     */
-    @Override
-    public int getZoneIdForDisplayPortId(byte displayPortId) {
-        enforcePermission(Car.PERMISSION_CAR_CONTROL_AUDIO_SETTINGS);
-        requireDynamicRouting();
-        synchronized (mImplLock) {
-            for (int index = 0; index < mCarAudioZones.length; index++) {
-                CarAudioZone zone = mCarAudioZones[index];
-                List<DisplayAddress.Physical> displayAddresses = zone.getPhysicalDisplayAddresses();
-                if (displayAddresses.stream().anyMatch(displayAddress->
-                        displayAddress.getPort() == displayPortId)) {
-                    return index;
-                }
-            }
-
-            // Everything else defaults to primary audio zone
-            return CarAudioManager.PRIMARY_AUDIO_ZONE;
-        }
     }
 
     @Override

@@ -27,6 +27,8 @@ import android.hardware.automotive.vehicle.V2_0.CreateUserRequest;
 import android.hardware.automotive.vehicle.V2_0.InitialUserInfoRequestType;
 import android.hardware.automotive.vehicle.V2_0.InitialUserInfoResponse;
 import android.hardware.automotive.vehicle.V2_0.InitialUserInfoResponseAction;
+import android.hardware.automotive.vehicle.V2_0.RemoveUserRequest;
+import android.hardware.automotive.vehicle.V2_0.SwitchUserRequest;
 import android.hardware.automotive.vehicle.V2_0.UserFlags;
 import android.hardware.automotive.vehicle.V2_0.UserIdentificationAssociation;
 import android.hardware.automotive.vehicle.V2_0.UserIdentificationAssociationSetValue;
@@ -60,8 +62,11 @@ public final class UserHalHelper {
     private static final boolean DEBUG = false;
 
     public static final int INITIAL_USER_INFO_PROPERTY = 299896583;
+    public static final int SWITCH_USER_PROPERTY = 299896584;
     public static final int CREATE_USER_PROPERTY = 299896585;
+    public static final int REMOVE_USER_PROPERTY = 299896586;
     public static final int USER_IDENTIFICATION_ASSOCIATION_PROPERTY = 299896587;
+
 
     private static final String STRING_SEPARATOR = "\\|\\|";
 
@@ -116,7 +121,6 @@ public final class UserHalHelper {
      */
     public static int convertFlags(@NonNull UserInfo user) {
         checkArgument(user != null, "user cannot be null");
-        checkArgument(user != null, "user cannot be null");
 
         int flags = UserFlags.NONE;
         if (user.id == UserHandle.USER_SYSTEM) {
@@ -130,6 +134,12 @@ public final class UserHalHelper {
         }
         if (user.isEphemeral()) {
             flags |= UserFlags.EPHEMERAL;
+        }
+        if (!user.isEnabled()) {
+            flags |= UserFlags.DISABLED;
+        }
+        if (user.isProfile()) {
+            flags |= UserFlags.PROFILE;
         }
 
         return flags;
@@ -171,6 +181,20 @@ public final class UserHalHelper {
      */
     public static boolean isAdmin(int flags) {
         return (flags & UserFlags.ADMIN) != 0;
+    }
+
+    /**
+     * Checks if a HAL flag contains {@link UserFlags#DISABLED}.
+     */
+    public static boolean isDisabled(int flags) {
+        return (flags & UserFlags.DISABLED) != 0;
+    }
+
+    /**
+     * Checks if a HAL flag contains {@link UserFlags#PROFILE}.
+     */
+    public static boolean isProfile(int flags) {
+        return (flags & UserFlags.PROFILE) != 0;
     }
 
     /**
@@ -388,14 +412,15 @@ public final class UserHalHelper {
                 response.userToSwitchOrCreate.flags = UserFlags.NONE;
                 break;
             case InitialUserInfoResponseAction.SWITCH:
-                assertMinimumSize(prop, 3);
+                assertMinimumSize(prop, 3); // request_id, action_type, user_id
                 response.userToSwitchOrCreate.userId = prop.value.int32Values.get(2);
                 response.userToSwitchOrCreate.flags = UserFlags.NONE;
                 break;
             case InitialUserInfoResponseAction.CREATE:
-                assertMinimumSize(prop, 3);
+                assertMinimumSize(prop, 4); // request_id, action_type, user_id, user_flags
+                // user id is set at index 2, but it's ignored
                 response.userToSwitchOrCreate.userId = UserHandle.USER_NULL;
-                response.userToSwitchOrCreate.flags = prop.value.int32Values.get(2);
+                response.userToSwitchOrCreate.flags = prop.value.int32Values.get(3);
                 if (stringValues.length > 1) {
                     response.userNameToCreate = stringValues[1];
                 }
@@ -486,6 +511,8 @@ public final class UserHalHelper {
         Objects.requireNonNull(request, "request cannot be null");
         checkArgument(request.requestId > 0, "invalid requestId on %s", request);
         checkValid(request.usersInfo);
+        checkArgument(request.newUserName != null, "newUserName cannot be null (should be empty "
+                + "instead) on %s", request);
 
         boolean hasNewUser = false;
         int newUserFlags = UserFlags.NONE;
@@ -513,13 +540,66 @@ public final class UserHalHelper {
     }
 
     /**
-     * Creates a {@link UsersInfo} instance populated with the current users.
+     * Creates a generic {@link VehiclePropValue} (that can be sent to HAL) from a
+     * {@link SwitchUserRequest}.
+     *
+     * @throws IllegalArgumentException if the request doesn't have the proper format.
+     */
+    @NonNull
+    public static VehiclePropValue toVehiclePropValue(@NonNull SwitchUserRequest request) {
+        Objects.requireNonNull(request, "request cannot be null");
+        checkArgument(request.messageType > 0, "invalid messageType on %s", request);
+        android.hardware.automotive.vehicle.V2_0.UserInfo targetInfo = request.targetUser;
+        UsersInfo usersInfo = request.usersInfo;
+        Objects.requireNonNull(targetInfo);
+        checkValid(usersInfo);
+
+        VehiclePropValue propValue = createPropRequest(SWITCH_USER_PROPERTY, request.requestId,
+                request.messageType);
+        addUserInfo(propValue, targetInfo);
+        addUsersInfo(propValue, usersInfo);
+        return propValue;
+    }
+
+    /**
+     * Creates a generic {@link VehiclePropValue} (that can be sent to HAL) from a
+     * {@link RemoveUserRequest}.
+     *
+     * @throws IllegalArgumentException if the request doesn't have the proper format.
+     */
+    @NonNull
+    public static VehiclePropValue toVehiclePropValue(@NonNull RemoveUserRequest request) {
+        checkArgument(request.requestId > 0, "invalid requestId on %s", request);
+        android.hardware.automotive.vehicle.V2_0.UserInfo removedUserInfo = request.removedUserInfo;
+        Objects.requireNonNull(removedUserInfo);
+        UsersInfo usersInfo = request.usersInfo;
+        checkValid(usersInfo);
+
+        VehiclePropValue propValue = createPropRequest(REMOVE_USER_PROPERTY, request.requestId);
+        addUserInfo(propValue, removedUserInfo);
+        addUsersInfo(propValue, usersInfo);
+        return propValue;
+    }
+
+    /**
+     * Creates a {@link UsersInfo} instance populated with the current users, using
+     * {@link ActivityManager#getCurrentUser()} as the current user.
      */
     @NonNull
     public static UsersInfo newUsersInfo(@NonNull UserManager um) {
+        return newUsersInfo(um, ActivityManager.getCurrentUser());
+    }
+
+    /**
+     * Creates a {@link UsersInfo} instance populated with the current users, using
+     * {@code userId} as the current user.
+     */
+    @NonNull
+    public static UsersInfo newUsersInfo(@NonNull UserManager um, @UserIdInt int userId) {
         Preconditions.checkArgument(um != null, "UserManager cannot be null");
 
-        List<UserInfo> users = um.getUsers(/*excludeDying= */ true);
+        List<UserInfo> users = um.getUsers(/* excludePartial= */ false, /* excludeDying= */ false,
+                /* excludePreCreated= */ true);
 
         if (users == null || users.isEmpty()) {
             Log.w(TAG, "newUsersInfo(): no users");
@@ -527,7 +607,7 @@ public final class UserHalHelper {
         }
 
         UsersInfo usersInfo = new UsersInfo();
-        usersInfo.currentUser.userId = ActivityManager.getCurrentUser();
+        usersInfo.currentUser.userId = userId;
         UserInfo currentUser = null;
         usersInfo.numberUsers = users.size();
 
@@ -546,8 +626,8 @@ public final class UserHalHelper {
         if (currentUser != null) {
             usersInfo.currentUser.flags = convertFlags(currentUser);
         } else {
-            Log.w(TAG, "newUsersInfo(): could not get flags for current user ("
-                    + usersInfo.currentUser.userId + ")");
+            // This should not happen.
+            Log.wtf(TAG, "Current user is not part of existing users. usersInfo: " + usersInfo);
         }
 
         return usersInfo;

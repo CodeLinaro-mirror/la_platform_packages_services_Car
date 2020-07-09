@@ -92,6 +92,10 @@ bool HalCamera::ownVirtualCamera(sp<VirtualCamera> virtualCamera) {
 
     // Add this virtualCamera to our ownership list via weak pointer
     mClients.emplace_back(virtualCamera);
+
+    // Update statistics
+    mUsageStats->updateNumClients(mClients.size());
+
     return true;
 }
 
@@ -114,6 +118,9 @@ void HalCamera::disownVirtualCamera(sp<VirtualCamera> virtualCamera) {
     if (!changeFramesInFlight(0)) {
         LOG(ERROR) << "Error when trying to reduce the in flight buffer count";
     }
+
+    // Update statistics
+    mUsageStats->updateNumClients(mClients.size());
 }
 
 
@@ -250,7 +257,7 @@ Return<EvsResult> HalCamera::clientStreamStarting() {
 }
 
 
-void HalCamera::clientStreamEnding(sp<VirtualCamera> client) {
+void HalCamera::clientStreamEnding(const VirtualCamera* client) {
     {
         std::lock_guard<std::mutex> lock(mFrameMutex);
         auto itReq = mNextRequests->begin();
@@ -262,7 +269,7 @@ void HalCamera::clientStreamEnding(sp<VirtualCamera> client) {
             }
         }
 
-        const uint64_t clientId = reinterpret_cast<const uint64_t>(client.get());
+        const uint64_t clientId = reinterpret_cast<const uint64_t>(client);
         if (itReq != mNextRequests->end()) {
             mNextRequests->erase(itReq);
 
@@ -275,7 +282,7 @@ void HalCamera::clientStreamEnding(sp<VirtualCamera> client) {
 
         auto itCam = mClients.begin();
         while (itCam != mClients.end()) {
-            if (itCam->promote() == client.get()) {
+            if (itCam->promote() == client) {
                 break;
             } else {
                 ++itCam;
@@ -352,7 +359,7 @@ Return<void> HalCamera::doneWithFrame(const BufferDesc_1_1& buffer) {
             mHwCamera->doneWithFrame_1_1(returnedBuffers);
 
             // Counts a returned buffer
-            mUsageStats->framesReturned();
+            mUsageStats->framesReturned(returnedBuffers);
         }
     }
 
@@ -412,7 +419,7 @@ Return<void> HalCamera::deliverFrame_1_1(const hardware::hidl_vec<BufferDesc_1_1
     }
 
     // Reports the number of received buffers
-    mUsageStats->framesReceived(buffer.size());
+    mUsageStats->framesReceived(buffer);
 
     // Frames are being forwarded to active v1.0 clients and v1.1 clients if we
     // failed to create a timeline.
@@ -437,7 +444,7 @@ Return<void> HalCamera::deliverFrame_1_1(const hardware::hidl_vec<BufferDesc_1_1
         mHwCamera->doneWithFrame_1_1(buffer);
 
         // Reports a returned buffer
-        mUsageStats->framesReturned();
+        mUsageStats->framesReturned(buffer);
     } else {
         // Add an entry for this frame in our tracking list.
         unsigned i;
