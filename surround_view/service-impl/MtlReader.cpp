@@ -13,12 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #include "MtlReader.h"
 
 #include <android-base/logging.h>
 #include <cstdio>
-
-#define LOG_TAG "MtlReader"
 
 namespace android {
 namespace hardware {
