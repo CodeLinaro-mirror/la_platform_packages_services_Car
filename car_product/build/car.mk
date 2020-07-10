@@ -25,7 +25,9 @@ PRODUCT_PACKAGES += \
     CompanionDeviceSupport \
     OneTimeInitializer \
     Provision \
+    StatementService \
     SystemUpdater
+
 
 PRODUCT_PACKAGES += \
     clatd \
@@ -41,6 +43,7 @@ PRODUCT_PACKAGES += \
     DirectRenderingCluster \
     GarageModeTestApp \
     ExperimentalCarService \
+    RotaryPlayground \
 
 
 # SEPolicy for test apps / services

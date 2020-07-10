@@ -39,9 +39,11 @@ import com.android.internal.annotations.GuardedBy;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 
@@ -56,7 +58,8 @@ public class CarPropertyService extends ICarProperty.Stub
     private static final String TAG = "Property.service";
     private final Context mContext;
     private final Map<IBinder, Client> mClientMap = new ConcurrentHashMap<>();
-    private Map<Integer, CarPropertyConfig<?>> mConfigs;
+    @GuardedBy("mLock")
+    private final Map<Integer, CarPropertyConfig<?>> mConfigs = new HashMap<>();
     private final PropertyHalService mHal;
     private boolean mListenerIsSet = false;
     private final Map<Integer, List<Client>> mPropIdClientMap = new ConcurrentHashMap<>();
@@ -143,12 +146,13 @@ public class CarPropertyService extends ICarProperty.Stub
 
     @Override
     public void init() {
-        if (mConfigs == null) {
+        synchronized (mLock) {
             // Cache the configs list to avoid subsequent binder calls
-            mConfigs = mHal.getPropertyList();
-            if (DBG) {
-                Log.d(TAG, "cache CarPropertyConfigs " + mConfigs.size());
-            }
+            mConfigs.clear();
+            mConfigs.putAll(mHal.getPropertyList());
+        }
+        if (DBG) {
+            Log.d(TAG, "cache CarPropertyConfigs " + mConfigs.size());
         }
     }
 
@@ -168,6 +172,29 @@ public class CarPropertyService extends ICarProperty.Stub
 
     @Override
     public void dump(PrintWriter writer) {
+        writer.println("*CarPropertyService*");
+        synchronized (mLock) {
+            writer.println("    Listener is set for PropertyHalService: " + mListenerIsSet);
+            writer.println("    There are " + mClientMap.size() + " clients "
+                    + "using CarPropertyService.");
+            writer.println("    Properties registered: ");
+            for (int propId : mPropIdClientMap.keySet()) {
+                writer.println("        propId: 0x" + toHexString(propId)
+                        + " is registered by " + mPropIdClientMap.get(propId).size()
+                        + " client(s).");
+            }
+            writer.println("    Properties changed by CarPropertyService: ");
+            for (int i = 0; i < mSetOperationClientMap.size(); i++) {
+                int propId = mSetOperationClientMap.keyAt(i);
+                SparseArray areaIdToClient = mSetOperationClientMap.valueAt(i);
+                for (int j = 0; j < areaIdToClient.size(); j++) {
+                    int areaId = areaIdToClient.keyAt(j);
+                    writer.println("        propId: 0x" + toHexString(propId)
+                            + " areaId: 0x" + toHexString(areaId)
+                            + " by client: " + areaIdToClient.valueAt(j));
+                }
+            }
+        }
     }
 
     @Override
@@ -272,10 +299,13 @@ public class CarPropertyService extends ICarProperty.Stub
     private void unregisterListenerBinderLocked(int propId, IBinder listenerBinder) {
         Client client = mClientMap.get(listenerBinder);
         List<Client> propertyClients = mPropIdClientMap.get(propId);
-        if (mConfigs.get(propId) == null) {
-            // Do not attempt to register an invalid propId
-            Log.e(TAG, "unregisterListener: propId is not in config list:0x" + toHexString(propId));
-            return;
+        synchronized (mLock) {
+            if (mConfigs.get(propId) == null) {
+                // Do not attempt to register an invalid propId
+                Log.e(TAG, "unregisterListener: propId is not in config list:0x" + toHexString(
+                        propId));
+                return;
+            }
         }
         if ((client == null) || (propertyClients == null)) {
             Log.e(TAG, "unregisterListenerBinderLocked: Listener was not previously registered.");
@@ -319,7 +349,11 @@ public class CarPropertyService extends ICarProperty.Stub
     @Override
     public List<CarPropertyConfig> getPropertyList() {
         List<CarPropertyConfig> returnList = new ArrayList<CarPropertyConfig>();
-        for (CarPropertyConfig c : mConfigs.values()) {
+        Set<CarPropertyConfig> allConfigs;
+        synchronized (mLock) {
+            allConfigs = new HashSet<>(mConfigs.values());
+        }
+        for (CarPropertyConfig c : allConfigs) {
             if (ICarImpl.hasPermission(mContext, mHal.getReadPermission(c.getPropertyId()))) {
                 // Only add properties the list if the process has permissions to read it
                 returnList.add(c);
@@ -333,10 +367,12 @@ public class CarPropertyService extends ICarProperty.Stub
 
     @Override
     public CarPropertyValue getProperty(int prop, int zone) {
-        if (mConfigs.get(prop) == null) {
-            // Do not attempt to register an invalid propId
-            Log.e(TAG, "getProperty: propId is not in config list:0x" + toHexString(prop));
-            return null;
+        synchronized (mLock) {
+            if (mConfigs.get(prop) == null) {
+                // Do not attempt to register an invalid propId
+                Log.e(TAG, "getProperty: propId is not in config list:0x" + toHexString(prop));
+                return null;
+            }
         }
         ICarImpl.assertPermission(mContext, mHal.getReadPermission(prop));
         return mHal.getProperty(prop, zone);
@@ -344,20 +380,26 @@ public class CarPropertyService extends ICarProperty.Stub
 
     @Override
     public String getReadPermission(int propId) {
-        if (mConfigs.get(propId) == null) {
-            // Property ID does not exist
-            Log.e(TAG, "getReadPermission: propId is not in config list:0x" + toHexString(propId));
-            return null;
+        synchronized (mLock) {
+            if (mConfigs.get(propId) == null) {
+                // Property ID does not exist
+                Log.e(TAG,
+                        "getReadPermission: propId is not in config list:0x" + toHexString(propId));
+                return null;
+            }
         }
         return mHal.getReadPermission(propId);
     }
 
     @Override
     public String getWritePermission(int propId) {
-        if (mConfigs.get(propId) == null) {
-            // Property ID does not exist
-            Log.e(TAG, "getWritePermission: propId is not in config list:0x" + toHexString(propId));
-            return null;
+        synchronized (mLock) {
+            if (mConfigs.get(propId) == null) {
+                // Property ID does not exist
+                Log.e(TAG, "getWritePermission: propId is not in config list:0x" + toHexString(
+                        propId));
+                return null;
+            }
         }
         return mHal.getWritePermission(propId);
     }
@@ -385,9 +427,11 @@ public class CarPropertyService extends ICarProperty.Stub
     // is accessible or not for platform and client.
     private void checkPropertyAccessibility(int propId) {
         // Checks if the car implemented the property or not.
-        if (!mConfigs.containsKey(propId)) {
-            throw new IllegalArgumentException("Property Id: 0x" + Integer.toHexString(propId)
-                    + " does not exist in the vehicle");
+        synchronized (mLock) {
+            if (mConfigs.get(propId) == null) {
+                throw new IllegalArgumentException("Property Id: 0x" + Integer.toHexString(propId)
+                        + " does not exist in the vehicle");
+            }
         }
 
         // Checks if android has permission to write property.
