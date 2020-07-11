@@ -44,6 +44,8 @@ import android.media.audiopolicy.AudioMix;
 import android.media.audiopolicy.AudioMixingRule;
 import android.media.audiopolicy.AudioPolicy;
 import android.os.IBinder;
+import android.os.Handler;
+import android.os.Message;
 import android.os.Looper;
 import android.os.RemoteException;
 import android.provider.Settings;
@@ -65,7 +67,10 @@ import java.util.NoSuchElementException;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-public class CarAudioService extends ICarAudio.Stub implements CarServiceBase {
+import com.android.car.CarPowerManagementService.PowerEventProcessingHandler;
+
+public class CarAudioService extends ICarAudio.Stub implements CarServiceBase,
+             PowerEventProcessingHandler {
 
     private static final int DEFAULT_AUDIO_USAGE = AudioAttributes.USAGE_MEDIA;
 
@@ -125,12 +130,16 @@ public class CarAudioService extends ICarAudio.Stub implements CarServiceBase {
     private final Object mImplLock = new Object();
 
     private final Context mContext;
+    private final CarPowerManagementService mCarPowerManagementService;
     private final TelephonyManager mTelephonyManager;
     private final AudioManager mAudioManager;
     private final boolean mUseDynamicRouting;
     private final boolean mPersistMasterMuteState;
     private final SparseIntArray mContextToBus = new SparseIntArray();
     private final SparseArray<CarAudioDeviceInfo> mCarAudioDeviceInfos = new SparseArray<>();
+
+    private static final int MAINTENANCE_SERVICE_TURNOFF_PERIOD = 5 * 1000;
+    private static final int MSG_NOTIFY_PROCESSINGCOMPLETE_EARLY = 0;
 
     private final AudioPolicy.AudioPolicyVolumeCallback mAudioPolicyVolumeCallback =
             new AudioPolicy.AudioPolicyVolumeCallback() {
@@ -173,6 +182,53 @@ public class CarAudioService extends ICarAudio.Stub implements CarServiceBase {
         }
     };
 
+    private final AudioServiceHandler mHandler = new AudioServiceHandler();
+
+    private class AudioServiceHandler extends Handler {
+        @Override
+        public void handleMessage(Message msg) {
+            if (msg.what == MSG_NOTIFY_PROCESSINGCOMPLETE_EARLY) {
+               final IAudioControl audioControl = getAudioControl();
+               if ((audioControl != null) && (mAudioManager != null)) {
+                   try {
+                        for (int contextNumber : CONTEXT_NUMBERS) {
+                            int busNumber = audioControl.getBusForContext(contextNumber);
+                            if ((ContextNumber.NAVIGATION == busNumber) &&
+                                    (!mAudioManager.isMusicActive())) {
+                                mHandler.removeMessages(MSG_NOTIFY_PROCESSINGCOMPLETE_EARLY);
+                                mCarPowerManagementService.notifyPowerEventProcessingCompletion(
+                                        CarAudioService.this);
+                             } else {
+                               //TODO: Handle by Applications
+                             }
+                        }
+                   } catch (RemoteException e) {
+                       Log.e(CarLog.TAG_AUDIO, " error while calling getBusForContext " + e);
+                   }
+               }
+               mHandler.removeMessages(MSG_NOTIFY_PROCESSINGCOMPLETE_EARLY);
+            }
+        }
+    }
+
+    @Override
+    public long onPrepareShutdown(boolean shuttingDown) {
+        mHandler.removeMessages(MSG_NOTIFY_PROCESSINGCOMPLETE_EARLY);
+        mHandler.sendMessageDelayed(
+                        mHandler.obtainMessage(MSG_NOTIFY_PROCESSINGCOMPLETE_EARLY),
+                        MAINTENANCE_SERVICE_TURNOFF_PERIOD);
+        return MAINTENANCE_SERVICE_TURNOFF_PERIOD;
+    }
+
+    @Override
+    public void onPowerOn(boolean displayOn) {
+    }
+
+    @Override
+    public int getWakeupTime() {
+        return 0;
+    }
+
     private final BinderInterfaceContainer<ICarVolumeCallback> mVolumeCallbackContainer =
             new BinderInterfaceContainer<>();
 
@@ -202,8 +258,10 @@ public class CarAudioService extends ICarAudio.Stub implements CarServiceBase {
     private AudioPolicy mAudioPolicy;
     private CarVolumeGroup[] mCarVolumeGroups;
 
-    public CarAudioService(Context context) {
+    public CarAudioService(Context context,
+            CarPowerManagementService carPowerManagementService) {
         mContext = context;
+        mCarPowerManagementService = carPowerManagementService;
         mTelephonyManager = (TelephonyManager) mContext.getSystemService(Context.TELEPHONY_SERVICE);
         mAudioManager = (AudioManager) mContext.getSystemService(Context.AUDIO_SERVICE);
         mUseDynamicRouting = mContext.getResources().getBoolean(R.bool.audioUseDynamicRouting);
@@ -217,6 +275,7 @@ public class CarAudioService extends ICarAudio.Stub implements CarServiceBase {
      */
     @Override
     public void init() {
+        mCarPowerManagementService.registerPowerEventProcessingHandler(this);
         synchronized (mImplLock) {
             if (!mUseDynamicRouting) {
                 Log.i(CarLog.TAG_AUDIO, "Audio dynamic routing not configured, run in legacy mode");

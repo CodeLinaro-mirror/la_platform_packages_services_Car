@@ -125,7 +125,7 @@ public class ICarImpl extends ICar.Stub {
         mCarProjectionService = new CarProjectionService(serviceContext, mCarInputService);
         mGarageModeService = new GarageModeService(mContext, mCarPowerManagementService);
         mAppFocusService = new AppFocusService(serviceContext, mSystemActivityMonitoringService);
-        mCarAudioService = new CarAudioService(serviceContext);
+        mCarAudioService = new CarAudioService(serviceContext, mCarPowerManagementService);
         mCarNightService = new CarNightService(serviceContext, mCarPropertyService);
         mInstrumentClusterService = new InstrumentClusterService(serviceContext,
                 mAppFocusService, mCarInputService);
