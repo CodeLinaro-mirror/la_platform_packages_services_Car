@@ -320,6 +320,11 @@ public class BluetoothDeviceConnectionPolicy {
                     // Write currently connected device snapshot to file.
                     writeDeviceInfoToSettings();
                     resetBluetoothDevicesConnectionInfo();
+                } else if (currState == BluetoothAdapter.STATE_TURNING_ON) {
+                    // To ensure profiles proxy connected before auto-connecting,
+                    // get the BluetoothUserService and also setup the Bluetooth
+                    // connection proxy for all profiles when BT is turnning on.
+                    mCarBluetoothUserService = setupBluetoothUserService();
                 }
             } else if (BluetoothDevice.ACTION_UUID.equals(action)) {
                 // Received during pairing with the UUIDs of the Bluetooth profiles supported by
