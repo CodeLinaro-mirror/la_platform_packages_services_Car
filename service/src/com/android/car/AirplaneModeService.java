@@ -29,6 +29,8 @@
 
 package com.android.car;
 
+import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.app.ActivityManager;
 import android.bluetooth.BluetoothAdapter;
 import android.content.BroadcastReceiver;
@@ -37,6 +39,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.database.ContentObserver;
+import android.hardware.bluetooth.V1_0.IBluetoothHci;
 import android.net.wifi.WifiManager;
 import android.net.wifi.p2p.WifiP2pManager;
 import android.provider.Settings;
@@ -46,6 +49,7 @@ import android.os.Message;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Looper;
+import android.os.RemoteException;
 import android.os.UserHandle;
 import android.os.SystemProperties;
 
@@ -53,6 +57,7 @@ import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.NoSuchElementException;
 
 public class AirplaneModeService implements CarServiceBase,
         CarPowerManagementService.PowerEventProcessingHandler,
@@ -184,9 +189,9 @@ public class AirplaneModeService implements CarServiceBase,
 
         private static final int MAX_NOTIFY_DELAY = 10_000; // 10 seconds
 
-        private static final int MIN_NOTIFY_DELAY = 2000;  // ms
+        private static final int MIN_NOTIFY_DELAY = 500;  // ms
 
-        private static final int MIN_BLUETOOTH_OFF_TIMEOUT = 2500;  // ms
+        private static final int MIN_BLUETOOTH_OFF_TIMEOUT = 400;  // ms
 
         private static final int MIN_WIFI_OFF_TIMEOUT = 1_500;  // 1.5 second
 
@@ -287,6 +292,31 @@ public class AirplaneModeService implements CarServiceBase,
                 if (mBluetoothAdapter != null) {
                     logd("disable Bluetooth");
                     mBluetoothAdapter.disable();
+                }
+            }
+
+            private void closeHci() {
+                final IBluetoothHci bluetoothHci = getBluetoothHci();
+                if (bluetoothHci == null) {
+                    loge("IBluetoothHci null");
+                    return;
+                }
+
+                try {
+                    bluetoothHci.close();
+                    logd("Bluetooth hci closed");
+                } catch (RemoteException e) {
+                    Log.e(TAG, "Failed to close Bluetooth hci", e);
+                }
+            }
+
+            public void handleRfState(int state) {
+                switch (state) {
+                    case RfState.RF_STATE_OFF:
+                        closeHci();
+                        break;
+                    default:
+                        break;
                 }
             }
 
@@ -758,10 +788,13 @@ public class AirplaneModeService implements CarServiceBase,
         private void handleRfStateChanged(int id, int state) {
             updateRfState(id, state);
 
-            if (!mPowerOn && isRfOff()) {
-                removeMessages(MSG_TIMEOUT);
-                logd("postpone notifying completion, duration: " + mDuration + " ms");
-                postponePowerEventProcessingCompletion(mDuration);
+            if (!mPowerOn) {
+                handleRfState(id, state);
+                if (isRfOff()) {
+                    removeMessages(MSG_TIMEOUT);
+                    logd("postpone notifying completion, duration: " + mDuration + " ms");
+                    postponePowerEventProcessingCompletion(mDuration);
+                }
             }
         }
 
@@ -834,6 +867,17 @@ public class AirplaneModeService implements CarServiceBase,
             }
         }
 
+        private void handleRfState(int id, int state) {
+            switch (id) {
+                case RfState.RF_ID_BLUETOOTH:
+                    mBluetoothState.handleRfState(state);
+                    break;
+
+                default:
+                    break;
+            }
+        }
+
         private boolean isRfOff() {
             boolean allRfOff = true;
 
@@ -889,6 +933,18 @@ public class AirplaneModeService implements CarServiceBase,
                 default:
                     return "unknown";
             }
+        }
+
+        @Nullable
+        private IBluetoothHci getBluetoothHci() {
+            try {
+                return IBluetoothHci.getService();
+            } catch (RemoteException e) {
+                Log.e(TAG, "Failed to get IBluetoothHci service", e);
+            } catch (NoSuchElementException e) {
+                Log.e(TAG, "IBluetoothHci service not registered yet", e);
+            }
+            return null;
         }
 
         public void dump(PrintWriter writer) {
