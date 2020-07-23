@@ -1385,7 +1385,7 @@
     <string name="sd_format" product="default" msgid="1346245995138883960">"Ջնջել SD քարտը"</string>
     <string name="sd_format_summary" product="nosdcard" msgid="1179857727779521920">"Ջնջել USB կրիչի բոլոր տվյալները, ինչպիսիք են երաժշտությունը և լուսանկարները"</string>
     <string name="sd_format_summary" product="default" msgid="4284028411908176234">"SD քարտից ջնջում է ողջ տեղեկատվությունը, ինչպիսիք են երաժշտությունն ու լուսանկարները"</string>
-    <string name="memory_clear_cache_title" msgid="4306793268129306684">"Մաքրե՞լ քեշավորված տվյալները:"</string>
+    <string name="memory_clear_cache_title" msgid="4306793268129306684">"Ջնջե՞լ քեշավորված տվյալները:"</string>
     <string name="memory_clear_cache_message" msgid="6723120398411410031">"Սա կմաքրի բոլոր ծրագրերի քեշավորված տվյալները:"</string>
     <string name="mtp_ptp_mode_summary" msgid="6074099855478444183">"MTP կամ PTP գործառույթը ակտիվ է"</string>
     <string name="dlg_confirm_unmount_title" product="nosdcard" msgid="3843209947310774105">"Անջատե՞լ USB կրիչը:"</string>
@@ -4238,7 +4238,7 @@
     <string name="storage_size_large_alternate" msgid="1317796542509105857">"<xliff:g id="NUMBER">^1</xliff:g>"<small>" "<font size="20">"<xliff:g id="UNIT">^2</xliff:g>"</font></small>""</string>
     <string name="storage_volume_total" msgid="5021484171514159913">"Օգտագործված է <xliff:g id="TOTAL">%1$s</xliff:g>-ից"</string>
     <string name="storage_percent_full" msgid="6924662861545958442">"զբաղված է"</string>
-    <string name="clear_instant_app_data" msgid="3673669086522890405">"Մաքրել հավելվածի տվյալները"</string>
+    <string name="clear_instant_app_data" msgid="3673669086522890405">"Հեռացնել սարքից"</string>
     <string name="clear_instant_app_confirmation" msgid="1778553115373698061">"Հեռացնե՞լ այս ակնթարթային հավելվածը։"</string>
     <string name="launch_instant_app" msgid="5251693061228352333">"Բացել"</string>
     <string name="game_storage_settings" msgid="6856911551799175914">"Խաղեր"</string>
@@ -4274,6 +4274,8 @@
     <string name="disabled_feature_reason_slow_down_phone" msgid="1819157849156814583">"Հեռախոսի աշխատանքը կդանդաղի"</string>
     <string name="enable_gnss_raw_meas_full_tracking" msgid="3397182995626655581">"GNSS-ի չափումների ամբողջական բեռնում"</string>
     <string name="enable_gnss_raw_meas_full_tracking_summary" msgid="2469305990718976105">"Հետագծել GNSS-ի բոլոր սխեմաներն ու հաճախականությունները՝ առանց աշխատաշրջանի"</string>
+    <string name="enable_user_switch_message" msgid="8613014373053051092">"Լրացուցիչ տեղեկություններ օգտատիրոջ հերթապահության մասին"</string>
+    <string name="enable_user_switch_message_summary" msgid="3354160264601132060">"Ցույց տալ մանրամասն տեղեկություններ օգտատիրոջ հերթապահության ժամանակ"</string>
     <string name="allow_background_activity_starts" msgid="6754016668813082728">"Թույլատրել աշխատանքը ֆոնային ռեժիմում"</string>
     <string name="allow_background_activity_starts_summary" msgid="8170749270869606692">"Թույլ է տալիս աշխատանքը ֆոնային ռեժիմում"</string>
     <string name="show_first_crash_dialog" msgid="3682063068903692710">"Միշտ ցույց տալ խափանման մասին ծանուցումը"</string>
@@ -4446,7 +4448,7 @@
     <string name="network_connection_timeout_dialog_ok" msgid="5156496438627748361">"Նորից փորձել"</string>
     <string name="network_connection_errorstate_dialog_message" msgid="1599445930536043943">"Սխալ առաջացավ: Հավելվածը չեղարկել է սարք ընտրելու հայտը:"</string>
     <string name="network_connection_connect_successful" msgid="888912275986965748">"Կապը հաստատվեց"</string>
-    <string name="network_connection_request_dialog_showall" msgid="396928496030183071">"Ցուցադրել բոլորը"</string>
+    <string name="network_connection_request_dialog_showall" msgid="396928496030183071">"Ցույց տալ բոլորը"</string>
     <plurals name="show_bluetooth_devices" formatted="false" msgid="7451733907387872891">
       <item quantity="one"><xliff:g id="NUMBER_DEVICE_COUNT_1">%1$d</xliff:g> միացված սարք</item>
       <item quantity="other"><xliff:g id="NUMBER_DEVICE_COUNT_1">%1$d</xliff:g> միացված սարք</item>
