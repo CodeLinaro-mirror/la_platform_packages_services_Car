@@ -1067,7 +1067,7 @@
     <string name="wifi_hotspot_ap_band_title" msgid="3485744480410441949">"एपी बैंड"</string>
     <string name="wifi_hotspot_footer_info_regular" msgid="3876006922622827363">"अपने दूसरे डिवाइस के लिए हॉटस्पॉट का इस्तेमाल करके वाई-फ़ाई नेटवर्क बनाएं. हॉटस्पॉट आपके मोबाइल डेटा कनेक्शन के ज़रिए इंटरनेट की सुविधा देता है. मोबाइल डेटा के लिए अतिरिक्त भुगतान करना पड़ सकता है."</string>
     <string name="wifi_hotspot_footer_info_local_only" msgid="3339582350894639261">"ऐप्लिकेशन आस-पास के डिवाइस से सामग्री शेयर करने के लिए कोई हॉटस्पॉट बना सकते हैं."</string>
-    <string name="wifi_hotspot_auto_off_title" msgid="7416022590415189590">"हॉटस्पॉट अपने आप बंद करें"</string>
+    <string name="wifi_hotspot_auto_off_title" msgid="7416022590415189590">"हॉटस्पॉट अपने-आप बंद हो जाए"</string>
     <string name="wifi_hotspot_auto_off_summary" msgid="3866769400624802105">"कोई डिवाइस कनेक्ट नहीं होने पर, वाई-फ़ाई हॉटस्पॉट बंद हो जाएगा"</string>
     <string name="wifi_tether_starting" msgid="7676952148471297900">"हॉटस्‍पॉट को चालू किया जा रहा है…"</string>
     <string name="wifi_tether_stopping" msgid="7478561853791953349">"हॉटस्‍पॉट को बंद किया जा रहा है…"</string>
@@ -4274,6 +4274,8 @@
     <string name="disabled_feature_reason_slow_down_phone" msgid="1819157849156814583">"इस सुविधा का इस्तेमाल करने पर आपका फ़ोन धीरे काम करेगा"</string>
     <string name="enable_gnss_raw_meas_full_tracking" msgid="3397182995626655581">"जीएनएसएस माप को हर हाल में लागू करें"</string>
     <string name="enable_gnss_raw_meas_full_tracking_summary" msgid="2469305990718976105">"बिना ड्यूटी-साइक्लिंग के जीएनएसएस के सभी तारामंडल (कॉन्स्टलेशन) और फ़्रीक्वेंसी ट्रैक करें"</string>
+    <string name="enable_user_switch_message" msgid="8613014373053051092">"उपयोगकर्ता बदलते समय डीबग करना"</string>
+    <string name="enable_user_switch_message_summary" msgid="3354160264601132060">"उपयोगकर्ता बदलते समय ज़्यादा जानकारी दिखाएं"</string>
     <string name="allow_background_activity_starts" msgid="6754016668813082728">"बैकग्राउंड में गतिविधि शुरू होने की मंज़ूरी दें"</string>
     <string name="allow_background_activity_starts_summary" msgid="8170749270869606692">"इससे बैकग्राउंड में शुरू होने वाली सभी गतिविधि को मंज़ूरी मिल जाती है"</string>
     <string name="show_first_crash_dialog" msgid="3682063068903692710">"क्रैश होने की सूचना हर बार दिखाएं"</string>
