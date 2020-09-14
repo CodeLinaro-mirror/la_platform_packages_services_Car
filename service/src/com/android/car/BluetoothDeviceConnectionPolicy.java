@@ -24,6 +24,8 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.UserHandle;
 import android.provider.Settings;
 import android.util.Log;
@@ -46,6 +48,7 @@ public class BluetoothDeviceConnectionPolicy {
     private final BluetoothAdapter mBluetoothAdapter;
     private final CarBluetoothService mCarBluetoothService;
 
+    private static final int MIN_BLUETOOTH_OFF_TIMEOUT = 1000;
     private CarPowerManager mCarPowerManager;
     private final CarPowerStateListenerWithCompletion mCarPowerStateListener =
             new CarPowerStateListenerWithCompletion() {
@@ -76,12 +79,18 @@ public class BluetoothDeviceConnectionPolicy {
             if (state == CarPowerManager.CarPowerStateListener.SHUTDOWN_PREPARE) {
                 logd("Car is preparing for shutdown. Disable bluetooth adapter");
                 disableBluetooth();
-
-                // Let CPMS know we're ready to shutdown. Otherwise, CPMS will get stuck for
-                // up to an hour.
-                if (future != null) {
-                    future.complete(null);
-                }
+                Handler handler = new Handler(Looper.getMainLooper());
+                handler.postDelayed(new Runnable() {
+                    @Override
+                    public void run() {
+                        // Let CPMS know we're ready to shutdown. Otherwise, CPMS will get stuck for
+                        // up to an hour.
+                        logd("complete from BT");
+                        if (future != null) {
+                            future.complete(null);
+                        }
+                    }
+                }, MIN_BLUETOOTH_OFF_TIMEOUT);
                 return;
             }
         }
