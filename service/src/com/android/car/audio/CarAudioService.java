@@ -43,6 +43,7 @@ import android.media.AudioFormat;
 import android.media.AudioGain;
 import android.media.AudioGainConfig;
 import android.media.AudioManager;
+import android.media.AudioSystem;
 import android.media.AudioPatch;
 import android.media.AudioPlaybackConfiguration;
 import android.media.AudioPortConfig;
@@ -1298,4 +1299,18 @@ public class CarAudioService extends ICarAudio.Stub implements CarServiceBase {
             }
         }
     }
+
+    public boolean getAudioStatus() {
+        return (AudioSystem.isStreamActive(AudioSystem.STREAM_VOICE_CALL, 0) ||
+                AudioSystem.isStreamActive(AudioSystem.STREAM_SYSTEM, 0) ||
+                AudioSystem.isStreamActive(AudioSystem.STREAM_RING, 0) ||
+                AudioSystem.isStreamActive(AudioSystem.STREAM_MUSIC, 0) ||
+                AudioSystem.isStreamActive(AudioSystem.STREAM_ALARM, 0) ||
+                AudioSystem.isStreamActive(AudioSystem.STREAM_NOTIFICATION, 0) ||
+                AudioSystem.isStreamActive(AudioSystem.STREAM_BLUETOOTH_SCO, 0) ||
+                AudioSystem.isStreamActive(AudioSystem.STREAM_SYSTEM_ENFORCED, 0) ||
+                AudioSystem.isStreamActive(AudioSystem.STREAM_DTMF, 0) ||
+                AudioSystem.isStreamActive(AudioSystem.STREAM_TTS, 0));
+    }
+
 }
