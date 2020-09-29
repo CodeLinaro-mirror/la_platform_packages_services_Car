@@ -118,6 +118,8 @@ public class AirplaneModeService implements CarServiceBase,
                 notifyPowerOff(future);
                 // Postpone to notify CarPowerManager after RF (e.g. BT/Wifi) is turned off.
                 break;
+            case CarPowerStateListener.SHUTDOWN_CANCELLED:
+                // Pass-through
             case CarPowerStateListener.SUSPEND_EXIT:
                 notifyPowerOn();
                 if (future != null) {
