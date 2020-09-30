@@ -37,17 +37,13 @@ using namespace ::android::hardware::automotive::evs::V1_0;
  */
 class RenderDirectView: public RenderBase {
 public:
-    RenderDirectView(sp<IEvsEnumerator> enumerator, const ConfigManager::CameraInfo& cam);
-
     virtual bool activate() override;
     virtual void deactivate() override;
 
-    virtual bool drawFrame(const BufferDesc& tgtBuffer);
+    virtual bool drawFrame(const BufferDesc& tgtBuffer,
+                           const BufferDesc& imageBuffer) override;
 
 protected:
-    sp<IEvsEnumerator>              mEnumerator;
-    ConfigManager::CameraInfo       mCameraInfo;
-
     std::unique_ptr<VideoTex>       mTexture;
 
     GLuint                          mShaderProgram = 0;

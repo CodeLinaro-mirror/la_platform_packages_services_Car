@@ -29,7 +29,7 @@ import android.os.IBinder;
  * Utility to retrieve various static information from car. Each data are grouped as {@link Bundle}
  * and relevant data can be checked from {@link Bundle} using pre-specified keys.
  */
-public final class CarInfoManager implements CarManagerBase{
+public final class CarInfoManager extends CarManagerBase {
 
     private final CarPropertyManager mCarPropertyMgr;
     /**
@@ -61,7 +61,6 @@ public final class CarInfoManager implements CarManagerBase{
     public static final String BASIC_INFO_KEY_VEHICLE_ID = "android.car.vehicle-id";
     /**
      * Key for product configuration info.
-     * @FutureFeature Cannot drop due to usage in non-flag protected place.
      * @hide
      */
     @ValueTypeDef(type = String.class)
@@ -261,15 +260,14 @@ public final class CarInfoManager implements CarManagerBase{
     }
 
     /** @hide */
-    public CarInfoManager(IBinder service) {
+    public CarInfoManager(Car car, IBinder service) {
+        super(car);
         ICarProperty mCarPropertyService = ICarProperty.Stub.asInterface(service);
-        mCarPropertyMgr = new CarPropertyManager(mCarPropertyService, null);
+        mCarPropertyMgr = new CarPropertyManager(car, mCarPropertyService);
     }
 
     /** @hide */
     public void onCarDisconnected() {
         mCarPropertyMgr.onCarDisconnected();
     }
-
-
 }

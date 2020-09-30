@@ -16,9 +16,7 @@
 #ifndef CAR_LIB_EVS_SUPPORT_DISPLAY_USECASE_H
 #define CAR_LIB_EVS_SUPPORT_DISPLAY_USECASE_H
 
-#include <android/hardware/automotive/evs/1.0/IEvsCamera.h>
 #include <android/hardware/automotive/evs/1.0/IEvsDisplay.h>
-#include <android/hardware/automotive/evs/1.0/IEvsEnumerator.h>
 
 #include <string>
 #include <thread>
@@ -27,6 +25,8 @@
 #include "BaseUseCase.h"
 #include "ConfigManager.h"
 #include "RenderBase.h"
+#include "StreamHandler.h"
+#include "ResourceManager.h"
 
 namespace android {
 namespace automotive {
@@ -61,12 +61,12 @@ class DisplayUseCase : public BaseUseCase {
     BaseRenderCallback* mRenderCallback = nullptr;
     std::unique_ptr<RenderBase> mCurrentRenderer;
 
-    // TODO(b/130246434): Move mEvs to a center place and share among use cases.
-    sp<IEvsEnumerator> mEvs;
     sp<IEvsDisplay> mDisplay;
-    ConfigManager::CameraInfo mCamera;
+    sp<StreamHandler> mStreamHandler;
+    sp<ResourceManager> mResourceManager;
     bool mIsReadyToRun;
     std::thread mWorkerThread;
+    BufferDesc mImageBuffer;
 };
 
 }  // namespace support

@@ -14,8 +14,16 @@
  * limitations under the License.
  */
 
-#include <log/log.h>
 #include "HalDisplay.h"
+
+#include <inttypes.h>
+
+#include <android-base/logging.h>
+#include <android-base/stringprintf.h>
+#include <ui/DisplayConfig.h>
+#include <ui/DisplayState.h>
+
+using android::base::StringAppendF;
 
 namespace android {
 namespace automotive {
@@ -23,8 +31,9 @@ namespace evs {
 namespace V1_1 {
 namespace implementation {
 
-HalDisplay::HalDisplay(sp<IEvsDisplay>& display) :
-  mHwDisplay(display) {
+HalDisplay::HalDisplay(sp<IEvsDisplay_1_0> display, int32_t id) :
+  mHwDisplay(display),
+  mId(id) {
     // nothing to do.
 }
 
@@ -40,7 +49,7 @@ void HalDisplay::shutdown() {
 /**
  * Returns a strong pointer to remote display object.
  */
-sp<IEvsDisplay> HalDisplay::getHwDisplay() {
+sp<IEvsDisplay_1_0> HalDisplay::getHwDisplay() {
     return mHwDisplay;
 }
 
@@ -98,6 +107,52 @@ Return<EvsResult> HalDisplay::returnTargetBufferForDisplay(const BufferDesc_1_0&
     } else {
         return EvsResult::OWNERSHIP_LOST;
     }
+}
+
+/**
+ * Gets basic display information from a hardware display object
+ * and returns.
+ */
+Return<void> HalDisplay::getDisplayInfo_1_1(getDisplayInfo_1_1_cb _info_cb) {
+    sp<IEvsDisplay_1_1> display = IEvsDisplay_1_1::castFrom(mHwDisplay)
+                                  .withDefault(nullptr);
+    if (display != nullptr) {
+        display->getDisplayInfo_1_1(_info_cb);
+    }
+
+    return Void();
+}
+
+
+std::string HalDisplay::toString(const char* indent) {
+    std::string buffer;
+    android::DisplayConfig displayConfig;
+    android::ui::DisplayState displayState;
+
+    if (mId == std::numeric_limits<int32_t>::min()) {
+        // Display identifier has not set
+        StringAppendF(&buffer, "HalDisplay: Display port is unknown.\n");
+    } else {
+        StringAppendF(&buffer, "HalDisplay: Display port %" PRId32 "\n", mId);
+    }
+
+    getDisplayInfo_1_1([&](auto& config, auto& state) {
+        displayConfig =
+            *(reinterpret_cast<const android::DisplayConfig*>(config.data()));
+        displayState =
+            *(reinterpret_cast<const android::ui::DisplayState*>(state.data()));
+    });
+
+    StringAppendF(&buffer, "%sWidth: %" PRId32 "\n",
+                           indent, displayConfig.resolution.getWidth());
+    StringAppendF(&buffer, "%sHeight: %" PRId32 "\n",
+                           indent, displayConfig.resolution.getHeight());
+    StringAppendF(&buffer, "%sRefresh rate: %f\n",
+                           indent, displayConfig.refreshRate);
+    StringAppendF(&buffer, "%sRotation: %" PRId32 "\n",
+                           indent, static_cast<int32_t>(displayState.orientation));
+
+    return buffer;
 }
 
 } // namespace implementation

@@ -20,21 +20,41 @@
 #include "shader.h"
 #include "shader_simpleTex.h"
 
-#include <log/log.h>
 #include <math/mat4.h>
+#include <system/camera_metadata.h>
+#include <android/hardware/camera/device/3.2/ICameraDevice.h>
+#include <android-base/logging.h>
+
+using ::android::hardware::camera::device::V3_2::Stream;
+using ::android::hardware::graphics::common::V1_0::PixelFormat;
+
+
+typedef struct {
+    int32_t id;
+    int32_t width;
+    int32_t height;
+    int32_t format;
+    int32_t direction;
+    int32_t framerate;
+} RawStreamConfig;
+
+const size_t kStreamCfgSz = sizeof(RawStreamConfig);
 
 
 RenderDirectView::RenderDirectView(sp<IEvsEnumerator> enumerator,
-                                   const ConfigManager::CameraInfo& cam) {
-    mEnumerator = enumerator;
-    mCameraInfo = cam;
+                                   const CameraDesc& camDesc,
+                                   const ConfigManager& config) :
+    mEnumerator(enumerator),
+    mCameraDesc(camDesc),
+    mConfig(config) {
+    /* Nothing to do */
 }
 
 
 bool RenderDirectView::activate() {
     // Ensure GL is ready to go...
     if (!prepareGL()) {
-        ALOGE("Error initializing GL");
+        LOG(ERROR) << "Error initializing GL";
         return false;
     }
 
@@ -44,16 +64,62 @@ bool RenderDirectView::activate() {
                                             pixShader_simpleTexture,
                                             "simpleTexture");
         if (!mShaderProgram) {
-            ALOGE("Error buliding shader program");
+            LOG(ERROR) << "Error building shader program";
             return false;
         }
     }
 
+    bool foundCfg = false;
+    std::unique_ptr<Stream> targetCfg(new Stream());
+
+    if (!foundCfg) {
+        // This logic picks the first configuration in the list among them that
+        // support RGBA8888 format and its frame rate is faster than minReqFps.
+        const int32_t minReqFps = 15;
+        int32_t maxArea = 0;
+        camera_metadata_entry_t streamCfgs;
+        if (!find_camera_metadata_entry(
+                 reinterpret_cast<camera_metadata_t *>(mCameraDesc.metadata.data()),
+                 ANDROID_SCALER_AVAILABLE_STREAM_CONFIGURATIONS,
+                 &streamCfgs)) {
+            // Stream configurations are found in metadata
+            RawStreamConfig *ptr = reinterpret_cast<RawStreamConfig *>(streamCfgs.data.i32);
+            for (unsigned idx = 0; idx < streamCfgs.count; idx += kStreamCfgSz) {
+                if (ptr->direction == ANDROID_SCALER_AVAILABLE_STREAM_CONFIGURATIONS_OUTPUT &&
+                    ptr->format == HAL_PIXEL_FORMAT_RGBA_8888) {
+
+                    if (ptr->framerate >= minReqFps &&
+                        ptr->width * ptr->height > maxArea) {
+                        targetCfg->id = ptr->id;
+                        targetCfg->width = ptr->width;
+                        targetCfg->height = ptr->height;
+
+                        maxArea = ptr->width * ptr->height;
+
+                        foundCfg = true;
+                    }
+                }
+                ++ptr;
+            }
+        } else {
+            LOG(WARNING) << "No stream configuration data is found; "
+                         << "default parameters will be used.";
+        }
+    }
+
+    // This client always wants below input data format
+    targetCfg->format =
+        static_cast<PixelFormat>(HAL_PIXEL_FORMAT_RGBA_8888);
+
     // Construct our video texture
-    mTexture.reset(createVideoTexture(mEnumerator, mCameraInfo.cameraId.c_str(), sDisplay));
+    mTexture.reset(createVideoTexture(mEnumerator,
+                                      mCameraDesc.v1.cameraId.c_str(),
+                                      foundCfg ? std::move(targetCfg) : nullptr,
+                                      sDisplay,
+                                      mConfig.getUseExternalMemory(),
+                                      mConfig.getExternalMemoryFormat()));
     if (!mTexture) {
-        ALOGE("Failed to set up video texture for %s (%s)",
-              mCameraInfo.cameraId.c_str(), mCameraInfo.function.c_str());
+        LOG(ERROR) << "Failed to set up video texture for " << mCameraDesc.v1.cameraId;
 // TODO:  For production use, we may actually want to fail in this case, but not yet...
 //       return false;
     }
@@ -74,7 +140,7 @@ void RenderDirectView::deactivate() {
 bool RenderDirectView::drawFrame(const BufferDesc& tgtBuffer) {
     // Tell GL to render to the given buffer
     if (!attachRenderTarget(tgtBuffer)) {
-        ALOGE("Failed to attached render target");
+        LOG(ERROR) << "Failed to attached render target";
         return false;
     }
 
@@ -84,7 +150,7 @@ bool RenderDirectView::drawFrame(const BufferDesc& tgtBuffer) {
     // Set up the model to clip space transform (identity matrix if we're modeling in screen space)
     GLint loc = glGetUniformLocation(mShaderProgram, "cameraMat");
     if (loc < 0) {
-        ALOGE("Couldn't set shader parameter 'cameraMat'");
+        LOG(ERROR) << "Couldn't set shader parameter 'cameraMat'";
         return false;
     } else {
         const android::mat4 identityMatrix;
@@ -100,7 +166,7 @@ bool RenderDirectView::drawFrame(const BufferDesc& tgtBuffer) {
 
     GLint sampler = glGetUniformLocation(mShaderProgram, "tex");
     if (sampler < 0) {
-        ALOGE("Couldn't set shader parameter 'tex'");
+        LOG(ERROR) << "Couldn't set shader parameter 'tex'";
         return false;
     } else {
         // Tell the sampler we looked up from the shader to use texture slot 0 as its source

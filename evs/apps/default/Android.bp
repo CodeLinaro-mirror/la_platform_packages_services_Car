@@ -35,17 +35,18 @@ cc_binary {
     ],
 
     shared_libs: [
+        "libbase",
         "libbinder",
         "libcutils",
-        "liblog",
         "libutils",
         "libui",
         "libhidlbase",
-        "libhidltransport",
         "libEGL",
         "libGLESv2",
         "libhardware",
         "libpng",
+        "libcamera_metadata",
+        "android.hardware.camera.device@3.2",
         "android.hardware.automotive.evs@1.0",
         "android.hardware.automotive.evs@1.1",
         "android.hardware.automotive.vehicle@2.0",
@@ -61,10 +62,6 @@ cc_binary {
         "CarFromTop.png",
         "LabeledChecker.png",
     ],
-
-    strip: {
-        keep_symbols: true,
-    },
 
     init_rc: ["evs_app.rc"],
 

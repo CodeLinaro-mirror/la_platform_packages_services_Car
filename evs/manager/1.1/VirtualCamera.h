@@ -17,23 +17,24 @@
 #ifndef ANDROID_AUTOMOTIVE_EVS_V1_1_CAMERAPROXY_H
 #define ANDROID_AUTOMOTIVE_EVS_V1_1_CAMERAPROXY_H
 
-#include <android/hardware/automotive/evs/1.0/types.h>
 #include <android/hardware/automotive/evs/1.1/types.h>
 #include <android/hardware/automotive/evs/1.1/IEvsCamera.h>
 #include <android/hardware/automotive/evs/1.1/IEvsCameraStream.h>
-#include <android/hardware/automotive/evs/1.0/IEvsDisplay.h>
-#include <ui/GraphicBuffer.h>
+#include <android/hardware/automotive/evs/1.1/IEvsDisplay.h>
 
 #include <thread>
 #include <deque>
+#include <unordered_map>
 
 
+using namespace std;
 using namespace ::android::hardware::automotive::evs::V1_1;
 using ::android::hardware::Return;
 using ::android::hardware::Void;
 using ::android::hardware::hidl_handle;
+using ::android::hardware::hidl_string;
+using ::android::hardware::hidl_vec;
 using ::android::hardware::automotive::evs::V1_0::EvsResult;
-using ::android::hardware::automotive::evs::V1_0::CameraDesc;
 using ::android::hardware::automotive::evs::V1_0::IEvsDisplay;
 using BufferDesc_1_0 = ::android::hardware::automotive::evs::V1_0::BufferDesc;
 using BufferDesc_1_1 = ::android::hardware::automotive::evs::V1_1::BufferDesc;
@@ -41,6 +42,8 @@ using IEvsCamera_1_0 = ::android::hardware::automotive::evs::V1_0::IEvsCamera;
 using IEvsCamera_1_1 = ::android::hardware::automotive::evs::V1_1::IEvsCamera;
 using IEvsCameraStream_1_0 = ::android::hardware::automotive::evs::V1_0::IEvsCameraStream;
 using IEvsCameraStream_1_1 = ::android::hardware::automotive::evs::V1_1::IEvsCameraStream;
+using IEvsDisplay_1_0 = ::android::hardware::automotive::evs::V1_0::IEvsDisplay;
+using IEvsDisplay_1_1 = ::android::hardware::automotive::evs::V1_1::IEvsDisplay;
 
 namespace android {
 namespace automotive {
@@ -57,16 +60,19 @@ class HalCamera;        // From HalCamera.h
 // IEvsCameraStream object.
 class VirtualCamera : public IEvsCamera_1_1 {
 public:
-    explicit          VirtualCamera(sp<HalCamera> halCamera);
+    explicit          VirtualCamera(const std::vector<sp<HalCamera>>& halCameras);
     virtual           ~VirtualCamera();
-    void              shutdown();
 
-    sp<HalCamera>     getHalCamera()      { return mHalCamera; };
     unsigned          getAllowedBuffers() { return mFramesAllowed; };
     bool              isStreaming()       { return mStreamState == RUNNING; }
+    bool              getVersion() const  { return (int)(mStream_1_1 != nullptr); }
+    vector<sp<HalCamera>>
+                      getHalCameras();
+    void              setDescriptor(CameraDesc* desc) { mDesc = desc; }
 
     // Proxy to receive frames and forward them to the client's stream
-    bool              notifyEvent(const EvsEvent& event);
+    bool              notify(const EvsEventDesc& event);
+    bool              deliverFrame(const BufferDesc& bufDesc);
 
     // Methods from ::android::hardware::automotive::evs::V1_0::IEvsCamera follow.
     Return<void>      getCameraInfo(getCameraInfo_cb _hidl_cb)  override;
@@ -78,31 +84,54 @@ public:
     Return<EvsResult> setExtendedInfo(uint32_t opaqueIdentifier, int32_t opaqueValue) override;
 
     // Methods from ::android::hardware::automotive::evs::V1_1::IEvsCamera follow.
-    Return<EvsResult> doneWithFrame_1_1(const BufferDesc_1_1& buffer) override;
+    Return<void>      getCameraInfo_1_1(getCameraInfo_1_1_cb _hidl_cb)  override;
+    Return<void>      getPhysicalCameraInfo(const hidl_string& deviceId,
+                                            getPhysicalCameraInfo_cb _hidl_cb)  override;
+    Return<EvsResult> doneWithFrame_1_1(const hardware::hidl_vec<BufferDesc_1_1>& buffer) override;
     Return<EvsResult> pauseVideoStream() override { return EvsResult::UNDERLYING_SERVICE_ERROR; }
     Return<EvsResult> resumeVideoStream() override { return EvsResult::UNDERLYING_SERVICE_ERROR; }
     Return<EvsResult> setMaster() override;
-    Return<EvsResult> forceMaster(const sp<IEvsDisplay>& display) override;
+    Return<EvsResult> forceMaster(const sp<IEvsDisplay_1_0>& display) override;
     Return<EvsResult> unsetMaster() override;
-    Return<void>      setParameter(CameraParam id, int32_t value,
-                                   setParameter_cb _hidl_cb) override;
-    Return<void>      getParameter(CameraParam id,
-                                   getParameter_cb _hidl_cb) override;
+    Return<void>      getParameterList(getParameterList_cb _hidl_cb) override;
+    Return<void>      getIntParameterRange(CameraParam id,
+                                           getIntParameterRange_cb _hidl_cb) override;
+    Return<void>      setIntParameter(CameraParam id, int32_t value,
+                                      setIntParameter_cb _hidl_cb) override;
+    Return<void>      getIntParameter(CameraParam id,
+                                      getIntParameter_cb _hidl_cb) override;
+    Return<EvsResult> setExtendedInfo_1_1(uint32_t opaqueIdentifier,
+                                          const hidl_vec<uint8_t>& opaqueValue) override;
+    Return<void>      getExtendedInfo_1_1(uint32_t opaqueIdentifier,
+                                          getExtendedInfo_1_1_cb _hidl_cb) override;
+    Return<void>      importExternalBuffers(const hidl_vec<BufferDesc_1_1>& buffers,
+                                            importExternalBuffers_cb _hidl_cb) override;
 
+    // Dump current status to a given file descriptor
+    std::string       toString(const char* indent = "") const;
 
 
 private:
-    sp<HalCamera>               mHalCamera;     // The low level camera interface that backs this proxy
+    void shutdown();
+
+    // The low level camera interface that backs this proxy
+    unordered_map<string,
+                 wp<HalCamera>> mHalCamera;
+
     sp<IEvsCameraStream_1_0>    mStream;
     sp<IEvsCameraStream_1_1>    mStream_1_1;
 
-    std::deque<BufferDesc_1_1>  mFramesHeld;
     unsigned                    mFramesAllowed  = 1;
     enum {
         STOPPED,
         RUNNING,
         STOPPING,
-    }                           mStreamState    = STOPPED;
+    }                           mStreamState;
+
+    unordered_map<string,
+         deque<BufferDesc_1_1>> mFramesHeld;
+    thread                      mCaptureThread;
+    CameraDesc*                 mDesc;
 };
 
 } // namespace implementation

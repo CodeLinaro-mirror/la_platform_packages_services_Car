@@ -19,6 +19,8 @@
 cc_binary {
     name: "android.hardware.automotive.evs@1.1-sample",
 
+    vendor: true,
+
     srcs: [
         "service.cpp",
         "EvsEnumerator.cpp",
@@ -27,13 +29,15 @@ cc_binary {
         "GlWrapper.cpp",
         "VideoCapture.cpp",
         "bufferCopy.cpp",
+        "ConfigManager.cpp",
+        "ConfigManagerUtil.cpp",
     ],
 
     shared_libs: [
         "android.hardware.automotive.evs@1.0",
         "android.hardware.automotive.evs@1.1",
+        "android.hardware.camera.device@3.2",
         "libui",
-        "libgui",
         "libEGL",
         "libGLESv2",
         "libbase",
@@ -41,18 +45,18 @@ cc_binary {
         "libcutils",
         "libhardware",
         "libhidlbase",
-        "libhidltransport",
-        "liblog",
         "libutils",
         "libhardware_legacy",
-        "libhwbinder",
+        "libcamera_metadata",
+        "libtinyxml2",
+        "libbufferqueueconverter",
+        "android.hidl.token@1.0-utils",
+        "android.frameworks.automotive.display@1.0",
+        "android.hardware.graphics.bufferqueue@1.0",
+        "android.hardware.graphics.bufferqueue@2.0",
     ],
 
     init_rc: ["android.hardware.automotive.evs@1.1-sample.rc"],
-
-    strip: {
-        keep_symbols: true,
-    },
 
     cflags: ["-DLOG_TAG=\"EvsSampleDriver\""] + [
         "-DGL_GLEXT_PROTOTYPES",
@@ -64,7 +68,58 @@ cc_binary {
         "-Wunreachable-code",
     ],
 
-    // NOTE:  It can be helpful, while debugging, to disable optimizations
-    //LOCAL_CFLAGS += -O0 -g
+    required: [
+        "evs_configuration.dtd",
+        "evs_sample_configuration.xml",
+    ],
 
+    include_dirs: [
+        "frameworks/native/include/",
+    ],
+
+    product_variables: {
+        debuggable: {
+            cflags: [
+                "-DEVS_DEBUG",
+            ]
+        }
+    },
+
+    vintf_fragments: [
+        "manifest_android.hardware.automotive.evs@1.1.xml",
+    ],
+}
+
+cc_library{
+    name : "libevsconfigmanager",
+    vendor : true,
+    srcs : [
+        "ConfigManager.cpp",
+        "ConfigManagerUtil.cpp",
+    ],
+    shared_libs : [
+        "android.hardware.automotive.evs@1.0",
+        "android.hardware.automotive.evs@1.1",
+        "android.hardware.camera.device@3.2",
+        "libbase",
+        "libcamera_metadata",
+        "libcutils",
+        "libhardware",
+        "libtinyxml2",
+        "libutils",
+    ],
+}
+
+prebuilt_etc {
+    name: "evs_configuration.dtd",
+    soc_specific: true,
+    src: "resources/evs_configuration.dtd",
+    sub_dir: "automotive/evs",
+}
+
+prebuilt_etc {
+    name: "evs_sample_configuration.xml",
+    soc_specific: true,
+    src: "resources/evs_sample_configuration.xml",
+    sub_dir: "automotive/evs",
 }

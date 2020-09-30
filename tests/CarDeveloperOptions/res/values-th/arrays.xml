@@ -38,19 +38,47 @@
     <item msgid="5827960506924849753">"10 นาที"</item>
     <item msgid="6677424950124253938">"30 นาที"</item>
   </string-array>
-    <!-- no translation found for dream_timeout_entries:1 (2517785806387977252) -->
-    <!-- no translation found for dream_timeout_entries:5 (2788593551142462622) -->
-    <!-- no translation found for dream_timeout_entries:6 (8012672183888404961) -->
-    <!-- no translation found for lock_after_timeout_entries:2 (5558060663472279597) -->
-    <!-- no translation found for lock_after_timeout_entries:6 (4376575879222393045) -->
-    <!-- no translation found for lock_after_timeout_entries:7 (811192536981678974) -->
+  <string-array name="dream_timeout_entries">
+    <item msgid="6487043225269853023">"ไม่เลย"</item>
+    <item msgid="2517785806387977252">"15 วินาที"</item>
+    <item msgid="6347954399441173672">"30 วินาที"</item>
+    <item msgid="4858305253279921789">"1 นาที"</item>
+    <item msgid="8109273437140044073">"2 นาที"</item>
+    <item msgid="2788593551142462622">"5 นาที"</item>
+    <item msgid="8012672183888404961">"10 นาที"</item>
+    <item msgid="8271452751594598661">"30 นาที"</item>
+  </string-array>
+  <string-array name="lock_after_timeout_entries">
+    <item msgid="2232921187970351881">"ทันที"</item>
+    <item msgid="2038544972632026612">"5 วินาที"</item>
+    <item msgid="5558060663472279597">"15 วินาที"</item>
+    <item msgid="45341168505452037">"30 วินาที"</item>
+    <item msgid="227647485917789272">"1 นาที"</item>
+    <item msgid="3367011891231217504">"2 นาที"</item>
+    <item msgid="4376575879222393045">"5 นาที"</item>
+    <item msgid="811192536981678974">"10 นาที"</item>
+    <item msgid="7258394417241706272">"30 นาที"</item>
+  </string-array>
   <string-array name="entries_font_size">
     <item msgid="2340391964816059553">"เล็ก"</item>
     <item msgid="591935967183159581">"ค่าเริ่มต้น"</item>
     <item msgid="1714184661981538355">"ใหญ่"</item>
     <item msgid="6195563047686707484">"ใหญ่ที่สุด"</item>
   </string-array>
-    <!-- no translation found for wifi_status:1 (4157625910392775808) -->
+  <string-array name="wifi_status">
+    <item msgid="1304883790721412351"></item>
+    <item msgid="4157625910392775808">"กำลังสแกน..."</item>
+    <item msgid="5597394826455877834">"กำลังเชื่อมต่อ…"</item>
+    <item msgid="5848277343965362748">"กำลังตรวจสอบสิทธิ์..."</item>
+    <item msgid="3391238031431440676">"กำลังรับที่อยู่ IP…"</item>
+    <item msgid="5257597310494000224">"เชื่อมต่อแล้ว"</item>
+    <item msgid="8472497592913050396">"ระงับไว้"</item>
+    <item msgid="1228072488815999109">"กำลังตัดการเชื่อมต่อ..."</item>
+    <item msgid="7253087004422991731">"ถูกตัดการเชื่อมต่อ"</item>
+    <item msgid="4169850917304751227">"ไม่สำเร็จ"</item>
+    <item msgid="6266658166690831131">"ถูกบล็อก"</item>
+    <item msgid="4517230805854909775">"หลีกเลี่ยงการเชื่อมต่อกับสัญญาณที่ไม่แรงพอชั่วคราว"</item>
+  </string-array>
   <string-array name="wifi_status_with_ssid">
     <item msgid="4853670665485437464"></item>
     <item msgid="6816207058895999545">"กำลังสแกน..."</item>
@@ -85,10 +113,21 @@
     <item msgid="167772676068860015">"1 ชั่วโมง"</item>
     <item msgid="5985477119043628504">"ไม่มีระยะหมดเวลา"</item>
   </string-array>
-    <!-- no translation found for bluetooth_max_connected_audio_devices:2 (5318020123964299318) -->
-    <!-- no translation found for bluetooth_max_connected_audio_devices:3 (6429260054182662738) -->
-    <!-- no translation found for bluetooth_max_connected_audio_devices:4 (1644506614010085798) -->
-    <!-- no translation found for wifi_signal:0 (1709949377823900951) -->
+  <string-array name="bluetooth_max_connected_audio_devices">
+    <item msgid="3800257971619063588">"ใช้ค่าเริ่มต้นของระบบ: <xliff:g id="DEFAULT_BLUETOOTH_MAX_CONNECTED_AUDIO_DEVICES">%1$d</xliff:g>"</item>
+    <item msgid="8572230405241423895">"1"</item>
+    <item msgid="5318020123964299318">"2"</item>
+    <item msgid="6429260054182662738">"3"</item>
+    <item msgid="1644506614010085798">"4"</item>
+    <item msgid="3132506679404897150">"5"</item>
+  </string-array>
+  <string-array name="wifi_signal">
+    <item msgid="1709949377823900951">"อ่อน"</item>
+    <item msgid="7882129634982603782">"อ่อน"</item>
+    <item msgid="6457357501905996224">"ปานกลาง"</item>
+    <item msgid="405271628162918841">"ดี"</item>
+    <item msgid="999948812884919584">"ดีมาก"</item>
+  </string-array>
   <string-array name="data_usage_data_range">
     <item msgid="8986775481492954015">"30 วันที่ผ่านมา"</item>
     <item msgid="3211287705232736964">"ตั้งรอบการใช้..."</item>
@@ -109,8 +148,14 @@
     <item msgid="8655686691660180616">"MSCHAPV2"</item>
     <item msgid="1354245862267605928">"GTC"</item>
   </string-array>
-    <!-- no translation found for wifi_peap_phase2_entries_with_sim_auth:0 (7122038588318037831) -->
-    <!-- no translation found for wifi_peap_phase2_entries_with_sim_auth:2 (6333849991499980140) -->
+  <string-array name="wifi_peap_phase2_entries_with_sim_auth">
+    <item msgid="7122038588318037831">"ไม่มี"</item>
+    <item msgid="212906109313512425">"MSCHAPV2"</item>
+    <item msgid="6333849991499980140">"GTC"</item>
+    <item msgid="6226796534844879034">"SIM"</item>
+    <item msgid="4600011056049114926">"AKA"</item>
+    <item msgid="5244120184217604552">"AKA\'"</item>
+  </string-array>
   <string-array name="wifi_phase2_entries">
     <item msgid="5865367433072785952">"ไม่มี"</item>
     <item msgid="7901133332272818442">"PAP"</item>
@@ -138,9 +183,30 @@
     <item msgid="9148582221081416020">"IPv6"</item>
     <item msgid="4094895508821270572">"IPv4/IPv6"</item>
   </string-array>
-    <!-- no translation found for bearer_entries:1 (2740477081395679090) -->
-    <!-- no translation found for mvno_type_entries:0 (6984770764726663331) -->
-    <!-- no translation found for mvno_type_entries:2 (7556656048009090524) -->
+  <string-array name="bearer_entries">
+    <item msgid="5231094118929435723">"ไม่ระบุ"</item>
+    <item msgid="2740477081395679090">"LTE"</item>
+    <item msgid="1807866878276630064">"HSPAP"</item>
+    <item msgid="7945352669463358624">"HSPA"</item>
+    <item msgid="4152166097223929133">"HSUPA"</item>
+    <item msgid="5134662517319988296">"HSDPA"</item>
+    <item msgid="4997539146036732961">"UMTS"</item>
+    <item msgid="4910169712073083585">"EDGE"</item>
+    <item msgid="3505904588897578792">"GPRS"</item>
+    <item msgid="7246853278334311652">"eHRPD"</item>
+    <item msgid="7037248100126710307">"EVDO_B"</item>
+    <item msgid="3440758673769932256">"EVDO_A"</item>
+    <item msgid="1782525731958596741">"EVDO_0"</item>
+    <item msgid="1819765960790884441">"1xRTT"</item>
+    <item msgid="3148192102183107944">"IS95B"</item>
+    <item msgid="3778273775365258534">"IS95A"</item>
+  </string-array>
+  <string-array name="mvno_type_entries">
+    <item msgid="6984770764726663331">"ไม่มี"</item>
+    <item msgid="1469208769491004112">"SPN"</item>
+    <item msgid="7556656048009090524">"IMSI"</item>
+    <item msgid="8636516530542473799">"GID"</item>
+  </string-array>
   <string-array name="app_install_location_entries">
     <item msgid="6621866711026016227">"ที่จัดเก็บข้อมูลอุปกรณ์ภายใน"</item>
     <item msgid="3186681694079967527">"การ์ด SD แบบนำออกได้"</item>
@@ -220,7 +286,73 @@
     <item msgid="1165623660533024666">"ทำงานในพื้นหลัง"</item>
     <item msgid="6423861043647911030">"ระดับเสียงการเข้าถึง"</item>
   </string-array>
-    <!-- no translation found for app_ops_labels:41 (2464189519136248621) -->
+  <string-array name="app_ops_labels">
+    <item msgid="7892361636570580123">"ตำแหน่ง"</item>
+    <item msgid="6656077694190491067">"ตำแหน่ง"</item>
+    <item msgid="8790228218278477369">"ตำแหน่ง"</item>
+    <item msgid="7836406246005211990">"สั่น"</item>
+    <item msgid="3951439024549922598">"อ่านรายชื่อติดต่อ"</item>
+    <item msgid="8802152411647068">"แก้ไขรายชื่อติดต่อ"</item>
+    <item msgid="229544934599698735">"อ่านประวัติการโทร"</item>
+    <item msgid="7396102294405899613">"แก้ไขประวัติการโทร"</item>
+    <item msgid="3597797992398484655">"อ่านปฏิทิน"</item>
+    <item msgid="2705975774250907343">"แก้ไขปฏิทิน"</item>
+    <item msgid="4668747371441932697">"ตำแหน่ง"</item>
+    <item msgid="1487578921720243646">"การแจ้งเตือนโพสต์"</item>
+    <item msgid="4636080349724146638">"ตำแหน่ง"</item>
+    <item msgid="673510900286463926">"โทรเข้าโทรศัพท์"</item>
+    <item msgid="542083422784609790">"อ่าน SMS/MMS"</item>
+    <item msgid="1033780373029588436">"เขียน SMS/MMS"</item>
+    <item msgid="5647111115517787488">"รับ SMS/MMS"</item>
+    <item msgid="8591105601108455893">"รับ SMS/MMS"</item>
+    <item msgid="7730995008517841903">"รับ SMS/MMS"</item>
+    <item msgid="2613033109026626086">"รับ SMS/MMS"</item>
+    <item msgid="3037159047591081136">"ส่ง SMS/MMS"</item>
+    <item msgid="4726682243833913568">"อ่าน SMS/MMS"</item>
+    <item msgid="6555678522277865572">"เขียน SMS/MMS"</item>
+    <item msgid="6981734935578130884">"แก้ไขการตั้งค่า"</item>
+    <item msgid="8705854389991425629">"วาดด้านบน"</item>
+    <item msgid="5861356020344153651">"เข้าถึงการแจ้งเตือน"</item>
+    <item msgid="78432174621628659">"กล้องถ่ายรูป"</item>
+    <item msgid="3986116419882154794">"บันทึกเสียง"</item>
+    <item msgid="4516840825756409490">"เล่นเสียง"</item>
+    <item msgid="6811712502798183957">"อ่านคลิปบอร์ด"</item>
+    <item msgid="2780369012602289114">"แก้ไขคลิปบอร์ด"</item>
+    <item msgid="2331359440170850868">"ปุ่มสื่อ"</item>
+    <item msgid="6133599737122751231">"โฟกัสอัตโนมัติ"</item>
+    <item msgid="6844485713404805301">"ระดับเสียงหลัก"</item>
+    <item msgid="1600379420669104929">"ระดับเสียงสนทนา"</item>
+    <item msgid="6296768210470214866">"ระดับเสียงเรียกเข้า"</item>
+    <item msgid="510690696071629241">"ระดับเสียงของสื่อ"</item>
+    <item msgid="406861638631430109">"ระดับเสียงปลุก"</item>
+    <item msgid="4715864795872233884">"ระดับเสียงของการแจ้งเตือน"</item>
+    <item msgid="2311478519251301183">"ระดับบลูทูธ"</item>
+    <item msgid="5133991377896747027">"ทำงานตลอดเวลา"</item>
+    <item msgid="2464189519136248621">"ตำแหน่ง"</item>
+    <item msgid="2062677934050803037">"ตำแหน่ง"</item>
+    <item msgid="1735171933192715957">"ดูสถิติการใช้งาน"</item>
+    <item msgid="1014093788778383554">"ปิด/เปิดเสียงไมโครโฟน"</item>
+    <item msgid="4199297950608622850">"แสดงข้อความโทสต์"</item>
+    <item msgid="2527962435313398821">"สื่อของโครงการ"</item>
+    <item msgid="5117506254221861929">"เปิดใช้งาน VPN"</item>
+    <item msgid="8291198322681891160">"เขียนวอลเปเปอร์"</item>
+    <item msgid="7106921284621230961">"สนับสนุนโครงสร้าง"</item>
+    <item msgid="4496533640894624799">"สนับสนุนภาพหน้าจอ"</item>
+    <item msgid="2598847264853993611">"อ่านสถานะโทรศัพท์"</item>
+    <item msgid="9215610846802973353">"เพิ่มข้อความเสียง"</item>
+    <item msgid="9186411956086478261">"ใช้ SIP"</item>
+    <item msgid="6884763100104539558">"โทรออก"</item>
+    <item msgid="125513972170580692">"ลายนิ้วมือ"</item>
+    <item msgid="2556071024281275619">"เซ็นเซอร์ร่างกาย"</item>
+    <item msgid="617168514928339387">"อ่านการส่งข้อมูลเตือนภัยทางมือถือ (CB)"</item>
+    <item msgid="7134693570516523585">"จำลองสถานที่"</item>
+    <item msgid="7224489175375229399">"อ่านพื้นที่เก็บข้อมูล"</item>
+    <item msgid="8472735063903258202">"เขียนพื้นที่เก็บข้อมูล"</item>
+    <item msgid="4069276819909595110">"เปิดหน้าจอ"</item>
+    <item msgid="1228338896751121025">"สร้างบัญชี"</item>
+    <item msgid="3181581793459233672">"ทำงานในพื้นหลัง"</item>
+    <item msgid="2340936043025374076">"ระดับเสียงการเข้าถึง"</item>
+  </string-array>
   <string-array name="long_press_timeout_selector_titles">
     <item msgid="8950313530602254787">"สั้น"</item>
     <item msgid="4816511817309094890">"ปานกลาง"</item>
@@ -237,8 +369,13 @@
     <item msgid="4627069151979553527">"คัดลายมือ"</item>
     <item msgid="6896773537705206194">"อักษรตัวพิมพ์ใหญ่ขนาดเล็ก"</item>
   </string-array>
-    <!-- no translation found for captioning_font_size_selector_titles:1 (5091603983404027034) -->
-    <!-- no translation found for captioning_font_size_selector_titles:2 (176844712416932112) -->
+  <string-array name="captioning_font_size_selector_titles">
+    <item msgid="1680223634161592855">"เล็กมาก"</item>
+    <item msgid="5091603983404027034">"เล็ก"</item>
+    <item msgid="176844712416932112">"ปกติ"</item>
+    <item msgid="2784236342175159295">"ใหญ่"</item>
+    <item msgid="218913203203160606">"ใหญ่มาก"</item>
+  </string-array>
   <string-array name="captioning_edge_type_selector_titles">
     <item msgid="3865198759294188069">"ค่าเริ่มต้น"</item>
     <item msgid="6488643537808152001">"ไม่มี"</item>
@@ -286,9 +423,19 @@
     <item msgid="7718817231348607934">"ไม่อนุญาตเลย"</item>
     <item msgid="8184570120217958741">"อนุญาตเสมอ"</item>
   </string-array>
-    <!-- no translation found for ram_states:0 (708247372474061274) -->
-    <!-- no translation found for ram_states:4 (1567326459340152525) -->
-    <!-- no translation found for proc_stats_memory_states:3 (8577246509202964244) -->
+  <string-array name="ram_states">
+    <item msgid="708247372474061274">"ปกติ"</item>
+    <item msgid="5101233285497327432">"ปานกลาง"</item>
+    <item msgid="1555861583162930714">"ต่ำ"</item>
+    <item msgid="1719683776264798117">"วิกฤต"</item>
+    <item msgid="1567326459340152525">"?"</item>
+  </string-array>
+  <string-array name="proc_stats_memory_states">
+    <item msgid="3474232046138139454">"ปกติ"</item>
+    <item msgid="6107138933849816768">"ปานกลาง"</item>
+    <item msgid="182695359839047859">"ต่ำ"</item>
+    <item msgid="8577246509202964244">"วิกฤต"</item>
+  </string-array>
   <string-array name="proc_stats_process_states">
     <item msgid="7560955722349181440">"ต่อเนื่อง"</item>
     <item msgid="167418068739176448">"กิจกรรมแรก"</item>
@@ -330,7 +477,7 @@
     <item msgid="1008268820118852416">"ถือว่าไม่มีการวัดปริมาณอินเทอร์เน็ต"</item>
   </string-array>
   <string-array name="wifi_privacy_entries">
-    <item msgid="6545683814310036454">"ใช้ที่อยู่ MAC แบบสุ่ม (ค่าเริ่มต้น)"</item>
+    <item msgid="6545683814310036454">"ใช้ MAC แบบสุ่ม (ค่าเริ่มต้น)"</item>
     <item msgid="214234417308375326">"ใช้ที่อยู่ MAC ของอุปกรณ์"</item>
   </string-array>
   <string-array name="wifi_hidden_entries">

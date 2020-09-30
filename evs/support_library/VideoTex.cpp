@@ -24,7 +24,6 @@
 
 #include "VideoTex.h"
 #include "glError.h"
-#include "StreamHandlerManager.h"
 
 #include <ui/GraphicBuffer.h>
 #include <ui/GraphicBufferAllocator.h>
@@ -41,25 +40,13 @@ namespace support {
 using ::android::GraphicBuffer;
 
 
-VideoTex::VideoTex(sp<IEvsEnumerator> pEnum,
-                   sp<IEvsCamera> pCamera,
-                   sp<StreamHandler> pStreamHandler,
-                   EGLDisplay glDisplay)
+VideoTex::VideoTex(EGLDisplay glDisplay)
     : TexWrapper()
-    , mEnumerator(pEnum)
-    , mCamera(pCamera)
-    , mStreamHandler(pStreamHandler)
     , mDisplay(glDisplay) {
     // Nothing but initialization here...
 }
 
 VideoTex::~VideoTex() {
-    // Tell the stream to stop flowing
-    mStreamHandler->asyncStopStream();
-
-    // Close the camera
-    mEnumerator->closeCamera(mCamera);
-
     // Drop our device texture image
     if (mKHRimage != EGL_NO_IMAGE_KHR) {
         eglDestroyImageKHR(mDisplay, mKHRimage);
@@ -69,117 +56,23 @@ VideoTex::~VideoTex() {
 
 
 // Return true if the texture contents are changed
-bool VideoTex::refresh(BaseRenderCallback* callback) {
-    if (!mStreamHandler->newFrameAvailable()) {
-        // No new image has been delivered, so there's nothing to do here
+bool VideoTex::refresh(const BufferDesc& imageBuffer) {
+    // No new image has been delivered, so there's nothing to do here
+    if (imageBuffer.memHandle.getNativeHandle() == nullptr) {
         return false;
     }
 
-    // If we already have an image backing us, then it's time to return it
-    if (mImageBuffer.memHandle.getNativeHandle() != nullptr) {
-        // Drop our device texture image
-        if (mKHRimage != EGL_NO_IMAGE_KHR) {
-            eglDestroyImageKHR(mDisplay, mKHRimage);
-            mKHRimage = EGL_NO_IMAGE_KHR;
-        }
-
-        // Return it since we're done with it
-        mStreamHandler->doneWithFrame(mImageBuffer);
+    // Drop our device texture image
+    if (mKHRimage != EGL_NO_IMAGE_KHR) {
+        eglDestroyImageKHR(mDisplay, mKHRimage);
+        mKHRimage = EGL_NO_IMAGE_KHR;
     }
 
-    // Get the new image we want to use as our contents
-    mImageBuffer = mStreamHandler->getNewFrame();
-
-    sp<GraphicBuffer> imageGraphicBuffer = nullptr;
-
-    buffer_handle_t inHandle;
-
-    // If callback is not set, use the raw buffer for display.
-    // If callback is set, copy the raw buffer to a newly allocated buffer.
-    if (!callback) {
-        inHandle = mImageBuffer.memHandle;
-    } else {
-        // create a GraphicBuffer from the existing handle
-        sp<GraphicBuffer> rawBuffer = new GraphicBuffer(
-            mImageBuffer.memHandle, GraphicBuffer::CLONE_HANDLE, mImageBuffer.width,
-            mImageBuffer.height, mImageBuffer.format, 1,  // layer count
-            GRALLOC_USAGE_HW_TEXTURE, mImageBuffer.stride);
-
-        if (rawBuffer.get() == nullptr) {
-            ALOGE("Failed to allocate GraphicBuffer to wrap image handle");
-            // Returning "true" in this error condition because we already released the
-            // previous image (if any) and so the texture may change in unpredictable ways now!
-            return true;
-        }
-
-        // Lock the buffer and map it to a pointer
-        void* rawDataPtr;
-        rawBuffer->lock(GRALLOC_USAGE_SW_READ_OFTEN | GRALLOC_USAGE_SW_WRITE_NEVER, &rawDataPtr);
-        if (!rawDataPtr) {
-            ALOGE("Failed to gain read access to imageGraphicBuffer");
-            return false;
-        }
-
-        // Start copying the raw buffer. If the destination buffer has not been
-        // allocated, use GraphicBufferAllocator to allocate it.
-        if (!mHandleCopy) {
-            android::GraphicBufferAllocator& alloc(android::GraphicBufferAllocator::get());
-            android::status_t result = alloc.allocate(
-                mImageBuffer.width, mImageBuffer.height, mImageBuffer.format, 1, mImageBuffer.usage,
-                &mHandleCopy, &mImageBuffer.stride, 0, "EvsDisplay");
-            if (result != android::NO_ERROR) {
-                ALOGE("Error %d allocating %d x %d graphics buffer", result, mImageBuffer.width,
-                      mImageBuffer.height);
-                return false;
-            }
-            if (!mHandleCopy) {
-                ALOGE("We didn't get a buffer handle back from the allocator");
-                return false;
-            }
-        }
-
-        // Lock the allocated buffer and map it to a pointer
-        void* copyDataPtr = nullptr;
-        android::GraphicBufferMapper& mapper = android::GraphicBufferMapper::get();
-        mapper.lock(mHandleCopy, GRALLOC_USAGE_SW_WRITE_OFTEN | GRALLOC_USAGE_SW_READ_NEVER,
-                    android::Rect(mImageBuffer.width, mImageBuffer.height), (void**)&copyDataPtr);
-
-        // If we failed to lock the pixel buffer, we're about to crash, but log it first
-        if (!copyDataPtr) {
-            ALOGE("Camera failed to gain access to image buffer for writing");
-            return false;
-        }
-
-        // Wrap the raw data and copied data, and pass them to the callback.
-        Frame inputFrame = {
-            .width = mImageBuffer.width,
-            .height = mImageBuffer.height,
-            .stride = mImageBuffer.stride,
-            .data = (uint8_t*)rawDataPtr
-        };
-
-        Frame outputFrame = {
-            .width = mImageBuffer.width,
-            .height = mImageBuffer.height,
-            .stride = mImageBuffer.stride,
-            .data = (uint8_t*)copyDataPtr
-        };
-
-        callback->render(inputFrame, outputFrame);
-
-        // Unlock the buffers after all changes to the buffer are completed.
-        rawBuffer->unlock();
-        mapper.unlock(mHandleCopy);
-
-        inHandle = mHandleCopy;
-    }
-
-    // Create the graphic buffer for the dest buffer, and use it for
-    // OpenGL rendering.
-    imageGraphicBuffer =
-        new GraphicBuffer(inHandle, GraphicBuffer::CLONE_HANDLE, mImageBuffer.width,
-                          mImageBuffer.height, mImageBuffer.format, 1,  // layer count
-                          GRALLOC_USAGE_HW_TEXTURE, mImageBuffer.stride);
+    // create a GraphicBuffer from the existing handle
+    sp<GraphicBuffer> imageGraphicBuffer = new GraphicBuffer(
+        imageBuffer.memHandle, GraphicBuffer::CLONE_HANDLE, imageBuffer.width,
+        imageBuffer.height, imageBuffer.format, 1, // layer count
+        GRALLOC_USAGE_HW_TEXTURE, imageBuffer.stride);
 
     if (imageGraphicBuffer.get() == nullptr) {
         ALOGE("Failed to allocate GraphicBuffer to wrap image handle");
@@ -218,35 +111,6 @@ bool VideoTex::refresh(BaseRenderCallback* callback) {
 
     return true;
 }
-
-VideoTex* createVideoTexture(sp<IEvsEnumerator> pEnum,
-                             const char* evsCameraId,
-                             EGLDisplay glDisplay) {
-    // Set up the camera to feed this texture
-    sp<IEvsCamera> pCamera = pEnum->openCamera(evsCameraId);
-    if (pCamera.get() == nullptr) {
-        ALOGE("Failed to allocate new EVS Camera interface for %s", evsCameraId);
-        return nullptr;
-    }
-
-    // Initialize the stream that will help us update this texture's contents
-    sp<StreamHandler> pStreamHandler =
-        StreamHandlerManager::getInstance()->getStreamHandler(pCamera);
-    if (pStreamHandler.get() == nullptr) {
-        ALOGE("failed to allocate FrameHandler");
-        return nullptr;
-    }
-
-    // Start the video stream
-    if (!pStreamHandler->startStream()) {
-        printf("Couldn't start the camera stream (%s)\n", evsCameraId);
-        ALOGE("start stream failed for %s", evsCameraId);
-        return nullptr;
-    }
-
-    return new VideoTex(pEnum, pCamera, pStreamHandler, glDisplay);
-}
-
 }  // namespace support
 }  // namespace evs
 }  // namespace automotive

@@ -23,12 +23,10 @@ import android.car.cluster.IInstrumentClusterManagerService;
 import android.car.content.pm.ICarPackageManager;
 import android.car.diagnostic.ICarDiagnostic;
 import android.car.drivingstate.ICarDrivingState;
-import android.car.drivingstate.ICarUxRestrictionsManager;
 import android.car.hardware.power.ICarPower;
 import android.car.media.ICarAudio;
 import android.car.settings.ICarConfigurationManager;
 import android.car.storagemonitoring.ICarStorageMonitoring;
-import android.car.vms.IVmsSubscriberService;
 import android.content.Context;
 import android.os.IBinder;
 import android.os.RemoteException;
@@ -36,6 +34,9 @@ import android.util.Log;
 
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+
+import java.util.Collections;
+import java.util.List;
 
 /*
     The idea behind this class is that we can fake-out interfaces between Car*Manager and
@@ -120,23 +121,30 @@ public class FakeCar {
         return mService.mInstrumentClusterNavigation;
     }
 
+    /**
+     * Returns a test controller that can modify and query the underlying service for the {@link
+     * android.car.drivingstate.CarUxRestrictionsManager}.
+     */
+    public CarUxRestrictionsController getCarUxRestrictionController() {
+        return mService.mCarUxRestrictionService;
+    }
+
     private static class FakeCarService extends ICar.Stub {
         @Mock ICarAudio.Stub mCarAudio;
         @Mock ICarPackageManager.Stub mCarPackageManager;
         @Mock ICarDiagnostic.Stub mCarDiagnostic;
         @Mock ICarPower.Stub mCarPower;
         @Mock IInstrumentClusterManagerService.Stub mClusterService;
-        @Mock IVmsSubscriberService.Stub mVmsSubscriberService;
         @Mock ICarBluetooth.Stub mCarBluetooth;
         @Mock ICarStorageMonitoring.Stub mCarStorageMonitoring;
         @Mock ICarDrivingState.Stub mCarDrivingState;
-        @Mock ICarUxRestrictionsManager.Stub mCarUxRestriction;
         @Mock ICarConfigurationManager.Stub mCarConfigurationManager;
 
         private final FakeAppFocusService mAppFocus;
         private final FakeCarPropertyService mCarProperty;
         private final FakeCarProjectionService mCarProjection;
         private final FakeInstrumentClusterNavigation mInstrumentClusterNavigation;
+        private final FakeCarUxRestrictionsService mCarUxRestrictionService;
 
         FakeCarService(Context context) {
             MockitoAnnotations.initMocks(this);
@@ -144,6 +152,7 @@ public class FakeCar {
             mCarProperty = new FakeCarPropertyService();
             mCarProjection = new FakeCarProjectionService(context);
             mInstrumentClusterNavigation = new FakeInstrumentClusterNavigation();
+            mCarUxRestrictionService = new FakeCarUxRestrictionsService();
         }
 
         @Override
@@ -152,12 +161,24 @@ public class FakeCar {
         }
 
         @Override
-        public void setUserLockStatus(int userHandle, int unlocked) throws RemoteException {
+        public void onUserLifecycleEvent(int eventType, long timestampMs, int fromUserId,
+                int toUserId) {
             // Nothing to do yet.
         }
 
         @Override
-        public void onSwitchUser(int userHandle) throws RemoteException {
+        public void onFirstUserUnlocked(int userId, long timestampMs, long duration,
+                int halResponseTime) {
+            // Nothing to do yet.
+        }
+
+        @Override
+        public void getInitialUserInfo(int requestType, int timeoutMs, IBinder binder) {
+            // Nothing to do yet.
+        }
+
+        @Override
+        public void setInitialUser(int userId) {
             // Nothing to do yet.
         }
 
@@ -187,8 +208,6 @@ public class FakeCar {
                     return mClusterService;
                 case Car.PROJECTION_SERVICE:
                     return mCarProjection;
-                case Car.VMS_SUBSCRIBER_SERVICE:
-                    return mVmsSubscriberService;
                 case Car.BLUETOOTH_SERVICE:
                     return mCarBluetooth;
                 case Car.STORAGE_MONITORING_SERVICE:
@@ -196,7 +215,7 @@ public class FakeCar {
                 case Car.CAR_DRIVING_STATE_SERVICE:
                     return mCarDrivingState;
                 case Car.CAR_UX_RESTRICTION_SERVICE:
-                    return mCarUxRestriction;
+                    return mCarUxRestrictionService;
                 case Car.CAR_CONFIGURATION_SERVICE:
                     return mCarConfigurationManager;
                 default:
@@ -208,6 +227,41 @@ public class FakeCar {
         @Override
         public int getCarConnectionType() throws RemoteException {
             return Car.CONNECTION_TYPE_EMBEDDED;
+        }
+
+        @Override
+        public boolean isFeatureEnabled(String featureName) {
+            return false;
+        }
+
+        @Override
+        public int enableFeature(String featureName) {
+            return Car.FEATURE_REQUEST_SUCCESS;
+        }
+
+        @Override
+        public int disableFeature(String featureName) {
+            return Car.FEATURE_REQUEST_SUCCESS;
+        }
+
+        @Override
+        public List<String> getAllEnabledFeatures() {
+            return Collections.emptyList();
+        }
+
+        @Override
+        public List<String> getAllPendingDisabledFeatures() {
+            return Collections.emptyList();
+        }
+
+        @Override
+        public List<String> getAllPendingEnabledFeatures() {
+            return Collections.emptyList();
+        }
+
+        @Override
+        public String getCarManagerClassForFeature(String featureName) {
+            return null;
         }
     }
 

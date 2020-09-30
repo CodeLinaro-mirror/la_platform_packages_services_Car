@@ -15,6 +15,12 @@
  */
 package com.android.car.bugreport;
 
+import static android.car.CarBugreportManager.CarBugreportManagerCallback.CAR_BUGREPORT_DUMPSTATE_CONNECTION_FAILED;
+import static android.car.CarBugreportManager.CarBugreportManagerCallback.CAR_BUGREPORT_DUMPSTATE_FAILED;
+import static android.car.CarBugreportManager.CarBugreportManagerCallback.CAR_BUGREPORT_SERVICE_NOT_AVAILABLE;
+import static android.view.Display.DEFAULT_DISPLAY;
+import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
+
 import static com.android.car.bugreport.PackageUtils.getPackageVersion;
 
 import android.annotation.FloatRange;
@@ -27,7 +33,13 @@ import android.app.Service;
 import android.car.Car;
 import android.car.CarBugreportManager;
 import android.car.CarNotConnectedException;
+import android.content.Context;
 import android.content.Intent;
+import android.hardware.display.DisplayManager;
+import android.media.AudioManager;
+import android.media.Ringtone;
+import android.media.RingtoneManager;
+import android.net.Uri;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Bundle;
@@ -36,35 +48,35 @@ import android.os.IBinder;
 import android.os.Message;
 import android.os.ParcelFileDescriptor;
 import android.util.Log;
+import android.view.Display;
 import android.widget.Toast;
 
+import com.google.common.base.Preconditions;
+import com.google.common.io.ByteStreams;
 import com.google.common.util.concurrent.AtomicDouble;
 
-import libcore.io.IoUtils;
-
 import java.io.BufferedOutputStream;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.OutputStream;
-import java.util.Enumeration;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipFile;
 import java.util.zip.ZipOutputStream;
 
 /**
  * Service that captures screenshot and bug report using dumpstate and bluetooth snoop logs.
  *
- * <p>After collecting all the logs it updates the {@link MetaBugReport} using {@link
- * BugStorageProvider}, which in turn schedules bug report to upload.
+ * <p>After collecting all the logs it sets the {@link MetaBugReport} status to
+ * {@link Status#STATUS_AUDIO_PENDING} or {@link Status#STATUS_PENDING_USER_ACTION} depending
+ * on {@link MetaBugReport#getType}.
+ *
+ * <p>If the service is started with action {@link #ACTION_START_SILENT}, it will start
+ * bugreporting without showing dialog and recording audio message, see
+ * {@link MetaBugReport#TYPE_SILENT}.
  */
 public class BugReportService extends Service {
     private static final String TAG = BugReportService.class.getSimpleName();
@@ -74,12 +86,25 @@ public class BugReportService extends Service {
      */
     static final String EXTRA_META_BUG_REPORT = "meta_bug_report";
 
+    /** Starts silent (no audio message recording) bugreporting. */
+    private static final String ACTION_START_SILENT =
+            "com.android.car.bugreport.action.START_SILENT";
+
     // Wait a short time before starting to capture the bugreport and the screen, so that
     // bugreport activity can detach from the view tree.
     // It is ugly to have a timeout, but it is ok here because such a delay should not really
     // cause bugreport to be tainted with so many other events. If in the future we want to change
     // this, the best option is probably to wait for onDetach events from view tree.
     private static final int ACTIVITY_FINISH_DELAY_MILLIS = 1000;
+
+    /** Stop the service only after some delay, to allow toasts to show on the screen. */
+    private static final int STOP_SERVICE_DELAY_MILLIS = 1000;
+
+    /**
+     * Wait a short time before showing "bugreport started" toast message, because the service
+     * will take a screenshot of the screen.
+     */
+    private static final int BUGREPORT_STARTED_TOAST_DELAY_MILLIS = 2000;
 
     private static final String BT_SNOOP_LOG_LOCATION = "/data/misc/bluetooth/logs/btsnoop_hci.log";
     private static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
@@ -90,9 +115,10 @@ public class BugReportService extends Service {
     /** Notifications on this channel will pop-up. */
     private static final String STATUS_CHANNEL_ID = "BUGREPORT_STATUS_CHANNEL";
 
+    /** Persistent notification is shown when bugreport is in progress or waiting for audio. */
     private static final int BUGREPORT_IN_PROGRESS_NOTIF_ID = 1;
 
-    /** The notification is shown when bugreport is collected. */
+    /** Dismissible notification is shown when bugreport is collected. */
     static final int BUGREPORT_FINISHED_NOTIF_ID = 2;
 
     private static final String OUTPUT_ZIP_FILE = "output_file.zip";
@@ -109,6 +135,7 @@ public class BugReportService extends Service {
     /** Binder given to clients. */
     private final IBinder mBinder = new ServiceBinder();
 
+    /** True if {@link BugReportService} is already collecting bugreport, including zipping. */
     private final AtomicBoolean mIsCollectingBugReport = new AtomicBoolean(false);
     private final AtomicDouble mBugReportProgress = new AtomicDouble(0);
 
@@ -119,9 +146,17 @@ public class BugReportService extends Service {
     private Car mCar;
     private CarBugreportManager mBugreportManager;
     private CarBugreportManager.CarBugreportManagerCallback mCallback;
+    private Config mConfig;
+    private Context mWindowContext;
 
     /** A handler on the main thread. */
     private Handler mHandler;
+    /**
+     * A handler to the main thread to show toast messages, it will be cleared when the service
+     * finishes. We need to clear it otherwise when bugreport fails, it will show "bugreport start"
+     * toast, which will confuse users.
+     */
+    private Handler mHandlerStartedToast;
 
     /** A listener that's notified when bugreport progress changes. */
     interface BugReportProgressListener {
@@ -141,7 +176,7 @@ public class BugReportService extends Service {
         }
     }
 
-    /** A handler on a main thread. */
+    /** A handler on the main thread. */
     private class BugReportHandler extends Handler {
         @Override
         public void handleMessage(Message message) {
@@ -161,6 +196,13 @@ public class BugReportService extends Service {
 
     @Override
     public void onCreate() {
+        Preconditions.checkState(Config.isBugReportEnabled(), "BugReport is disabled.");
+
+        DisplayManager dm = getSystemService(DisplayManager.class);
+        Display primaryDisplay = dm.getDisplay(DEFAULT_DISPLAY);
+        mWindowContext = createDisplayContext(primaryDisplay)
+                .createWindowContext(TYPE_APPLICATION_OVERLAY, null);
+
         mNotificationManager = getSystemService(NotificationManager.class);
         mNotificationManager.createNotificationChannel(new NotificationChannel(
                 PROGRESS_CHANNEL_ID,
@@ -172,36 +214,72 @@ public class BugReportService extends Service {
                 NotificationManager.IMPORTANCE_HIGH));
         mSingleThreadExecutor = Executors.newSingleThreadScheduledExecutor();
         mHandler = new BugReportHandler();
-        mCar = Car.createCar(this);
-        try {
-            mBugreportManager = (CarBugreportManager) mCar.getCarManager(Car.CAR_BUGREPORT_SERVICE);
-        } catch (CarNotConnectedException | NoClassDefFoundError e) {
-            Log.w(TAG, "Couldn't get CarBugreportManager", e);
+        mHandlerStartedToast = new Handler();
+        mConfig = new Config();
+        mConfig.start();
+    }
+
+    @Override
+    public void onDestroy() {
+        if (DEBUG) {
+            Log.d(TAG, "Service destroyed");
         }
+        disconnectFromCarService();
     }
 
     @Override
     public int onStartCommand(final Intent intent, int flags, int startId) {
-        if (mIsCollectingBugReport.get()) {
+        if (mIsCollectingBugReport.getAndSet(true)) {
             Log.w(TAG, "bug report is already being collected, ignoring");
-            Toast.makeText(this, R.string.toast_bug_report_in_progress, Toast.LENGTH_SHORT).show();
+            Toast.makeText(mWindowContext,
+                    R.string.toast_bug_report_in_progress, Toast.LENGTH_SHORT).show();
             return START_NOT_STICKY;
         }
+
         Log.i(TAG, String.format("Will start collecting bug report, version=%s",
                 getPackageVersion(this)));
-        mIsCollectingBugReport.set(true);
+
+        if (ACTION_START_SILENT.equals(intent.getAction())) {
+            Log.i(TAG, "Starting a silent bugreport.");
+            mMetaBugReport = BugReportActivity.createBugReport(this, MetaBugReport.TYPE_SILENT);
+        } else {
+            Bundle extras = intent.getExtras();
+            mMetaBugReport = extras.getParcelable(EXTRA_META_BUG_REPORT);
+        }
+
         mBugReportProgress.set(0);
 
         startForeground(BUGREPORT_IN_PROGRESS_NOTIF_ID, buildProgressNotification());
         showProgressNotification();
 
-        Bundle extras = intent.getExtras();
-        mMetaBugReport = extras.getParcelable(EXTRA_META_BUG_REPORT);
-
         collectBugReport();
+
+        // Show a short lived "bugreport started" toast message after a short delay.
+        mHandlerStartedToast.postDelayed(() -> {
+            Toast.makeText(mWindowContext,
+                    getText(R.string.toast_bug_report_started), Toast.LENGTH_LONG).show();
+        }, BUGREPORT_STARTED_TOAST_DELAY_MILLIS);
 
         // If the service process gets killed due to heavy memory pressure, do not restart.
         return START_NOT_STICKY;
+    }
+
+    private void onCarLifecycleChanged(Car car, boolean ready) {
+        // not ready - car service is crashed or is restarting.
+        if (!ready) {
+            mBugreportManager = null;
+            mCar = null;
+
+            // NOTE: dumpstate still might be running, but we can't kill it or reconnect to it
+            //       so we ignore it.
+            handleBugReportManagerError(CAR_BUGREPORT_SERVICE_NOT_AVAILABLE);
+            return;
+        }
+        try {
+            mBugreportManager = (CarBugreportManager) car.getCarManager(Car.CAR_BUGREPORT_SERVICE);
+        } catch (CarNotConnectedException | NoClassDefFoundError e) {
+            throw new IllegalStateException("Failed to get CarBugreportManager.", e);
+        }
     }
 
     /** Shows an updated progress notification. */
@@ -213,13 +291,18 @@ public class BugReportService extends Service {
     }
 
     private Notification buildProgressNotification() {
+        Intent intent = new Intent(getApplicationContext(), BugReportInfoActivity.class);
+        PendingIntent startBugReportInfoActivity =
+                PendingIntent.getActivity(getApplicationContext(), 0, intent, 0);
         return new Notification.Builder(this, PROGRESS_CHANNEL_ID)
                 .setContentTitle(getText(R.string.notification_bugreport_in_progress))
+                .setContentText(mMetaBugReport.getTitle())
                 .setSubText(String.format("%.1f%%", mBugReportProgress.get()))
                 .setSmallIcon(R.drawable.download_animation)
                 .setCategory(Notification.CATEGORY_STATUS)
                 .setOngoing(true)
                 .setProgress((int) MAX_PROGRESS_VALUE, (int) mBugReportProgress.get(), false)
+                .setContentIntent(startBugReportInfoActivity)
                 .build();
     }
 
@@ -250,10 +333,30 @@ public class BugReportService extends Service {
 
     private void showToast(@StringRes int resId) {
         // run on ui thread.
-        mHandler.post(() -> Toast.makeText(this, getText(resId), Toast.LENGTH_LONG).show());
+        mHandler.post(
+                () -> Toast.makeText(mWindowContext, getText(resId), Toast.LENGTH_LONG).show());
+    }
+
+    private void disconnectFromCarService() {
+        if (mCar != null) {
+            mCar.disconnect();
+            mCar = null;
+        }
+        mBugreportManager = null;
+    }
+
+    private void connectToCarServiceSync() {
+        if (mCar == null || !(mCar.isConnected() || mCar.isConnecting())) {
+            mCar = Car.createCar(this, /* handler= */ null,
+                    Car.CAR_WAIT_TIMEOUT_WAIT_FOREVER, this::onCarLifecycleChanged);
+        }
     }
 
     private void collectBugReport() {
+        // Connect to the car service before collecting bugreport, because when car service crashes,
+        // BugReportService doesn't automatically reconnect to it.
+        connectToCarServiceSync();
+
         if (Build.IS_USERDEBUG || Build.IS_ENG) {
             mSingleThreadExecutor.schedule(
                     this::grabBtSnoopLog, ACTIVITY_FINISH_DELAY_MILLIS, TimeUnit.MILLISECONDS);
@@ -266,9 +369,14 @@ public class BugReportService extends Service {
         Log.i(TAG, "Grabbing bt snoop log");
         File result = FileUtils.getFileWithSuffix(this, mMetaBugReport.getTimestamp(),
                 "-btsnoop.bin.log");
-        try {
-            copyBinaryStream(new FileInputStream(new File(BT_SNOOP_LOG_LOCATION)),
-                    new FileOutputStream(result));
+        File snoopFile = new File(BT_SNOOP_LOG_LOCATION);
+        if (!snoopFile.exists()) {
+            Log.w(TAG, BT_SNOOP_LOG_LOCATION + " not found, skipping");
+            return;
+        }
+        try (FileInputStream input = new FileInputStream(snoopFile);
+             FileOutputStream output = new FileOutputStream(result)) {
+            ByteStreams.copy(input, output);
         } catch (IOException e) {
             // this regularly happens when snooplog is not enabled so do not log as an error
             Log.i(TAG, "Failed to grab bt snooplog, continuing to take bug report.", e);
@@ -290,6 +398,8 @@ public class BugReportService extends Service {
             BugStorageUtils.setBugReportStatus(this, mMetaBugReport, Status.STATUS_WRITE_FAILED,
                     MESSAGE_FAILURE_DUMPSTATE);
             showToast(R.string.toast_status_dump_state_failed);
+            disconnectFromCarService();
+            mIsCollectingBugReport.set(false);
         }
     }
 
@@ -306,15 +416,10 @@ public class BugReportService extends Service {
         }
         mCallback = new CarBugreportManager.CarBugreportManagerCallback() {
             @Override
-            public void onError(int errorCode) {
-                Log.e(TAG, "Bugreport failed " + errorCode);
-                showToast(R.string.toast_status_failed);
-                // TODO(b/133520419): show this error on Info page or add to zip file.
-                scheduleZipTask();
-                // We let the UI know that bug reporting is finished, because the next step is to
-                // zip everything and upload.
-                mBugReportProgress.set(MAX_PROGRESS_VALUE);
-                sendProgressEventToHandler(MAX_PROGRESS_VALUE);
+            public void onError(@CarBugreportErrorCode int errorCode) {
+                Log.e(TAG, "CarBugreportManager failed: " + errorCode);
+                disconnectFromCarService();
+                handleBugReportManagerError(errorCode);
             }
 
             @Override
@@ -325,86 +430,147 @@ public class BugReportService extends Service {
 
             @Override
             public void onFinished() {
-                Log.i(TAG, "Bugreport finished");
-                scheduleZipTask();
+                Log.d(TAG, "CarBugreportManager finished");
+                disconnectFromCarService();
                 mBugReportProgress.set(MAX_PROGRESS_VALUE);
                 sendProgressEventToHandler(MAX_PROGRESS_VALUE);
+                mSingleThreadExecutor.submit(BugReportService.this::zipDirectoryAndUpdateStatus);
             }
         };
+        if (mBugreportManager == null) {
+            mHandler.post(() -> Toast.makeText(mWindowContext,
+                    "Car service is not ready", Toast.LENGTH_LONG).show());
+            Log.e(TAG, "CarBugReportManager is not ready");
+            return;
+        }
         mBugreportManager.requestBugreport(outFd, extraOutFd, mCallback);
     }
 
-    private void scheduleZipTask() {
-        mSingleThreadExecutor.submit(this::zipDirectoryAndScheduleForUpload);
+    private void handleBugReportManagerError(
+            @CarBugreportManager.CarBugreportManagerCallback.CarBugreportErrorCode int errorCode) {
+        if (mMetaBugReport == null) {
+            Log.w(TAG, "No bugreport is running");
+            mIsCollectingBugReport.set(false);
+            return;
+        }
+        // We let the UI know that bug reporting is finished, because the next step is to
+        // zip everything and upload.
+        mBugReportProgress.set(MAX_PROGRESS_VALUE);
+        sendProgressEventToHandler(MAX_PROGRESS_VALUE);
+        showToast(R.string.toast_status_failed);
+        BugStorageUtils.setBugReportStatus(
+                BugReportService.this, mMetaBugReport,
+                Status.STATUS_WRITE_FAILED, getBugReportFailureStatusMessage(errorCode));
+        mHandler.postDelayed(() -> {
+            mNotificationManager.cancel(BUGREPORT_IN_PROGRESS_NOTIF_ID);
+            stopForeground(true);
+        }, STOP_SERVICE_DELAY_MILLIS);
+        mHandlerStartedToast.removeCallbacksAndMessages(null);
+        mMetaBugReport = null;
+        mIsCollectingBugReport.set(false);
+    }
+
+    private static String getBugReportFailureStatusMessage(
+            @CarBugreportManager.CarBugreportManagerCallback.CarBugreportErrorCode int errorCode) {
+        switch (errorCode) {
+            case CAR_BUGREPORT_DUMPSTATE_CONNECTION_FAILED:
+            case CAR_BUGREPORT_DUMPSTATE_FAILED:
+                return "Failed to connect to dumpstate. Retry again after a minute.";
+            case CAR_BUGREPORT_SERVICE_NOT_AVAILABLE:
+                return "Car service is not available. Retry again.";
+            default:
+                return "Car service bugreport collection failed: " + errorCode;
+        }
     }
 
     /**
      * Shows a clickable bugreport finished notification. When clicked it opens
      * {@link BugReportInfoActivity}.
      */
-    private void showBugReportFinishedNotification() {
-        Intent intent = new Intent(getApplicationContext(), BugReportInfoActivity.class);
+    static void showBugReportFinishedNotification(Context context, MetaBugReport bug) {
+        Intent intent = new Intent(context, BugReportInfoActivity.class);
         PendingIntent startBugReportInfoActivity =
-                PendingIntent.getActivity(getApplicationContext(), 0, intent, 0);
+                PendingIntent.getActivity(context, 0, intent, 0);
         Notification notification = new Notification
-                .Builder(getApplicationContext(), STATUS_CHANNEL_ID)
-                .setContentTitle(getText(R.string.notification_bugreport_finished_title))
-                .setContentText(getText(JobSchedulingUtils.uploadByDefault()
-                        ? R.string.notification_bugreport_auto_upload_finished_text
-                        : R.string.notification_bugreport_manual_upload_finished_text))
+                .Builder(context, STATUS_CHANNEL_ID)
+                .setContentTitle(context.getText(R.string.notification_bugreport_finished_title))
+                .setContentText(bug.getTitle())
                 .setCategory(Notification.CATEGORY_STATUS)
                 .setSmallIcon(R.drawable.ic_upload)
                 .setContentIntent(startBugReportInfoActivity)
                 .build();
-        mNotificationManager.notify(BUGREPORT_FINISHED_NOTIF_ID, notification);
+        context.getSystemService(NotificationManager.class)
+                .notify(BUGREPORT_FINISHED_NOTIF_ID, notification);
     }
 
-    private void zipDirectoryAndScheduleForUpload() {
+    /**
+     * Zips the temp directory, writes to the system user's {@link FileUtils#getPendingDir} and
+     * updates the bug report status.
+     *
+     * <p>For {@link MetaBugReport#TYPE_INTERACTIVE}: Sets status to either STATUS_UPLOAD_PENDING or
+     * STATUS_PENDING_USER_ACTION and shows a regular notification.
+     *
+     * <p>For {@link MetaBugReport#TYPE_SILENT}: Sets status to STATUS_AUDIO_PENDING and shows
+     * a dialog to record audio message.
+     */
+    private void zipDirectoryAndUpdateStatus() {
         try {
-            // When OutputStream from openBugReportFile is closed, BugStorageProvider automatically
-            // schedules an upload job.
-            zipDirectoryToOutputStream(
-                    FileUtils.createTempDir(this, mMetaBugReport.getTimestamp()),
-                    BugStorageUtils.openBugReportFile(this, mMetaBugReport));
-            showBugReportFinishedNotification();
+            // All the generated zip files, images and audio messages are located in this dir.
+            // This is located under the current user.
+            String bugreportFileName = FileUtils.getZipFileName(mMetaBugReport);
+            Log.d(TAG, "Zipping bugreport into " + bugreportFileName);
+            mMetaBugReport = BugStorageUtils.update(this,
+                    mMetaBugReport.toBuilder().setBugReportFileName(bugreportFileName).build());
+            File bugReportTempDir = FileUtils.createTempDir(this, mMetaBugReport.getTimestamp());
+            zipDirectoryToOutputStream(bugReportTempDir,
+                    BugStorageUtils.openBugReportFileToWrite(this, mMetaBugReport));
         } catch (IOException e) {
             Log.e(TAG, "Failed to zip files", e);
             BugStorageUtils.setBugReportStatus(this, mMetaBugReport, Status.STATUS_WRITE_FAILED,
                     MESSAGE_FAILURE_ZIP);
             showToast(R.string.toast_status_failed);
+            return;
         }
+        if (mMetaBugReport.getType() == MetaBugReport.TYPE_SILENT) {
+            BugStorageUtils.setBugReportStatus(BugReportService.this,
+                    mMetaBugReport, Status.STATUS_AUDIO_PENDING, /* message= */ "");
+            playNotificationSound();
+            startActivity(BugReportActivity.buildAddAudioIntent(this, mMetaBugReport));
+        } else {
+            // NOTE: If bugreport type is INTERACTIVE, it will already contain an audio message.
+            Status status = mConfig.getAutoUpload()
+                    ? Status.STATUS_UPLOAD_PENDING : Status.STATUS_PENDING_USER_ACTION;
+            BugStorageUtils.setBugReportStatus(BugReportService.this,
+                    mMetaBugReport, status, /* message= */ "");
+            showBugReportFinishedNotification(this, mMetaBugReport);
+        }
+        mHandler.post(() -> {
+            mNotificationManager.cancel(BUGREPORT_IN_PROGRESS_NOTIF_ID);
+            stopForeground(true);
+        });
+        mHandlerStartedToast.removeCallbacksAndMessages(null);
+        mMetaBugReport = null;
         mIsCollectingBugReport.set(false);
-        showToast(R.string.toast_status_finished);
-        mHandler.post(() -> stopForeground(true));
     }
 
-    @Override
-    public void onDestroy() {
-        if (DEBUG) {
-            Log.d(TAG, "Service destroyed");
+    private void playNotificationSound() {
+        Uri notification = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
+        Ringtone ringtone = RingtoneManager.getRingtone(getApplicationContext(), notification);
+        if (ringtone == null) {
+            Log.w(TAG, "No notification ringtone found.");
+            return;
         }
-    }
-
-    private static void copyBinaryStream(InputStream in, OutputStream out) throws IOException {
-        OutputStream writer = null;
-        InputStream reader = null;
-        try {
-            writer = new DataOutputStream(out);
-            reader = new DataInputStream(in);
-            rawCopyStream(writer, reader);
-        } finally {
-            IoUtils.closeQuietly(reader);
-            IoUtils.closeQuietly(writer);
+        float volume = ringtone.getVolume();
+        // Use volume from audio manager, otherwise default ringtone volume can be too loud.
+        AudioManager audioManager = getSystemService(AudioManager.class);
+        if (audioManager != null) {
+            int currentVolume = audioManager.getStreamVolume(AudioManager.STREAM_NOTIFICATION);
+            int maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_NOTIFICATION);
+            volume = (currentVolume + 0.0f) / maxVolume;
         }
-    }
-
-    // does not close the reader or writer.
-    private static void rawCopyStream(OutputStream writer, InputStream reader) throws IOException {
-        int read;
-        byte[] buf = new byte[8192];
-        while ((read = reader.read(buf, 0, buf.length)) > 0) {
-            writer.write(buf, 0, read);
-        }
+        Log.v(TAG, "Using volume " + volume);
+        ringtone.setVolume(volume);
+        ringtone.play();
     }
 
     /**
@@ -425,59 +591,23 @@ public class BugReportService extends Service {
         Log.v(TAG, "zipping directory " + dirToZip.getAbsolutePath());
 
         File[] listFiles = dirToZip.listFiles();
-        ZipOutputStream zipStream = new ZipOutputStream(new BufferedOutputStream(outStream));
-        try {
+        try (ZipOutputStream zipStream = new ZipOutputStream(new BufferedOutputStream(outStream))) {
             for (File file : listFiles) {
                 if (file.isDirectory()) {
                     continue;
                 }
-                if (file.length() == 0) {
-                    // If there were issues with reading from dumpstate socket, the dumpstate zip
-                    // file still might be available in
-                    // /data/user_de/0/com.android.shell/files/bugreports/.
-                    Log.w(TAG, "File " + file.getName() + " is empty, skipping.");
-                    return;
-                }
                 String filename = file.getName();
-
                 // only for the zipped output file, we add individual entries to zip file.
                 if (filename.equals(OUTPUT_ZIP_FILE) || filename.equals(EXTRA_OUTPUT_ZIP_FILE)) {
-                    extractZippedFileToOutputStream(file, zipStream);
+                    ZipUtils.extractZippedFileToZipStream(file, zipStream);
                 } else {
-                    try (FileInputStream reader = new FileInputStream(file)) {
-                        addFileToOutputStream(filename, reader, zipStream);
-                    }
+                    ZipUtils.addFileToZipStream(file, zipStream);
                 }
             }
         } finally {
-            zipStream.close();
             outStream.close();
         }
         // Zipping successful, now cleanup the temp dir.
         FileUtils.deleteDirectory(dirToZip);
-    }
-
-    private void extractZippedFileToOutputStream(File file, ZipOutputStream zipStream)
-            throws IOException {
-        ZipFile zipFile = new ZipFile(file);
-        Enumeration<? extends ZipEntry> entries = zipFile.entries();
-        while (entries.hasMoreElements()) {
-            ZipEntry entry = entries.nextElement();
-            try (InputStream stream = zipFile.getInputStream(entry)) {
-                addFileToOutputStream(entry.getName(), stream, zipStream);
-            }
-        }
-    }
-
-    private void addFileToOutputStream(
-            String filename, InputStream reader, ZipOutputStream zipStream) {
-        ZipEntry entry = new ZipEntry(filename);
-        try {
-            zipStream.putNextEntry(entry);
-            rawCopyStream(zipStream, reader);
-            zipStream.closeEntry();
-        } catch (IOException e) {
-            Log.w(TAG, "Failed to add file " + filename + " to the zip.", e);
-        }
     }
 }

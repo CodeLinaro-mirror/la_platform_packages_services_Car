@@ -17,17 +17,18 @@
 #define ANDROID_HARDWARE_AUTOMOTIVE_EVS_V1_1_VIDEOCAPTURE_H
 
 #include <atomic>
-#include <thread>
 #include <functional>
-#include <linux/videodev2.h>
+#include <set>
+#include <thread>
 
+#include <linux/videodev2.h>
 
 typedef v4l2_buffer imageBuffer;
 
 
 class VideoCapture {
 public:
-    bool open(const char* deviceName);
+    bool open(const char* deviceName, const int32_t width = 0, const int32_t height = 0);
     void close();
 
     bool startStream(std::function<void(VideoCapture*, imageBuffer*, void*)> callback = nullptr);
@@ -49,6 +50,7 @@ public:
 
     int setParameter(struct v4l2_control& control);
     int getParameter(struct v4l2_control& control);
+    std::set<uint32_t> enumerateCameraControls();
 
 private:
     void collectFrames();

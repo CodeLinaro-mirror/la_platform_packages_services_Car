@@ -22,13 +22,12 @@
 #include <stdio.h>
 #include <string.h>
 
-#include <log/log.h>
+#include <android-base/logging.h>
 #include <inttypes.h>
 #include <utils/SystemClock.h>
 #include <binder/IServiceManager.h>
 
 using ::android::hardware::automotive::evs::V1_0::EvsResult;
-using ::android::hardware::automotive::evs::V1_0::CameraDesc;
 using EvsDisplayState = ::android::hardware::automotive::evs::V1_0::DisplayState;
 using BufferDesc_1_0  = ::android::hardware::automotive::evs::V1_0::BufferDesc;
 using BufferDesc_1_1  = ::android::hardware::automotive::evs::V1_1::BufferDesc;
@@ -67,13 +66,12 @@ EvsStateControl::EvsStateControl(android::sp <IVehicle>       pVnet,
 
     // This way we only ever deal with cameras which exist in the system
     // Build our set of cameras for the states we support
-    ALOGD("Requesting camera list");
-    mEvs->getCameraList(
+    LOG(DEBUG) << "Requesting camera list";
+    mEvs->getCameraList_1_1(
         [this, &config](hidl_vec<CameraDesc> cameraList) {
-            ALOGI("Camera list callback received %zu cameras",
-                  cameraList.size());
+            LOG(INFO) << "Camera list callback received " << cameraList.size() << "cameras.";
             for (auto&& cam: cameraList) {
-                ALOGD("Found camera %s", cam.cameraId.c_str());
+                LOG(DEBUG) << "Found camera " << cam.v1.cameraId;
                 bool cameraConfigFound = false;
 
                 // Check our configuration for information about this camera
@@ -83,33 +81,37 @@ EvsStateControl::EvsStateControl(android::sp <IVehicle>       pVnet,
                 // list all of them and let the UX/rendering logic use one, some
                 // or all of them as appropriate.
                 for (auto&& info: config.getCameras()) {
-                    if (cam.cameraId == info.cameraId) {
+                    if (cam.v1.cameraId == info.cameraId) {
                         // We found a match!
                         if (info.function.find("reverse") != std::string::npos) {
-                            mCameraList[State::REVERSE].push_back(info);
+                            mCameraList[State::REVERSE].emplace_back(info);
+                            mCameraDescList[State::REVERSE].emplace_back(cam);
                         }
                         if (info.function.find("right") != std::string::npos) {
-                            mCameraList[State::RIGHT].push_back(info);
+                            mCameraList[State::RIGHT].emplace_back(info);
+                            mCameraDescList[State::RIGHT].emplace_back(cam);
                         }
                         if (info.function.find("left") != std::string::npos) {
-                            mCameraList[State::LEFT].push_back(info);
+                            mCameraList[State::LEFT].emplace_back(info);
+                            mCameraDescList[State::LEFT].emplace_back(cam);
                         }
                         if (info.function.find("park") != std::string::npos) {
-                            mCameraList[State::PARKING].push_back(info);
+                            mCameraList[State::PARKING].emplace_back(info);
+                            mCameraDescList[State::PARKING].emplace_back(cam);
                         }
                         cameraConfigFound = true;
                         break;
                     }
                 }
                 if (!cameraConfigFound) {
-                    ALOGW("No config information for hardware camera %s",
-                          cam.cameraId.c_str());
+                    LOG(WARNING) << "No config information for hardware camera "
+                                 << cam.v1.cameraId;
                 }
             }
         }
     );
 
-    ALOGD("State controller ready");
+    LOG(DEBUG) << "State controller ready";
 }
 
 
@@ -120,9 +122,22 @@ bool EvsStateControl::startUpdateLoop() {
 }
 
 
-void EvsStateControl::postCommand(const Command& cmd) {
+void EvsStateControl::terminateUpdateLoop() {
+    // Join a rendering thread
+    if (mRenderThread.joinable()) {
+        mRenderThread.join();
+    }
+}
+
+
+void EvsStateControl::postCommand(const Command& cmd, bool clear) {
     // Push the command onto the queue watched by updateLoop
     mLock.lock();
+    if (clear) {
+        std::queue<Command> emptyQueue;
+        std::swap(emptyQueue, mCommandQueue);
+    }
+
     mCommandQueue.push(cmd);
     mLock.unlock();
 
@@ -132,7 +147,7 @@ void EvsStateControl::postCommand(const Command& cmd) {
 
 
 void EvsStateControl::updateLoop() {
-    ALOGD("Starting EvsStateControl update loop");
+    LOG(DEBUG) << "Starting EvsStateControl update loop";
 
     bool run = true;
     while (run) {
@@ -158,7 +173,7 @@ void EvsStateControl::updateLoop() {
 
         // Review vehicle state and choose an appropriate renderer
         if (!selectStateForCurrentConditions()) {
-            ALOGE("selectStateForCurrentConditions failed so we're going to die");
+            LOG(ERROR) << "selectStateForCurrentConditions failed so we're going to die";
             break;
         }
 
@@ -172,7 +187,7 @@ void EvsStateControl::updateLoop() {
             );
 
             if (tgtBuffer.memHandle == nullptr) {
-                ALOGE("Didn't get requested output buffer -- skipping this frame.");
+                LOG(ERROR) << "Didn't get requested output buffer -- skipping this frame.";
             } else {
                 // Generate our output image
                 if (!mCurrentRenderer->drawFrame(convertBufferDesc(tgtBuffer))) {
@@ -183,19 +198,23 @@ void EvsStateControl::updateLoop() {
                 // Send the finished image back for display
                 mDisplay->returnTargetBufferForDisplay(tgtBuffer);
             }
-        } else {
+        } else if (run) {
             // No active renderer, so sleep until somebody wakes us with another command
+            // or exit if we received EXIT command
             std::unique_lock<std::mutex> lock(mLock);
             mWakeSignal.wait(lock);
         }
     }
 
-    ALOGW("EvsStateControl update loop ending");
+    LOG(WARNING) << "EvsStateControl update loop ending";
 
-    // TODO:  Fix it so we can exit cleanly from the main thread instead
+    if (mCurrentRenderer) {
+        // Deactive the renderer
+        mCurrentRenderer->deactivate();
+    }
+
     printf("Shutting down app due to state control loop ending\n");
-    ALOGE("KILLING THE APP FROM THE EvsStateControl LOOP ON DRAW FAILURE!!!");
-    exit(1);
+    LOG(ERROR) << "Shutting down app due to state control loop ending";
 }
 
 
@@ -206,7 +225,7 @@ bool EvsStateControl::selectStateForCurrentConditions() {
     if (mVehicle != nullptr) {
         // Query the car state
         if (invokeGet(&mGearValue) != StatusCode::OK) {
-            ALOGE("GEAR_SELECTION not available from vehicle.  Exiting.");
+            LOG(ERROR) << "GEAR_SELECTION not available from vehicle.  Exiting.";
             return false;
         }
         if ((mTurnSignalValue.prop == 0) || (invokeGet(&mTurnSignalValue) != StatusCode::OK)) {
@@ -275,11 +294,11 @@ bool EvsStateControl::configureEvsPipeline(State desiredState) {
         return true;
     }
 
-    ALOGD("Switching to state %d.", desiredState);
-    ALOGD("  Current state %d has %zu cameras", mCurrentState,
-          mCameraList[mCurrentState].size());
-    ALOGD("  Desired state %d has %zu cameras", desiredState,
-          mCameraList[desiredState].size());
+    LOG(DEBUG) << "Switching to state " << desiredState;
+    LOG(DEBUG) << "  Current state " << mCurrentState
+               << " has " << mCameraList[mCurrentState].size() << " cameras";
+    LOG(DEBUG) << "  Desired state " << desiredState
+               << " has " << mCameraList[desiredState].size() << " cameras";
 
     if (!isGlReady && !isSfReady()) {
         // Graphics is not ready yet; using CPU renderer.
@@ -287,12 +306,12 @@ bool EvsStateControl::configureEvsPipeline(State desiredState) {
             mDesiredRenderer = std::make_unique<RenderPixelCopy>(mEvs,
                                                                  mCameraList[desiredState][0]);
             if (!mDesiredRenderer) {
-                ALOGE("Failed to construct Pixel Copy renderer.  Skipping state change.");
+                LOG(ERROR) << "Failed to construct Pixel Copy renderer.  Skipping state change.";
                 return false;
             }
         } else {
-            ALOGD("Unsupported, desiredState %d has %u cameras.",
-                  desiredState, static_cast<unsigned int>(mCameraList[desiredState].size()));
+            LOG(DEBUG) << "Unsupported, desiredState " << desiredState
+                       << " has " << mCameraList[desiredState].size() << " cameras.";
         }
     } else {
         // Assumes that SurfaceFlinger is available always after being launched.
@@ -301,22 +320,25 @@ bool EvsStateControl::configureEvsPipeline(State desiredState) {
         if (mCameraList[desiredState].size() == 1) {
             // We have a camera assigned to this state for direct view.
             mDesiredRenderer = std::make_unique<RenderDirectView>(mEvs,
-                                                                  mCameraList[desiredState][0]);
+                                                                  mCameraDescList[desiredState][0],
+                                                                  mConfig);
             if (!mDesiredRenderer) {
-                ALOGE("Failed to construct direct renderer.  Skipping state change.");
+                LOG(ERROR) << "Failed to construct direct renderer.  Skipping state change.";
                 return false;
             }
         } else if (mCameraList[desiredState].size() > 1 || desiredState == PARKING) {
+            //TODO(b/140668179): RenderTopView needs to be updated to use new
+            //                   ConfigManager.
             mDesiredRenderer = std::make_unique<RenderTopView>(mEvs,
                                                                mCameraList[desiredState],
                                                                mConfig);
             if (!mDesiredRenderer) {
-                ALOGE("Failed to construct top view renderer.  Skipping state change.");
+                LOG(ERROR) << "Failed to construct top view renderer.  Skipping state change.";
                 return false;
             }
         } else {
-            ALOGD("Unsupported, desiredState %d has %u cameras.",
-                  desiredState, static_cast<unsigned int>(mCameraList[desiredState].size()));
+            LOG(DEBUG) << "Unsupported, desiredState " << desiredState
+                       << " has " << mCameraList[desiredState].size() << " cameras.";
         }
 
         // GL renderer is now ready.
@@ -331,29 +353,32 @@ bool EvsStateControl::configureEvsPipeline(State desiredState) {
 
     // Now set the display state based on whether we have a video feed to show
     if (mDesiredRenderer == nullptr) {
-        ALOGD("Turning off the display");
+        LOG(DEBUG) << "Turning off the display";
         mDisplay->setDisplayState(EvsDisplayState::NOT_VISIBLE);
     } else {
         mCurrentRenderer = std::move(mDesiredRenderer);
 
         // Start the camera stream
-        ALOGD("EvsStartCameraStreamTiming start time: %" PRId64 "ms", android::elapsedRealtime());
+        LOG(DEBUG) << "EvsStartCameraStreamTiming start time: "
+                   << android::elapsedRealtime() << " ms.";
         if (!mCurrentRenderer->activate()) {
-            ALOGE("New renderer failed to activate");
+            LOG(ERROR) << "New renderer failed to activate";
             return false;
         }
 
         // Activate the display
-        ALOGD("EvsActivateDisplayTiming start time: %" PRId64 "ms", android::elapsedRealtime());
+        LOG(DEBUG) << "EvsActivateDisplayTiming start time: "
+                   << android::elapsedRealtime() << " ms.";
         Return<EvsResult> result = mDisplay->setDisplayState(EvsDisplayState::VISIBLE_ON_NEXT_FRAME);
         if (result != EvsResult::OK) {
-            ALOGE("setDisplayState returned an error (%d)", (EvsResult)result);
+            LOG(ERROR) << "setDisplayState returned an error "
+                       << result.description();
             return false;
         }
     }
 
     // Record our current state
-    ALOGI("Activated state %d.", desiredState);
+    LOG(INFO) << "Activated state " << desiredState;
     mCurrentState = desiredState;
 
     return true;

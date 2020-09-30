@@ -31,11 +31,14 @@ import android.car.vms.VmsSubscriberManager;
 import android.car.vms.VmsSubscriptionState;
 import android.util.Pair;
 
+import androidx.test.ext.junit.runners.AndroidJUnit4;
+import androidx.test.filters.FlakyTest;
 import androidx.test.filters.MediumTest;
 import androidx.test.filters.RequiresDevice;
 
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.runner.RunWith;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -44,6 +47,7 @@ import java.util.Set;
 import java.util.function.Supplier;
 import java.util.function.ToIntFunction;
 
+@RunWith(AndroidJUnit4.class)
 @MediumTest
 public class VmsPublisherSubscriberTest extends MockedVmsTestBase {
     private static final VmsLayer SUBSCRIPTION_LAYER = new VmsLayer(1, 1, 1);
@@ -516,6 +520,7 @@ public class VmsPublisherSubscriberTest extends MockedVmsTestBase {
     }
 
     @Test
+    @FlakyTest
     public void testUnsubscribeToPublisher_MultiplePublishers() {
         int publisherId = mPublisher.getPublisherId(PUBLISHER_INFO);
         int publisherId2 = mPublisher.getPublisherId(PUBLISHER_INFO_OTHER);

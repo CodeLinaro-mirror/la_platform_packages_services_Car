@@ -19,7 +19,9 @@ package android.car;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
-import android.content.Context;
+import android.annotation.RequiresPermission;
+import android.annotation.SystemApi;
+import android.annotation.UserIdInt;
 import android.hardware.display.DisplayManager;
 import android.os.Handler;
 import android.os.IBinder;
@@ -28,6 +30,7 @@ import android.os.Message;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.os.RemoteException;
+import android.os.UserHandle;
 import android.util.Log;
 import android.view.Display;
 
@@ -39,14 +42,14 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * API to get information on displays and users in the car.
  */
-public class CarOccupantZoneManager implements CarManagerBase {
+public class CarOccupantZoneManager extends CarManagerBase {
 
     private static final String TAG = CarOccupantZoneManager.class.getSimpleName();
 
@@ -224,10 +227,16 @@ public class CarOccupantZoneManager implements CarManagerBase {
     /** Zone config change caused by user change. Assigned user for passenger zones have changed. */
     public static final int ZONE_CONFIG_CHANGE_FLAG_USER = 0x2;
 
+    /** Zone config change caused by audio zone change.
+     * Assigned audio zone for passenger zones have changed.
+     **/
+    public static final int ZONE_CONFIG_CHANGE_FLAG_AUDIO = 0x4;
+
     /** @hide */
     @IntDef(flag = true, prefix = { "ZONE_CONFIG_CHANGE_FLAG_" }, value = {
             ZONE_CONFIG_CHANGE_FLAG_DISPLAY,
             ZONE_CONFIG_CHANGE_FLAG_USER,
+            ZONE_CONFIG_CHANGE_FLAG_AUDIO,
     })
     @Retention(RetentionPolicy.SOURCE)
     @interface ZoneConfigChangeFlags {}
@@ -261,11 +270,12 @@ public class CarOccupantZoneManager implements CarManagerBase {
 
     /** @hide */
     @VisibleForTesting
-    public CarOccupantZoneManager(IBinder service, Context context, Handler handler) {
+    public CarOccupantZoneManager(Car car, IBinder service) {
+        super(car);
         mService = ICarOccupantZone.Stub.asInterface(service);
         mBinderCallback = new ICarOccupantZoneCallbackImpl(this);
-        mDisplayManager = context.getSystemService(DisplayManager.class);
-        mEventHandler = new EventHandler(handler.getLooper());
+        mDisplayManager = getContext().getSystemService(DisplayManager.class);
+        mEventHandler = new EventHandler(getEventHandler().getLooper());
     }
 
     /**
@@ -275,9 +285,9 @@ public class CarOccupantZoneManager implements CarManagerBase {
     @NonNull
     public List<OccupantZoneInfo> getAllOccupantZones() {
         try {
-            return Arrays.asList(mService.getAllOccupantZones());
+            return mService.getAllOccupantZones();
         } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
+            return handleRemoteExceptionFromCarService(e, Collections.emptyList());
         }
     }
 
@@ -303,7 +313,7 @@ public class CarOccupantZoneManager implements CarManagerBase {
             }
             return displays;
         } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
+            return handleRemoteExceptionFromCarService(e, Collections.emptyList());
         }
     }
 
@@ -326,7 +336,42 @@ public class CarOccupantZoneManager implements CarManagerBase {
             }
             return mDisplayManager.getDisplay(displayId);
         } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
+            return handleRemoteExceptionFromCarService(e, null);
+        }
+    }
+
+    /**
+     * Gets the audio zone id for the occupant, or returns
+     * {@code CarAudioManager.INVALID_AUDIO_ZONE} if no audio zone matches the requirements.
+     * throws InvalidArgumentException if occupantZone does not exist.
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(Car.PERMISSION_CAR_CONTROL_AUDIO_SETTINGS)
+    public int getAudioZoneIdForOccupant(@NonNull OccupantZoneInfo occupantZone) {
+        assertNonNullOccupant(occupantZone);
+        try {
+            return mService.getAudioZoneIdForOccupant(occupantZone.zoneId);
+        } catch (RemoteException e) {
+            return handleRemoteExceptionFromCarService(e, null);
+        }
+    }
+
+    /**
+     * Gets occupant for the audio zone id, or returns {@code null}
+     * if no audio zone matches the requirements.
+     *
+     * @hide
+     */
+    @Nullable
+    @SystemApi
+    @RequiresPermission(Car.PERMISSION_CAR_CONTROL_AUDIO_SETTINGS)
+    public OccupantZoneInfo getOccupantForAudioZoneId(int audioZoneId) {
+        try {
+            return mService.getOccupantForAudioZoneId(audioZoneId);
+        } catch (RemoteException e) {
+            return handleRemoteExceptionFromCarService(e, null);
         }
     }
 
@@ -340,7 +385,7 @@ public class CarOccupantZoneManager implements CarManagerBase {
         try {
             return mService.getDisplayType(display.getDisplayId());
         } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
+            return handleRemoteExceptionFromCarService(e, DISPLAY_TYPE_UNKNOWN);
         }
     }
 
@@ -348,12 +393,38 @@ public class CarOccupantZoneManager implements CarManagerBase {
      * Returns android user id assigned for the given zone. It will return
      * {@link UserHandle#USER_NULL} if user is not assigned or if zone is not available.
      */
+    @UserIdInt
     public int getUserForOccupant(@NonNull OccupantZoneInfo occupantZone) {
         assertNonNullOccupant(occupantZone);
         try {
             return mService.getUserForOccupant(occupantZone.zoneId);
         } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
+            return handleRemoteExceptionFromCarService(e, UserHandle.USER_NULL);
+        }
+    }
+
+    /**
+     * Assigns the given profile {@code userId} to the {@code occupantZone}. Returns true when the
+     * request succeeds.
+     *
+     * <p>Note that only non-driver zone can be assigned with this call. Calling this for driver
+     * zone will lead into {@code IllegalArgumentException}.
+     *
+     * @param occupantZone Zone to assign user.
+     * @param userId profile user id to assign. Passing {@link UserHandle#USER_NULL} leads into
+     *               removing the current user assignment.
+     * @return true if the request succeeds or if the user is already assigned to the zone.
+     *
+     * @hide
+     */
+    @RequiresPermission(android.Manifest.permission.MANAGE_USERS)
+    public boolean assignProfileUserToOccupantZone(@NonNull OccupantZoneInfo occupantZone,
+            @UserIdInt int userId) {
+        assertNonNullOccupant(occupantZone);
+        try {
+            return mService.assignProfileUserToOccupantZone(occupantZone.zoneId, userId);
+        } catch (RemoteException e) {
+            return handleRemoteExceptionFromCarService(e, false);
         }
     }
 
@@ -380,7 +451,7 @@ public class CarOccupantZoneManager implements CarManagerBase {
                 try {
                     mService.registerCallback(mBinderCallback);
                 } catch (RemoteException e) {
-                    throw e.rethrowFromSystemServer();
+                    handleRemoteExceptionFromCarService(e);
                 }
             }
         }

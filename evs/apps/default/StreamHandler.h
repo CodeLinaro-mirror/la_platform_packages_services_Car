@@ -23,7 +23,7 @@
 
 #include <android/hardware/automotive/evs/1.1/IEvsCameraStream.h>
 #include <android/hardware/automotive/evs/1.1/IEvsCamera.h>
-#include <android/hardware/automotive/evs/1.0/IEvsDisplay.h>
+#include <android/hardware/automotive/evs/1.1/IEvsDisplay.h>
 
 using namespace ::android::hardware::automotive::evs::V1_1;
 using ::android::hardware::Return;
@@ -31,11 +31,10 @@ using ::android::hardware::Void;
 using ::android::hardware::hidl_vec;
 using ::android::hardware::hidl_handle;
 using ::android::sp;
-using ::android::hardware::automotive::evs::V1_0::IEvsDisplay;
-using BufferDesc_1_0       = ::android::hardware::automotive::evs::V1_0::BufferDesc;
-using BufferDesc_1_1       = ::android::hardware::automotive::evs::V1_1::BufferDesc;
-using EvsDisplayState      = ::android::hardware::automotive::evs::V1_0::DisplayState;
-using IEvsCameraStream_1_1 = ::android::hardware::automotive::evs::V1_1::IEvsCameraStream;
+using ::android::hardware::automotive::evs::V1_1::IEvsDisplay;
+using EvsDisplayState = ::android::hardware::automotive::evs::V1_0::DisplayState;
+using BufferDesc_1_0  = ::android::hardware::automotive::evs::V1_0::BufferDesc;
+using BufferDesc_1_1  = ::android::hardware::automotive::evs::V1_1::BufferDesc;
 
 
 /*
@@ -49,7 +48,12 @@ class StreamHandler : public IEvsCameraStream {
 public:
     virtual ~StreamHandler() { shutdown(); };
 
-    StreamHandler(android::sp <IEvsCamera> pCamera);
+    StreamHandler(android::sp <IEvsCamera> pCamera,
+                  uint32_t numBuffers = 2,
+                  bool useOwnBuffers = false,
+                  android_pixel_format_t format = HAL_PIXEL_FORMAT_RGBA_8888,
+                  int32_t width = 640,
+                  int32_t height = 360);
     void shutdown();
 
     bool startStream();
@@ -63,9 +67,12 @@ public:
     void doneWithFrame(const BufferDesc_1_1& buffer);
 
 private:
-    // Implementation for ::android::hardware::automotive::evs::V1_1::IEvsCameraStream
+    // Implementation for ::android::hardware::automotive::evs::V1_0::IEvsCameraStream
     Return<void> deliverFrame(const BufferDesc_1_0& buffer)  override;
-    Return<void> notifyEvent(const EvsEvent& event) override;
+
+    // Implementation for ::android::hardware::automotive::evs::V1_1::IEvsCameraStream
+    Return<void> deliverFrame_1_1(const hidl_vec<BufferDesc_1_1>& buffer)  override;
+    Return<void> notify(const EvsEventDesc& event) override;
 
     // Values initialized as startup
     android::sp <IEvsCamera>    mCamera;
@@ -81,6 +88,8 @@ private:
     BufferDesc                  mBuffers[2];
     int                         mHeldBuffer = -1;   // Index of the one currently held by the client
     int                         mReadyBuffer = -1;  // Index of the newest available buffer
+    hidl_vec<BufferDesc_1_1>    mOwnBuffers;
+    bool                        mUseOwnBuffers;
 };
 
 

@@ -16,8 +16,11 @@
 #ifndef CONFIG_MANAGER_H
 #define CONFIG_MANAGER_H
 
-#include <vector>
+#include <cerrno>
 #include <string>
+#include <vector>
+
+#include <system/graphics-base.h>
 
 
 class ConfigManager {
@@ -30,6 +33,13 @@ public:
         float pitch = 0;    // positive upward (ie: right hand rule about local x axis)
         float hfov  = 0;    // radians
         float vfov  = 0;    // radians
+    };
+
+    struct DisplayInfo {
+        uint8_t port = 0;           // Display port number to use
+        std::string function = "";  // The expected use for this display.
+        float frontRangeInCarSpace; // How far the display extends in front of the car
+        float rearRangeInCarSpace;  // How far the display extends behind the car
     };
 
     bool initialize(const char* configFileName);
@@ -48,11 +58,11 @@ public:
     // Where are the edges of the top down display in car space?
     float getDisplayTopLocation() const {
         // From the rear axel (origin) to the front bumper, and then beyond by the front range
-        return mWheelBase + mFrontExtent + mFrontRangeInCarSpace;
+        return mWheelBase + mFrontExtent + mDisplays[mActiveDisplayId].frontRangeInCarSpace;
     };
     float getDisplayBottomLocation() const {
         // From the rear axel (origin) to the back bumper, and then beyond by the back range
-        return -mRearExtent - mRearRangeInCarSpace;
+        return -mRearExtent - mDisplays[mActiveDisplayId].rearRangeInCarSpace;
     };
     float getDisplayRightLocation(float aspectRatio) const   {
         // Given the display aspect ratio (width over height), how far can we see to the right?
@@ -69,9 +79,52 @@ public:
 
     const std::vector<CameraInfo>& getCameras() const   { return mCameras; };
 
+    int  setActiveDisplayId(int displayId) {
+        if (displayId == -1) {
+            // -1 is reserved for the default display, which is the first
+            // display in config.json's display list
+            printf("Uses a display with id %d", mDisplays[0].port);
+            mActiveDisplayId = mDisplays[0].port;
+            return mActiveDisplayId;
+        } else if (displayId < 0) {
+            printf("Display %d is invalid.", displayId);
+            return -ENOENT;
+        } else {
+            for (auto display : mDisplays) {
+                if (display.port == displayId) {
+                    mActiveDisplayId = displayId;
+                    return mActiveDisplayId;
+                }
+            }
+
+            printf("Display %d does not exist.", displayId);
+            return -ENOENT;
+        }
+    }
+    const std::vector<DisplayInfo>& getDisplays() const { return mDisplays; };
+    const DisplayInfo& getActiveDisplay() const { return mDisplays[mActiveDisplayId]; };
+    void  useExternalMemory(bool flag) { mUseExternalMemory = flag; }
+    bool  getUseExternalMemory() const { return mUseExternalMemory; }
+    void  setExternalMemoryFormat(android_pixel_format_t format) {
+        mExternalMemoryFormat = format;
+    }
+    android_pixel_format_t getExternalMemoryFormat() const {
+        return mExternalMemoryFormat;
+    }
+
 private:
     // Camera information
     std::vector<CameraInfo> mCameras;
+
+    // Display information
+    std::vector<DisplayInfo> mDisplays;
+    int mActiveDisplayId;
+
+    // Memory management
+    bool mUseExternalMemory;
+
+    // Format of external memory
+    android_pixel_format_t mExternalMemoryFormat;
 
     // Car body information (assumes front wheel steering and origin at center of rear axel)
     // Note that units aren't specified and don't matter as long as all length units are consistent
@@ -81,10 +134,6 @@ private:
     float mWheelBase;
     float mFrontExtent;
     float mRearExtent;
-
-    // Display information
-    float    mFrontRangeInCarSpace;     // How far the display extends in front of the car
-    float    mRearRangeInCarSpace;      // How far the display extends behind the car
 
     // Top view car image information
     float mCarGraphicFrontPixel;    // How many pixels from the top of the image does the car start

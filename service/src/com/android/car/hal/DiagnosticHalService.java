@@ -28,6 +28,7 @@ import android.hardware.automotive.vehicle.V2_0.VehiclePropConfig;
 import android.hardware.automotive.vehicle.V2_0.VehiclePropValue;
 import android.hardware.automotive.vehicle.V2_0.VehicleProperty;
 import android.hardware.automotive.vehicle.V2_0.VehiclePropertyChangeMode;
+import android.os.ServiceSpecificException;
 import android.util.Log;
 import android.util.SparseArray;
 
@@ -47,9 +48,17 @@ import java.util.concurrent.CopyOnWriteArraySet;
  * Diagnostic HAL service supporting gathering diagnostic info from VHAL and translating it into
  * higher-level semantic information
  */
-public class DiagnosticHalService extends  HalServiceBase{
+public class DiagnosticHalService extends HalServiceBase {
     static final int OBD2_SELECTIVE_FRAME_CLEAR = 1;
-    static final boolean DEBUG = true;
+    static final boolean DEBUG = false;
+
+    private static final int[] SUPPORTED_PROPERTIES = new int[]{
+            VehicleProperty.OBD2_LIVE_FRAME,
+            VehicleProperty.OBD2_FREEZE_FRAME,
+            VehicleProperty.OBD2_FREEZE_FRAME_INFO,
+            VehicleProperty.OBD2_FREEZE_FRAME_CLEAR
+    };
+
     private final Object mLock = new Object();
     private final VehicleHal mVehicleHal;
 
@@ -110,13 +119,16 @@ public class DiagnosticHalService extends  HalServiceBase{
     }
 
     @Override
-    public Collection<VehiclePropConfig> takeSupportedProperties(
-            Collection<VehiclePropConfig> allProperties) {
+    public int[] getAllSupportedProperties() {
+        return SUPPORTED_PROPERTIES;
+    }
+
+    @Override
+    public void takeProperties(Collection<VehiclePropConfig> properties) {
         if (DEBUG) {
             Log.d(CarLog.TAG_DIAGNOSTIC, "takeSupportedProperties");
         }
-        LinkedList<VehiclePropConfig> supportedProperties = new LinkedList<VehiclePropConfig>();
-        for (VehiclePropConfig vp : allProperties) {
+        for (VehiclePropConfig vp : properties) {
             int sensorType = getTokenForProperty(vp);
             if (sensorType == NOT_SUPPORTED_PROPERTY) {
                 if (DEBUG) {
@@ -127,13 +139,11 @@ public class DiagnosticHalService extends  HalServiceBase{
                                 .toString());
                 }
             } else {
-                supportedProperties.add(vp);
                 synchronized (mLock) {
                     mSensorTypeToConfig.append(sensorType, vp);
                 }
             }
         }
-        return supportedProperties;
     }
 
     /**
@@ -299,7 +309,7 @@ public class DiagnosticHalService extends  HalServiceBase{
         }
         try {
             return mVehicleHal.get(propConfig.prop);
-        } catch (PropertyTimeoutException e) {
+        } catch (ServiceSpecificException e) {
             Log.e(CarLog.TAG_DIAGNOSTIC,
                     "property not ready 0x" + toHexString(propConfig.prop), e);
             return null;
@@ -396,7 +406,7 @@ public class DiagnosticHalService extends  HalServiceBase{
     private final LinkedList<CarDiagnosticEvent> mEventsToDispatch = new LinkedList<>();
 
     @Override
-    public void handleHalEvents(List<VehiclePropValue> values) {
+    public void onHalEvents(List<VehiclePropValue> values) {
         for (VehiclePropValue value : values) {
             CarDiagnosticEvent event = createCarDiagnosticEvent(value);
             if (event != null) {
@@ -468,8 +478,8 @@ public class DiagnosticHalService extends  HalServiceBase{
         try {
             VehiclePropValue value = mVehicleHal.get(VehicleProperty.OBD2_LIVE_FRAME);
             return createCarDiagnosticEvent(value);
-        } catch (PropertyTimeoutException e) {
-            Log.e(CarLog.TAG_DIAGNOSTIC, "timeout trying to read OBD2_LIVE_FRAME");
+        } catch (ServiceSpecificException e) {
+            Log.e(CarLog.TAG_DIAGNOSTIC, "Failed to read OBD2_LIVE_FRAME.", e);
             return null;
         } catch (IllegalArgumentException e) {
             Log.e(CarLog.TAG_DIAGNOSTIC, "illegal argument trying to read OBD2_LIVE_FRAME", e);
@@ -486,8 +496,8 @@ public class DiagnosticHalService extends  HalServiceBase{
                 timestamps[i] = value.value.int64Values.get(i);
             }
             return timestamps;
-        } catch (PropertyTimeoutException e) {
-            Log.e(CarLog.TAG_DIAGNOSTIC, "timeout trying to read OBD2_FREEZE_FRAME_INFO");
+        } catch (ServiceSpecificException e) {
+            Log.e(CarLog.TAG_DIAGNOSTIC, "Failed to read OBD2_FREEZE_FRAME_INFO.", e);
             return null;
         } catch (IllegalArgumentException e) {
             Log.e(CarLog.TAG_DIAGNOSTIC,
@@ -504,8 +514,8 @@ public class DiagnosticHalService extends  HalServiceBase{
         try {
             VehiclePropValue value = mVehicleHal.get(builder.build());
             return createCarDiagnosticEvent(value);
-        } catch (PropertyTimeoutException e) {
-            Log.e(CarLog.TAG_DIAGNOSTIC, "timeout trying to read OBD2_FREEZE_FRAME");
+        } catch (ServiceSpecificException e) {
+            Log.e(CarLog.TAG_DIAGNOSTIC, "Failed to read OBD2_FREEZE_FRAME.", e);
             return null;
         } catch (IllegalArgumentException e) {
             Log.e(CarLog.TAG_DIAGNOSTIC,
@@ -520,8 +530,8 @@ public class DiagnosticHalService extends  HalServiceBase{
         builder.setInt64Value(timestamps);
         try {
             mVehicleHal.set(builder.build());
-        } catch (PropertyTimeoutException e) {
-            Log.e(CarLog.TAG_DIAGNOSTIC, "timeout trying to write OBD2_FREEZE_FRAME_CLEAR");
+        } catch (ServiceSpecificException e) {
+            Log.e(CarLog.TAG_DIAGNOSTIC, "Failed to write OBD2_FREEZE_FRAME_CLEAR.", e);
         } catch (IllegalArgumentException e) {
             Log.e(CarLog.TAG_DIAGNOSTIC,
                 "illegal argument trying to write OBD2_FREEZE_FRAME_CLEAR", e);

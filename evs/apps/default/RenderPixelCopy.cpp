@@ -17,7 +17,7 @@
 #include "RenderPixelCopy.h"
 #include "FormatConvert.h"
 
-#include <log/log.h>
+#include <android-base/logging.h>
 
 
 RenderPixelCopy::RenderPixelCopy(sp<IEvsEnumerator> enumerator,
@@ -34,20 +34,20 @@ bool RenderPixelCopy::activate() {
         .withDefault(nullptr);
 
     if (pCamera.get() == nullptr) {
-        ALOGE("Failed to allocate new EVS Camera interface");
+        LOG(ERROR) << "Failed to allocate new EVS Camera interface";
         return false;
     }
 
     // Initialize the stream that will help us update this texture's contents
     sp<StreamHandler> pStreamHandler = new StreamHandler(pCamera);
     if (pStreamHandler.get() == nullptr) {
-        ALOGE("failed to allocate FrameHandler");
+        LOG(ERROR) << "Failed to allocate FrameHandler";
         return false;
     }
 
     // Start the video stream
     if (!pStreamHandler->startStream()) {
-        ALOGE("start stream failed");
+        LOG(ERROR) << "Start stream failed";
         return false;
     }
 
@@ -83,14 +83,14 @@ bool RenderPixelCopy::drawFrame(const BufferDesc& tgtBuffer) {
     if (tgtPixels) {
         if (pTgtDesc->format != HAL_PIXEL_FORMAT_RGBA_8888) {
             // We always expect 32 bit RGB for the display output for now.  Is there a need for 565?
-            ALOGE("Diplay buffer is always expected to be 32bit RGBA");
+            LOG(ERROR) << "Diplay buffer is always expected to be 32bit RGBA";
             success = false;
         } else {
             // Make sure we have the latest frame data
             if (mStreamHandler->newFrameAvailable()) {
                 const BufferDesc& srcBuffer = mStreamHandler->getNewFrame();
                 const AHardwareBuffer_Desc* pSrcDesc =
-                    reinterpret_cast<const AHardwareBuffer_Desc *>(&tgtBuffer.buffer.description);
+                    reinterpret_cast<const AHardwareBuffer_Desc *>(&srcBuffer.buffer.description);
 
                 // Lock our source buffer for reading (current expectation are for this to be NV21 format)
                 sp<android::GraphicBuffer> src = new android::GraphicBuffer(srcBuffer.buffer.nativeHandle,
@@ -101,42 +101,44 @@ bool RenderPixelCopy::drawFrame(const BufferDesc& tgtBuffer) {
                                                                             pSrcDesc->layers,
                                                                             pSrcDesc->usage,
                                                                             pSrcDesc->stride);
+
                 unsigned char* srcPixels = nullptr;
                 src->lock(GRALLOC_USAGE_SW_READ_OFTEN, (void**)&srcPixels);
-                if (!srcPixels) {
-                    ALOGE("Failed to get pointer into src image data");
-                }
+                if (srcPixels != nullptr) {
+                    // Make sure we don't run off the end of either buffer
+                    const unsigned width  = std::min(pTgtDesc->width,
+                                                     pSrcDesc->width);
+                    const unsigned height = std::min(pTgtDesc->height,
+                                                     pSrcDesc->height);
 
-                // Make sure we don't run off the end of either buffer
-                const unsigned width  = std::min(pTgtDesc->width,
-                                                 pSrcDesc->width);
-                const unsigned height = std::min(pTgtDesc->height,
-                                                 pSrcDesc->height);
-
-                if (pSrcDesc->format == HAL_PIXEL_FORMAT_YCRCB_420_SP) {   // 420SP == NV21
-                    copyNV21toRGB32(width, height,
-                                    srcPixels,
-                                    tgtPixels, pTgtDesc->stride);
-                } else if (pSrcDesc->format == HAL_PIXEL_FORMAT_YV12) { // YUV_420P == YV12
-                    copyYV12toRGB32(width, height,
-                                    srcPixels,
-                                    tgtPixels, pTgtDesc->stride);
-                } else if (pSrcDesc->format == HAL_PIXEL_FORMAT_YCBCR_422_I) { // YUYV
-                    copyYUYVtoRGB32(width, height,
-                                    srcPixels, pSrcDesc->stride,
-                                    tgtPixels, pTgtDesc->stride);
-                } else if (pSrcDesc->format == pTgtDesc->format) {  // 32bit RGBA
-                    copyMatchedInterleavedFormats(width, height,
-                                                  srcPixels, pSrcDesc->stride,
-                                                  tgtPixels, pTgtDesc->stride,
-                                                  tgtBuffer.pixelSize);
+                    if (pSrcDesc->format == HAL_PIXEL_FORMAT_YCRCB_420_SP) {   // 420SP == NV21
+                        copyNV21toRGB32(width, height,
+                                        srcPixels,
+                                        tgtPixels, pTgtDesc->stride);
+                    } else if (pSrcDesc->format == HAL_PIXEL_FORMAT_YV12) { // YUV_420P == YV12
+                        copyYV12toRGB32(width, height,
+                                        srcPixels,
+                                        tgtPixels, pTgtDesc->stride);
+                    } else if (pSrcDesc->format == HAL_PIXEL_FORMAT_YCBCR_422_I) { // YUYV
+                        copyYUYVtoRGB32(width, height,
+                                        srcPixels, pSrcDesc->stride,
+                                        tgtPixels, pTgtDesc->stride);
+                    } else if (pSrcDesc->format == pTgtDesc->format) {  // 32bit RGBA
+                        copyMatchedInterleavedFormats(width, height,
+                                                      srcPixels, pSrcDesc->stride,
+                                                      tgtPixels, pTgtDesc->stride,
+                                                      tgtBuffer.pixelSize);
+                    }
+                } else {
+                    LOG(ERROR) << "Failed to get pointer into src image data";
+                    success = false;
                 }
 
                 mStreamHandler->doneWithFrame(srcBuffer);
             }
         }
     } else {
-        ALOGE("Failed to lock buffer contents for contents transfer");
+        LOG(ERROR) << "Failed to lock buffer contents for contents transfer";
         success = false;
     }
 
