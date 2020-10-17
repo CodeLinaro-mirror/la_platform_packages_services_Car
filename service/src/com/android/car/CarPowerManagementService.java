@@ -1104,8 +1104,8 @@ public class CarPowerManagementService extends ICarPower.Stub implements
     // If it fails repeatedly, send the command to shut down.
     // Returns true if we successfully suspended.
     private boolean suspendWithRetries() {
-        final int maxTries = 3;
-        final long retryIntervalMs = 10;
+        final int maxTries = 10;
+        final long retryIntervalMs = 10000;
         int tryCount = 0;
 
         while (true) {
