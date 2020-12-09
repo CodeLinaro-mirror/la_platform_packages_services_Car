@@ -176,6 +176,15 @@ public class CarBluetoothService extends ICarBluetooth.Stub implements CarServic
         return sManagedProfiles;
     }
 
+    private boolean isPanSupported(Context context) {
+        boolean enablePan = true;
+        if (context != null) {
+            enablePan = context.getResources().getBoolean(R.bool.enableBluetoothPan);
+        }
+        logd("IsPANSupport: " + enablePan);
+        return enablePan;
+    }
+
     /**
      * Initialize the user context using the current active user.
      *
@@ -251,11 +260,17 @@ public class CarBluetoothService extends ICarBluetooth.Stub implements CarServic
      * Clears out Profile Device Managers and re-creates them for the current user.
      */
     private void createBluetoothProfileDeviceManagersLocked() {
+        boolean enablePan =isPanSupported(mContext);
+
         if (mUserId == UserHandle.USER_NULL) {
             logd("No foreground user, cannot create profile device managers");
             return;
         }
         for (int profileId : sManagedProfiles) {
+            if (profileId == BluetoothProfile.PAN && !enablePan){
+                logd("Bluetooth PAN is not supported");
+                continue;
+            }
             BluetoothProfileDeviceManager deviceManager = mProfileDeviceManagers.get(profileId);
             if (deviceManager != null) {
                 deviceManager.stop();
