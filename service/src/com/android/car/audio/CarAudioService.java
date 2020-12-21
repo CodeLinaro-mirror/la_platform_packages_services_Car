@@ -893,6 +893,10 @@ public class CarAudioService extends ICarAudio.Stub implements CarServiceBase {
      *
      * @param zoneId The audio zone id
      * @param uid The uid to map
+     *
+     * <p><b>Note:</b> Will throw if occupant zone mapping exist, as uid and occupant zone mapping
+     * do not work in conjunction.
+     *
      * @return true if the device affinities, for devices in zone, are successfully set
      */
     @Override
@@ -905,6 +909,9 @@ public class CarAudioService extends ICarAudio.Stub implements CarServiceBase {
             Log.i(CarLog.TAG_AUDIO, "setZoneIdForUid Calling uid "
                     + uid + " mapped to : "
                     + zoneId);
+
+            // If occupant mapping exist uid routing can not be used
+            requiredOccupantZoneMappingDisabledLocked();
 
             // Figure out if anything is currently holding focus,
             // This will change the focus to transient loss while we are switching zones
@@ -986,6 +993,10 @@ public class CarAudioService extends ICarAudio.Stub implements CarServiceBase {
     /**
      * Removes the current mapping of the uid, focus will be lost in zone
      * @param uid The uid to remove
+     *
+     * <p><b>Note:</b> Will throw if occupant zone mapping exist, as uid and occupant zone mapping
+     * do not work in conjunction.
+     *
      * return true if all the devices affinities currently
      *            mapped to uid are successfully removed
      */
@@ -994,6 +1005,10 @@ public class CarAudioService extends ICarAudio.Stub implements CarServiceBase {
         enforcePermission(Car.PERMISSION_CAR_CONTROL_AUDIO_SETTINGS);
         requireDynamicRouting();
         synchronized (mImplLock) {
+            // Throw so as to not set the wrong expectation,
+            // that routing will be changed if clearZoneIdForUid is called.
+            requiredOccupantZoneMappingDisabledLocked();
+
             return checkAndRemoveUidLocked(uid);
         }
     }
@@ -1084,6 +1099,13 @@ public class CarAudioService extends ICarAudio.Stub implements CarServiceBase {
         Preconditions.checkState(mUseDynamicRouting, "Dynamic routing is required");
     }
 
+    private void requiredOccupantZoneMappingDisabledLocked() {
+        if (isOccupantZoneMappingAvailableLocked()) {
+            throw new IllegalStateException(
+                    "UID based routing is not supported while using occupant zone mapping");
+        }
+    }
+
     /**
      * @return {@link AudioDevicePort} that handles the given car audio usage.
      * Multiple usages may share one {@link AudioDevicePort}
@@ -1124,7 +1146,7 @@ public class CarAudioService extends ICarAudio.Stub implements CarServiceBase {
     private void handleOccupantZoneUserChanged() {
         int driverUserId = mOccupantZoneService.getDriverUserId();
         synchronized (mImplLock) {
-            if (!isOccupantZoneMappingAvailable()) {
+            if (!isOccupantZoneMappingAvailableLocked()) {
                 //No occupant zone to audio zone mapping, re-adjust to settings driver.
                 for (int index = 0; index < mCarAudioZones.length; index++) {
                     CarAudioZone zone = mCarAudioZones[index];
@@ -1143,7 +1165,7 @@ public class CarAudioService extends ICarAudio.Stub implements CarServiceBase {
         }
     }
 
-    private boolean isOccupantZoneMappingAvailable() {
+    private boolean isOccupantZoneMappingAvailableLocked() {
         return mAudioZoneIdToOccupantZoneIdMapping.size() > 0;
     }
 
