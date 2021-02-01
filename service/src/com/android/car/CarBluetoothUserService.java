@@ -26,6 +26,7 @@ import android.bluetooth.BluetoothProfile;
 import android.car.ICarBluetoothUserService;
 import android.util.Log;
 import android.util.SparseBooleanArray;
+import android.content.Context;
 
 import java.util.Arrays;
 import java.util.List;
@@ -180,9 +181,16 @@ public class CarBluetoothUserService extends ICarBluetoothUserService.Stub {
                 if (!mBluetoothProfileStatus.get(profile, false)) {
                     mBluetoothProfileStatus.put(profile, true);
                     mConnectedProfiles++;
-                    if (mConnectedProfiles == sProfilesToConnect.size()) {
-                        logd("All profiles have connected");
-                        mConditionAllProxiesConnected.signal();
+                    if (!isPanSupported(mService.getApplicationContext())) {
+                        if (mConnectedProfiles == sProfilesToConnect.size() - 1) {
+                            logd("All profiles have connected");
+                            mConditionAllProxiesConnected.signal();
+                        }
+                    } else {
+                        if (mConnectedProfiles == sProfilesToConnect.size()) {
+                            logd("All profiles have connected");
+                            mConditionAllProxiesConnected.signal();
+                        }
                     }
                 } else {
                     Log.w(TAG, "Received duplicate service connection event for: "
@@ -237,16 +245,22 @@ public class CarBluetoothUserService extends ICarBluetoothUserService.Stub {
      * @return True if the condition was satisfied within the timeout, False otherwise
      */
     private boolean waitForProxies(int timeout /* ms */) {
+        int needConnectedProfiles = sProfilesToConnect.size();
         logd("waitForProxies()");
         // If bluetooth isn't on then the operation waiting on proxies was never meant to actually
         // work regardless if Bluetooth comes on within the timeout period or not. Return false.
         if (!mBluetoothAdapter.isEnabled()) return false;
+
+        if (!isPanSupported(mService.getApplicationContext())) {
+            needConnectedProfiles = sProfilesToConnect.size() - 1;
+            logd("No need wait PAN profile");
+        }
         try {
-            while (mConnectedProfiles != sProfilesToConnect.size()) {
+            while (mConnectedProfiles != needConnectedProfiles) {
                 if (!mConditionAllProxiesConnected.await(
                         timeout, TimeUnit.MILLISECONDS)) {
                     Log.e(TAG, "Timeout while waiting for proxies, Connected: " + mConnectedProfiles
-                            + "/" + sProfilesToConnect.size());
+                            + "/" + needConnectedProfiles);
                     return false;
                 }
             }
@@ -433,6 +447,15 @@ public class CarBluetoothUserService extends ICarBluetoothUserService.Stub {
         } finally {
             mBluetoothProxyLock.unlock();
         }
+    }
+
+    private boolean isPanSupported(Context context) {
+        boolean enablePan = true;
+        if (context != null) {
+            enablePan = context.getResources().getBoolean(R.bool.enableBluetoothPan);
+        }
+        logd("IsPANSupport: " + enablePan);
+        return enablePan;
     }
 
     /**
