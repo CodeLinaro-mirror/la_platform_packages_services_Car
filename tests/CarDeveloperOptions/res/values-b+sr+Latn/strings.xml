@@ -1392,7 +1392,7 @@
     <string name="memory_media_usage" msgid="2744652206722240527">"Mediji"</string>
     <string name="memory_downloads_usage" msgid="7039979723012065168">"Preuzimanja"</string>
     <string name="memory_dcim_usage" msgid="599009211606524732">"Slike, video snimci"</string>
-    <string name="memory_music_usage" msgid="809605300042546279">"Audio (muzika, zvukovi zvona, potkasti itd.)"</string>
+    <string name="memory_music_usage" msgid="809605300042546279">"Audio (muzika, zvukovi zvona, podkasti itd.)"</string>
     <string name="memory_media_misc_usage" msgid="6258827529046910705">"Druge datoteke"</string>
     <string name="memory_media_cache_usage" msgid="1307620682751377717">"Keširani podaci"</string>
     <string name="sd_eject" product="nosdcard" msgid="3016608823130472449">"Isklj. deljene memorije"</string>
@@ -1644,7 +1644,7 @@
     <string name="usb_tethering_subtext" product="tablet" msgid="154536000235361034">"Deljenje internet veze tableta preko USB-a"</string>
     <string name="bluetooth_tether_checkbox_text" msgid="7257293066139372774">"Bluetooth privezivanje"</string>
     <string name="bluetooth_tethering_subtext" product="tablet" msgid="6868756914621131635">"Delite internet vezu tableta preko Bluetooth-a"</string>
-    <string name="bluetooth_tethering_subtext" product="default" msgid="9167912297565425178">"Delite internet vezu telefona preko Bluetooth-a"</string>
+    <string name="bluetooth_tethering_subtext" product="default" msgid="9167912297565425178">"Deljenje internet veze telefona preko Bluetooth-a"</string>
     <string name="bluetooth_tethering_off_subtext_config" msgid="3981528184780083266">"Internet veza uređaja <xliff:g id="DEVICE_NAME">%1$d</xliff:g> se deli preko Bluetooth-a"</string>
     <string name="bluetooth_tethering_overflow_error" msgid="6946561351369376943">"Privezivanje na više od <xliff:g id="MAXCONNECTION">%1$d</xliff:g> uređaja nije moguće."</string>
     <string name="bluetooth_untether_blank" msgid="5428300773782256084">"Internet veza sa uređajem <xliff:g id="DEVICE_NAME">%1$s</xliff:g> će biti prekinuta."</string>
