@@ -230,7 +230,7 @@ public class AirplaneModeService implements CarServiceBase,
 
         private static final int MIN_BLUETOOTH_OFF_TIMEOUT = 400;  // ms
 
-        private static final int MIN_WIFI_OFF_TIMEOUT = 1_500;  // 1.5 second
+        private static final int MIN_WIFI_OFF_TIMEOUT = 2_500;  // 2.5 second
 
         // Airplane mode
         private static final int AIRPLANE_MODE_OFF = 0;
