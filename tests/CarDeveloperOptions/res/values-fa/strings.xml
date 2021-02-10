@@ -935,14 +935,14 @@
     <string name="wifi_privacy_settings" msgid="4462092795794247809">"حریم خصوصی"</string>
     <string name="wifi_privacy_settings_ephemeral_summary" msgid="2411375348287064283">"MAC تصادفی"</string>
     <string name="wifi_dpp_add_device_to_network" msgid="8871041525483253430">"افزودن دستگاه"</string>
-    <string name="wifi_dpp_center_qr_code" msgid="3826108361797476758">"برای افزودن دستگاه به «<xliff:g id="SSID">%1$s</xliff:g>»،‌ کد QR را در مرکز پنجره زیر قرار دهید"</string>
-    <string name="wifi_dpp_scan_qr_code" msgid="6021600592661235546">"اسکن کد QR"</string>
-    <string name="wifi_dpp_scan_qr_code_join_network" msgid="3085162928804379545">"برای اتصال به «<xliff:g id="SSID">%1$s</xliff:g>»،‌ کد QR را در مرکز پنجره زیر قرار دهید"</string>
-    <string name="wifi_dpp_scan_qr_code_join_unknown_network" msgid="5682308317067290738">"با اسکن کردن کد QR، به Wi‑Fi بپیوندید"</string>
+    <string name="wifi_dpp_center_qr_code" msgid="3826108361797476758">"برای افزودن دستگاه به «<xliff:g id="SSID">%1$s</xliff:g>»،‌ رمزینه پاسخ‌سریع را در مرکز پنجره زیر قرار دهید"</string>
+    <string name="wifi_dpp_scan_qr_code" msgid="6021600592661235546">"اسکن رمزینه پاسخ‌سریع"</string>
+    <string name="wifi_dpp_scan_qr_code_join_network" msgid="3085162928804379545">"برای اتصال به «<xliff:g id="SSID">%1$s</xliff:g>»،‌ رمزینه پاسخ‌سریع را در مرکز پنجره زیر قرار دهید"</string>
+    <string name="wifi_dpp_scan_qr_code_join_unknown_network" msgid="5682308317067290738">"با اسکن کردن رمزینه پاسخ‌سریع، به Wi‑Fi بپیوندید"</string>
     <string name="wifi_dpp_share_wifi" msgid="1724161216219646284">"استفاده مشترک از Wi‑Fi"</string>
-    <string name="wifi_dpp_scan_qr_code_with_another_device" msgid="4357387474444884759">"برای اتصال به «<xliff:g id="SSID">%1$s</xliff:g>»، این کد QR را اسکن کنید و گذرواژه مربوطه را هم‌رسانی کنید"</string>
-    <string name="wifi_dpp_scan_open_network_qr_code_with_another_device" msgid="572011882416511818">"برای اتصال به «<xliff:g id="SSID">%1$s</xliff:g>»، این کد QR را اسکن کنید"</string>
-    <string name="wifi_dpp_could_not_detect_valid_qr_code" msgid="27667719861826438">"کد QR خوانده نشد. کد را در مرکز قرار دهید و دوباره امتحان کنید"</string>
+    <string name="wifi_dpp_scan_qr_code_with_another_device" msgid="4357387474444884759">"برای اتصال به «<xliff:g id="SSID">%1$s</xliff:g>»، این رمزینه پاسخ‌سریع را اسکن کنید و گذرواژه مربوطه را هم‌رسانی کنید"</string>
+    <string name="wifi_dpp_scan_open_network_qr_code_with_another_device" msgid="572011882416511818">"برای اتصال به «<xliff:g id="SSID">%1$s</xliff:g>»، این رمزینه پاسخ‌سریع را اسکن کنید"</string>
+    <string name="wifi_dpp_could_not_detect_valid_qr_code" msgid="27667719861826438">"رمزینه پاسخ‌سریع خوانده نشد. کد را در مرکز قرار دهید و دوباره امتحان کنید"</string>
     <string name="wifi_dpp_failure_authentication_or_configuration" msgid="9142051662156233679">"دوباره امتحان کنید. اگر مشکل همچنان ادامه دارد، با سازنده دستگاه تماس بگیرید"</string>
     <string name="wifi_dpp_failure_not_compatible" msgid="4320027179973678283">"مشکلی رخ داده است"</string>
     <string name="wifi_dpp_failure_timeout" msgid="5060065168142109420">"مطمئن شوید دستگاه متصل، شارژ و روشن شده است"</string>
@@ -964,7 +964,7 @@
     <string name="wifi_dpp_wifi_password" msgid="8007558344032612455">"گذرواژه Wi-Fi: <xliff:g id="PASSWORD">%1$s</xliff:g>"</string>
     <string name="wifi_dpp_hotspot_password" msgid="6172326289042241924">"گذرواژه نقطه اتصال: <xliff:g id="PASSWORD">%1$s</xliff:g>"</string>
     <string name="wifi_dpp_add_device" msgid="1347056725253936358">"افزودن دستگاه"</string>
-    <string name="wifi_dpp_connect_network_using_qr_code" msgid="115993715600532357">"بااستفاده از کد QR، به این شبکه متصل شوید"</string>
+    <string name="wifi_dpp_connect_network_using_qr_code" msgid="115993715600532357">"بااستفاده از رمزینه پاسخ‌سریع، به این شبکه متصل شوید"</string>
     <string name="retry" msgid="8500839563577344702">"امتحان مجدد"</string>
     <string name="wifi_shared" msgid="5054256778276524960">"اشتراک‌گذاری با دیگر استفاده‌کنندگان از دستگاه"</string>
     <string name="wifi_unchanged" msgid="6804964646942333992">"(بدون تغییر)"</string>
@@ -1836,7 +1836,7 @@
     <string name="enable_compatibility" msgid="1754177974320410195">"مقیاس‌بندی برنامه"</string>
     <string name="unknown" msgid="2780743426415501227">"ناشناس"</string>
     <string name="sort_order_alpha" msgid="6689698854460261212">"مرتب سازی براساس نام"</string>
-    <string name="sort_order_size" msgid="3167376197248713027">"مرتب‌سازی براساس اندازه"</string>
+    <string name="sort_order_size" msgid="3167376197248713027">"به‌ترتیب اندازه"</string>
     <string name="sort_order_recent_notification" msgid="5592496977404445941">"جدیدترین"</string>
     <string name="sort_order_frequent_notification" msgid="5640245013098010347">"پرتکرارترین"</string>
     <string name="show_running_services" msgid="1895994322704667543">"نمایش سرویس‌های در حال اجرا"</string>
@@ -1980,7 +1980,7 @@
     <string name="game_controller_settings_category" msgid="9066526500617769463">"دسته کنترل بازی"</string>
     <string name="vibrate_input_devices" msgid="3584406079534121467">"تغییر مسیر لرزش"</string>
     <string name="vibrate_input_devices_summary" msgid="7503148018220540038">"وقتی متصل شد، لرزش به دسته کنترل بازی ارسال شود"</string>
-    <string name="keyboard_layout_dialog_title" msgid="4762706917037085797">"انتخاب طرح‌بندی صفحه‌کلید"</string>
+    <string name="keyboard_layout_dialog_title" msgid="4762706917037085797">"انتخاب جانمایی صفحه‌کلید"</string>
     <string name="keyboard_layout_dialog_setup_button" msgid="771293535107618283">"تنظیم طرح‌بندی‌های صفحه‌کلید"</string>
     <string name="keyboard_layout_dialog_switch_hint" msgid="138516114253502182">"برای تغییر، Control-کلید فاصله را فشار هید"</string>
     <string name="keyboard_layout_default_label" msgid="8368579311667189793">"پیش‌فرض"</string>
@@ -2008,7 +2008,7 @@
     <string name="testing" msgid="4255916838792186365">"تست کردن"</string>
     <string name="testing_phone_info" product="tablet" msgid="2714303457408649566">"اطلاعات رایانهٔ لوحی"</string>
     <string name="testing_phone_info" product="default" msgid="1954062952628179016">"اطلاعات تلفن"</string>
-    <string name="input_methods_settings_title" msgid="880477541100103388">"ووردی متن"</string>
+    <string name="input_methods_settings_title" msgid="880477541100103388">"ورودی نوشتاری"</string>
     <string name="input_method" msgid="2426639635860376775">"روش ورودی"</string>
     <string name="current_input_method" msgid="4831870685505762355">"صفحه‌کلید کنونی"</string>
     <string name="input_method_selector" msgid="2053594139601607047">"انتخابگر روش ورودی"</string>
@@ -2020,7 +2020,7 @@
     <string name="input_method_settings_button" msgid="6151412131733672062">"تنظیمات"</string>
     <string name="input_methods_settings_label_format" msgid="5927400388781960176">"<xliff:g id="IME_NAME">%1$s</xliff:g> تنظیمات"</string>
     <string name="input_methods_and_subtype_enabler_title" msgid="75557930915149416">"انتخاب روش‌های ورودی فعال"</string>
-    <string name="onscreen_keyboard_settings_summary" msgid="148763210673670769">"تنظیمات صفحه‌کلید روی صفحه"</string>
+    <string name="onscreen_keyboard_settings_summary" msgid="148763210673670769">"تنظیمات صفحه‌کلید مجازی"</string>
     <string name="builtin_keyboard_settings_title" msgid="3683883402326039724">"صفحه‌کلید فیزیکی"</string>
     <string name="builtin_keyboard_settings_summary" msgid="6498739864479285932">"تنظیمات صفحه‌کلید فیزیکی"</string>
     <string name="gadget_picker_title" msgid="9146981887780645322">"انتخاب اسبابک"</string>
@@ -2030,7 +2030,7 @@
     <string name="allow_bind_app_widget_activity_always_allow_bind" msgid="1185486443615658430">"همیشه به <xliff:g id="WIDGET_HOST_NAME">%1$s</xliff:g> برای ایجاد ابزارک‌ها و دسترسی به اطلاعات آن‌ها اجازه داده شود"</string>
     <string name="usage_stats_label" msgid="3128999956478977035">"آمار کاربرد"</string>
     <string name="testing_usage_stats" msgid="704965692323956976">"آمار کاربرد"</string>
-    <string name="display_order_text" msgid="2973620313510295873">"ترتیب براساس:"</string>
+    <string name="display_order_text" msgid="2973620313510295873">"به‌ترتیب:"</string>
     <string name="app_name_label" msgid="2258469951312794816">"برنامه"</string>
     <string name="last_time_used_label" msgid="1119322667349666930">"آخرین زمان استفاده"</string>
     <string name="usage_time_label" msgid="5615725415876461039">"زمان استفاده"</string>
@@ -2443,7 +2443,7 @@
     <string name="menu_stats_last_unplugged" msgid="197591229866380225">"در حین قطع اتصال آخر برای <xliff:g id="UNPLUGGED">%1$s</xliff:g>"</string>
     <string name="menu_stats_total" msgid="2270006562448894071">"مقدار کل استفاده"</string>
     <string name="menu_stats_refresh" msgid="9017362786647223203">"بازخوانی"</string>
-    <string name="process_kernel_label" msgid="4175060316414593760">"سیستم عامل Android"</string>
+    <string name="process_kernel_label" msgid="4175060316414593760">"سیستم‌عامل Android"</string>
     <string name="process_mediaserver_label" msgid="8591722404282619153">"سرور رسانه"</string>
     <string name="process_dex2oat_label" msgid="8249082119748556085">"بهینه‌سازی برنامه"</string>
     <string name="battery_saver" msgid="3989710213758938398">"بهینه‌سازی باتری"</string>
@@ -2475,7 +2475,7 @@
     <string name="process_stats_type_background" msgid="7867552451658035199">"پس‌زمینه"</string>
     <string name="process_stats_type_foreground" msgid="9185538008409818577">"پیش‌زمینه"</string>
     <string name="process_stats_type_cached" msgid="6774816751826613732">"در حافظه پنهان"</string>
-    <string name="process_stats_os_label" msgid="2866711070924260440">"سیستم عامل Android"</string>
+    <string name="process_stats_os_label" msgid="2866711070924260440">"سیستم‌عامل Android"</string>
     <string name="process_stats_os_native" msgid="8971193568864959041">"داخلی"</string>
     <string name="process_stats_os_kernel" msgid="496627624157605578">"مرکزی"</string>
     <string name="process_stats_os_zram" msgid="5654662484619165424">"Z-Ram"</string>
@@ -3772,8 +3772,8 @@
     <string name="memory_details" msgid="5165105904103664110">"جزئیات"</string>
     <string name="memory_use_summary" msgid="7676311343819965850">"<xliff:g id="SIZE">%1$s</xliff:g> متوسط حافظه استفاده شده در ۳ ساعت گذشته"</string>
     <string name="no_memory_use_summary" msgid="3966550113388917978">"در ۳ ساعت گذشته از حافظه استفاده نشده است"</string>
-    <string name="sort_avg_use" msgid="78428601253054298">"مرتب‌سازی براساس مصرف متوسط"</string>
-    <string name="sort_max_use" msgid="322772647893307413">"مرتب‌سازی براساس حداکثر مصرف"</string>
+    <string name="sort_avg_use" msgid="78428601253054298">"به‌ترتیب مصرف متوسط"</string>
+    <string name="sort_max_use" msgid="322772647893307413">"به‌ترتیب حداکثر مصرف"</string>
     <string name="memory_performance" msgid="3506743771947250453">"عملکرد"</string>
     <string name="total_memory" msgid="7352192982476976453">"کل حافظه"</string>
     <string name="average_used" msgid="3022736210190754669">"مصرف متوسط (%)"</string>
