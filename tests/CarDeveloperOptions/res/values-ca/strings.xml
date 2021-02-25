@@ -1615,7 +1615,7 @@
     <string name="tether_settings_title_bluetooth" msgid="1999590158102569959">"Compartició de xarxa per Bluetooth"</string>
     <string name="tether_settings_title_usb_bluetooth" msgid="1159128764162788159">"Compartició de xarxa"</string>
     <string name="tether_settings_title_all" msgid="6935843543433954181">"Punt d\'accés Wi-Fi i compartició de xarxa"</string>
-    <string name="tether_settings_summary_hotspot_on_tether_on" msgid="1289593649526514499">"Punt d\'accés Wi-Fi i compartició de xarxa activats"</string>
+    <string name="tether_settings_summary_hotspot_on_tether_on" msgid="1289593649526514499">"Punt d\'accés Wi-Fi activat, compartició de xarxa"</string>
     <string name="tether_settings_summary_hotspot_on_tether_off" msgid="8010689354668285422">"Punt d\'accés Wi-Fi activat"</string>
     <string name="tether_settings_summary_hotspot_off_tether_on" msgid="1349909238672649877">"Compartició de xarxa"</string>
     <string name="tether_settings_disabled_on_data_saver" msgid="3682544845899910726">"No es pot compartir la xarxa ni utilitzar punts d\'accés Wi-Fi mentre la funció Economitzador de dades està activada"</string>
@@ -1648,7 +1648,7 @@
     <string name="mobile_connect_to_internet" msgid="6031886097365170913">"Connecta a Internet"</string>
     <string name="location_title" msgid="8664674161765477168">"La meva ubicació"</string>
     <string name="managed_profile_location_switch_title" msgid="8157384427925389680">"Ubicació per al perfil de treball"</string>
-    <string name="location_app_level_permissions" msgid="1298041503927632960">"Permís d\'aplicacions"</string>
+    <string name="location_app_level_permissions" msgid="1298041503927632960">"Permisos de les aplicacions"</string>
     <string name="location_app_permission_summary_location_off" msgid="541372845344796336">"La ubicació està desactivada"</string>
     <plurals name="location_app_permission_summary_location_on" formatted="false" msgid="7904821382328758218">
       <item quantity="other">Aplicacions que tenen accés il·limitat: <xliff:g id="BACKGROUND_LOCATION_APP_COUNT_2">%1$d</xliff:g> de <xliff:g id="TOTAL_LOCATION_APP_COUNT_3">%2$d</xliff:g></item>
@@ -3137,7 +3137,7 @@
     <string name="media_volume_option_title" msgid="3553411883305505682">"Volum de multimèdia"</string>
     <string name="remote_media_volume_option_title" msgid="6355710054191873836">"Volum emès"</string>
     <string name="call_volume_option_title" msgid="5028003296631037334">"Volum de trucada"</string>
-    <string name="alarm_volume_option_title" msgid="3184076022438477047">"Volum de l\'alarma"</string>
+    <string name="alarm_volume_option_title" msgid="3184076022438477047">"Volum d\'alarma"</string>
     <string name="ring_volume_option_title" msgid="2038924918468372264">"Volum del to"</string>
     <string name="notification_volume_option_title" msgid="1358512611511348260">"Volum de notificació"</string>
     <string name="ringtone_title" msgid="1409086028485922583">"So de trucada del telèfon"</string>
