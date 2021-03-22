@@ -226,11 +226,7 @@ public class AirplaneModeService implements CarServiceBase,
 
         private static final int MIN_BLUETOOTH_OFF_TIMEOUT = 400;  // ms
 
-        private static final int MIN_WIFI_OFF_TIMEOUT = 1_500;  // 1.5 second
-
-        private static final int MIN_WIFI_AP_OFF_TIMEOUT = 1_500;  // 1.5 second
-
-        private static final int MIN_WIFI_P2P_OFF_TIMEOUT = 2_000;  // 2 second
+        private static final int MIN_WIFI_OFF_TIMEOUT = 2_000;  // 2 second
 
         // Airplane mode
         private static final int AIRPLANE_MODE_OFF = 0;
@@ -238,7 +234,7 @@ public class AirplaneModeService implements CarServiceBase,
         private static final int AIRPLANE_MODE_ON = 2;
         private static final int AIRPLANE_MODE_TURNING_OFF = 3;
 
-        private static final int MAX_RETRY = 3;
+        private static final int MAX_RETRY = 4;
 
         private class RfState {
             // RF (e.g. Bluetooth/Wifi) state
@@ -646,7 +642,12 @@ public class AirplaneModeService implements CarServiceBase,
                 int state = intent.getIntExtra(WifiManager.EXTRA_WIFI_STATE,
                         WifiManager.WIFI_STATE_UNKNOWN);
 
-                if (state == WifiManager.WIFI_STATE_ENABLED) {
+                logd("AirplaneModeHandler wifi onReceive, state: " + state);
+                // System suspend should be prevented not just in wlan enabled
+                // state, but also in wlan enabling state. Using WIFI_STATE_ENABLING
+                // instead of WIFI_STATE_ENABLED can prevent suspend happening from
+                // both wlan state.
+                if (state == WifiManager.WIFI_STATE_ENABLING) {
                     notifyWifiStateChanged(true);
                 } else if (state == WifiManager.WIFI_STATE_DISABLED) {
                     notifyWifiStateChanged(false);
@@ -792,6 +793,11 @@ public class AirplaneModeService implements CarServiceBase,
             int delay = 0; // ms
 
             while (retry++ < MAX_RETRY) {
+                logd("turnWifiAllOff: retry:" + retry + ",wifi cnt:"
+                        + mWifiState.getCount() + ",ap cnt:"
+                        + mWifiApState.getCount() + ",p2p cnt:"
+                        + mWifiP2pState.getCount());
+
                 if ((mWifiState.getCount() > 0) ||
                     (mWifiApState.getCount() > 0) ||
                     (mWifiP2pState.getCount() > 0)) {
@@ -806,20 +812,21 @@ public class AirplaneModeService implements CarServiceBase,
 
                     if (mWifiP2pState.getCount() > 0) {
                         mWifiP2pState.closeWithTimeout();
-                        delay = MIN_WIFI_P2P_OFF_TIMEOUT;
                     }
 
-                    // Add some delay if necessary
-                    if (delay > 0) {
-                        try {
-                            Thread.sleep(delay);
-                        } catch (InterruptedException ignored) {
-                        }
-                    }
+                    // TODO: need some time for wifi closing completely
+                    delay = MIN_WIFI_OFF_TIMEOUT;
 
                     logd("turnWifiAllOff done");
                 } else {
                     break;
+                }
+            }
+
+            if (delay > 0) {
+                try {
+                    Thread.sleep(delay);
+                } catch (InterruptedException ignored) {
                 }
             }
         }
@@ -959,11 +966,11 @@ public class AirplaneModeService implements CarServiceBase,
             }
 
             if (mWifiApState.isOn()) {
-                duration = Math.max(duration, MIN_WIFI_AP_OFF_TIMEOUT);
+                duration = Math.max(duration, MIN_WIFI_OFF_TIMEOUT);
             }
 
             if (mWifiP2pState.isOn()) {
-                duration = Math.max(duration, MIN_WIFI_P2P_OFF_TIMEOUT);
+                duration = Math.max(duration, MIN_WIFI_OFF_TIMEOUT);
             }
 
             logd("calculateDuration: " + duration + " ms");
