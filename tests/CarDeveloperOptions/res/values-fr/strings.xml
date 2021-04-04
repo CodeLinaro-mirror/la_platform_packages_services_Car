@@ -2491,7 +2491,7 @@
     <string name="menu_duration_6h" msgid="6169009210638008417">"6 heures"</string>
     <string name="menu_duration_12h" msgid="1435242738163843797">"12 heures"</string>
     <string name="menu_duration_1d" msgid="6476370834372352174">"1 jour"</string>
-    <string name="menu_show_system" msgid="6315865548558708248">"Afficher les processus système"</string>
+    <string name="menu_show_system" msgid="6315865548558708248">"Afficher process. système"</string>
     <string name="menu_hide_system" msgid="8457027118873733782">"Masquer les processus système"</string>
     <string name="menu_show_percentage" msgid="6983272380729890884">"Afficher les pourcentages"</string>
     <string name="menu_use_uss" msgid="3765054705208926803">"Utiliser l\'USS"</string>
