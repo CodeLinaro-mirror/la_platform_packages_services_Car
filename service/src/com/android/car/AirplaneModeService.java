@@ -92,6 +92,8 @@ public class AirplaneModeService implements CarServiceBase,
                 mThread = new HandlerThread(TAG);
                 mThread.start();
                 mAirplaneModeHandler = new AirplaneModeHandler(mThread.getLooper());
+                // Clear airplane mode.
+                mAirplaneModeHandler.setAirplaneModeOn(false);
             } else {
                 loge("Can't get CarPowerManager");
             }
@@ -1018,7 +1020,7 @@ public class AirplaneModeService implements CarServiceBase,
             }
         }
 
-        private void setAirplaneModeOn(boolean enable) {
+        public void setAirplaneModeOn(boolean enable) {
             logd("set airplane mode " + (enable ? "on" : "off"));
 
             // Change the system setting
