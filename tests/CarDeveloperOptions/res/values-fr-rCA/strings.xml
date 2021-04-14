@@ -300,7 +300,7 @@
     <string name="settings_label" msgid="7263237773415875813">"Paramètres"</string>
     <string name="settings_label_launcher" msgid="500627679902923496">"Paramètres"</string>
     <string name="settings_shortcut" msgid="4503714880251502167">"Raccourci vers les paramètres"</string>
-    <string name="airplane_mode" msgid="4508870277398231073">"Mode avion"</string>
+    <string name="airplane_mode" msgid="4508870277398231073">"Mode Avion"</string>
     <string name="wireless_networks_settings_title" msgid="4298430520189173949">"Sans fil et réseaux"</string>
     <string name="radio_controls_summary" msgid="4596981962167684814">"Gérer le Wi-Fi, le Bluetooth, le mode Avion, les réseaux mobiles et les RPV"</string>
     <string name="cellular_data_title" msgid="7909624119432695022">"Données cellulaires"</string>
@@ -508,8 +508,8 @@
     <string name="crypt_keeper_encrypt_title" product="tablet" msgid="2292129135369853167">"Chiffrer la tablette"</string>
     <string name="crypt_keeper_encrypt_title" product="default" msgid="3110852053238357832">"Chiffrer le téléphone"</string>
     <string name="crypt_keeper_encrypted_summary" msgid="2438498691741626642">"Chiffré"</string>
-    <string name="crypt_keeper_desc" product="tablet" msgid="9142792050252407734">"Vous pouvez chiffrer vos comptes, vos paramètres, les applications téléchargées et les données associées, les contenus multimédias et d\'autres fichiers. Si vous avez chiffré votre tablette en définissant un verrouillage d\'écran (au moyen d\'un schéma, d\'un NIP ou d\'un mot de passe), vous devez déverrouiller l\'écran pour déchiffrer la tablette à chaque fois que vous l\'allumez. La seule autre manière de déchiffrer cette dernière consiste à rétablir la configuration d\'usine, ce qui entraîne la suppression de l\'ensemble de vos données.\n\nLa procédure de chiffrement dure au moins une heure. La pile de la tablette doit être chargée au départ, et la tablette doit rester branchée pendant tout le processus. Toute interruption entraîne la perte d\'une partie ou de la totalité des données."</string>
-    <string name="crypt_keeper_desc" product="default" msgid="1996334685607444282">"Vous pouvez chiffrer vos comptes, vos paramètres, les applications téléchargées et les données associées, les contenus multimédias et d\'autres fichiers. Si vous avez chiffré votre téléphone en définissant un verrouillage d\'écran (au moyen d\'un schéma, d\'un NIP ou d\'un mot de passe), vous devez déverrouiller l\'écran pour déchiffrer le téléphone à chaque fois que vous l\'allumez. La seule autre manière de déchiffrer ce dernier consiste à rétablir la configuration d\'usine, ce qui entraîne la suppression de l\'ensemble de vos données.\n\nLa procédure de chiffrement dure au moins une heure. La pile du téléphone doit être chargée au départ, et le téléphone doit rester branché pendant tout le processus. Toute interruption entraîne la perte d\'une partie ou de la totalité des données."</string>
+    <string name="crypt_keeper_desc" product="tablet" msgid="9142792050252407734">"Vous pouvez chiffrer vos comptes, vos paramètres, les applications téléchargées et les données associées, les contenus multimédias et d\'autres fichiers. Si vous avez chiffré votre tablette en définissant un verrouillage d\'écran (au moyen d\'un schéma, d\'un NIP ou d\'un mot de passe), vous devez déverrouiller l\'écran pour déchiffrer la tablette à chaque fois que vous l\'allumez. La seule autre manière de déchiffrer cette dernière consiste à rétablir les paramètres par défaut, ce qui entraîne la suppression de l\'ensemble de vos données.\n\nLa procédure de chiffrement dure au moins une heure. La pile de la tablette doit être chargée au départ, et la tablette doit rester branchée pendant tout le processus. Toute interruption entraîne la perte d\'une partie ou de la totalité des données."</string>
+    <string name="crypt_keeper_desc" product="default" msgid="1996334685607444282">"Vous pouvez chiffrer vos comptes, vos paramètres, les applications téléchargées et les données associées, les contenus multimédias et d\'autres fichiers. Si vous avez chiffré votre téléphone en définissant un verrouillage d\'écran (au moyen d\'un schéma, d\'un NIP ou d\'un mot de passe), vous devez déverrouiller l\'écran pour déchiffrer le téléphone à chaque fois que vous l\'allumez. La seule autre manière de déchiffrer ce dernier consiste à rétablir les paramètres par défaut, ce qui entraîne la suppression de l\'ensemble de vos données.\n\nLa procédure de chiffrement dure au moins une heure. La pile du téléphone doit être chargée au départ, et le téléphone doit rester branché pendant tout le processus. Toute interruption entraîne la perte d\'une partie ou de la totalité des données."</string>
     <string name="crypt_keeper_button_text" product="tablet" msgid="7918671468758813824">"Chiffrer la tablette"</string>
     <string name="crypt_keeper_button_text" product="default" msgid="8737394386627318489">"Chiffrer le téléphone"</string>
     <string name="crypt_keeper_low_charge_text" msgid="1422879728632636311">"Veuillez charger votre batterie, puis réessayer."</string>
@@ -529,11 +529,11 @@
     <string name="crypt_keeper_warn_wipe" msgid="700814581500057050">"Attention : Les données de votre appareil seront effacées si vous effectuez encore <xliff:g id="COUNT">^1</xliff:g> tentatives de déverrouillage infructueuses."</string>
     <string name="crypt_keeper_enter_password" msgid="726933635335219421">"Saisissez votre mot de passe."</string>
     <string name="crypt_keeper_failed_title" msgid="1906382607060855782">"Échec du chiffrement"</string>
-    <string name="crypt_keeper_failed_summary" product="tablet" msgid="7844833877734529625">"Impossible de terminer le chiffrement, car celui-ci a été interrompu. Par conséquent, les données de votre tablette ne sont plus accessibles.\n\nPour continuer d\'utiliser votre tablette, vous devez rétablir la configuration d\'usine. Une fois cette opération terminée, vous pourrez restaurer toutes les données sauvegardées sur votre compte Google lors de la nouvelle configuration de votre tablette."</string>
-    <string name="crypt_keeper_failed_summary" product="default" msgid="2895589681839090312">"Impossible de terminer le chiffrement, car celui-ci a été interrompu. Par conséquent, les données de votre téléphone ne sont plus accessibles.\n\nPour continuer d\'utiliser votre téléphone, vous devez rétablir la configuration d\'usine. Une fois cette opération terminée, vous pourrez restaurer toutes les données sauvegardées sur votre compte Google lors de la nouvelle configuration de votre téléphone."</string>
+    <string name="crypt_keeper_failed_summary" product="tablet" msgid="7844833877734529625">"Impossible de terminer le chiffrement, car celui-ci a été interrompu. Par conséquent, les données de votre tablette ne sont plus accessibles.\n\nPour continuer d\'utiliser votre tablette, vous devez rétablir les paramètres par défaut. Une fois cette opération terminée, vous pourrez restaurer toutes les données sauvegardées sur votre compte Google lors de la nouvelle configuration de votre tablette."</string>
+    <string name="crypt_keeper_failed_summary" product="default" msgid="2895589681839090312">"Impossible de terminer le chiffrement, car celui-ci a été interrompu. Par conséquent, les données de votre téléphone ne sont plus accessibles.\n\nPour continuer d\'utiliser votre téléphone, vous devez rétablir ses paramètres par défaut. Une fois cette opération terminée, vous pourrez restaurer toutes les données sauvegardées sur votre compte Google lors de la nouvelle configuration de votre téléphone."</string>
     <string name="crypt_keeper_data_corrupt_title" msgid="6561535293845985713">"Échec du déchiffrement"</string>
-    <string name="crypt_keeper_data_corrupt_summary" product="tablet" msgid="7018748502706237323">"Le mot de passe entré est correct. Malheureusement, vos données sont corrompues.\n\nPour continuer d\'utiliser votre tablette, vous devez rétablir sa configuration d\'usine. Une fois cette opération terminée, vous pourrez restaurer toutes les données que vous aviez sauvegardées dans votre compte Google lors de la nouvelle configuration de votre tablette."</string>
-    <string name="crypt_keeper_data_corrupt_summary" product="default" msgid="5798580588985326937">"Le mot de passe entré est correct. Malheureusement, vos données sont corrompues.\n\nPour continuer d\'utiliser votre téléphone, vous devez rétablir sa configuration d\'usine. Une fois cette opération terminée, vous pourrez restaurer toutes les données que vous aviez sauvegardées dans votre compte Google lors de la nouvelle configuration de votre téléphone."</string>
+    <string name="crypt_keeper_data_corrupt_summary" product="tablet" msgid="7018748502706237323">"Le mot de passe entré est correct. Malheureusement, vos données sont corrompues.\n\nPour continuer d\'utiliser votre tablette, vous devez rétablir ses paramètres par défaut. Une fois cette opération terminée, vous pourrez restaurer toutes les données que vous aviez sauvegardées dans votre compte Google lors de la nouvelle configuration de votre tablette."</string>
+    <string name="crypt_keeper_data_corrupt_summary" product="default" msgid="5798580588985326937">"Le mot de passe entré est correct. Malheureusement, vos données sont corrompues.\n\nPour continuer d\'utiliser votre téléphone, vous devez rétablir ses paramètres par défaut. Une fois cette opération terminée, vous pourrez restaurer toutes les données que vous aviez sauvegardées dans votre compte Google lors de la nouvelle configuration de votre téléphone."</string>
     <string name="crypt_keeper_switch_input_method" msgid="4744137470890459582">"Changer le mode de saisie"</string>
     <string name="suggested_lock_settings_title" msgid="1518155558803371661">"Sécurisez votre téléphone"</string>
     <string name="suggested_lock_settings_summary" product="tablet" msgid="1861066918594412519">"Définir un verr. de l\'écran pour protéger la tablette"</string>
@@ -1605,7 +1605,7 @@
     <string name="master_clear_final_button_text" msgid="866772743886027768">"Tout effacer"</string>
     <string name="master_clear_failed" msgid="7588397453984229892">"Les données n\'ont pas été réinitialisées, car le service de nettoyage du système n\'est pas disponible."</string>
     <string name="master_clear_confirm_title" msgid="698328669893512402">"Effacer toutes les données?"</string>
-    <string name="master_clear_not_available" msgid="4676613348163652454">"Le rétablissement de la configuration d\'usine n\'est pas possible pour cet utilisateur"</string>
+    <string name="master_clear_not_available" msgid="4676613348163652454">"Le rétablissement des paramètres par défaut n\'est pas possible pour cet utilisateur"</string>
     <string name="master_clear_progress_title" msgid="378953167274114857">"Suppression en cours..."</string>
     <string name="master_clear_progress_text" msgid="5418958116008976218">"Veuillez patienter..."</string>
     <string name="call_settings_title" msgid="5033906789261282752">"Paramètres d\'appel"</string>
@@ -1738,9 +1738,9 @@
     <string name="lockpassword_strong_auth_required_work_pattern" msgid="6861154706098327320">"Pour plus de sécurité, tracez votre schéma professionnel"</string>
     <string name="lockpassword_strong_auth_required_work_pin" msgid="6306902249365524526">"Pour plus de sécurité, entrez votre NIP professionnel"</string>
     <string name="lockpassword_strong_auth_required_work_password" msgid="2917338218971012776">"Pour plus de sécurité, entrez votre mot de passe professionnel"</string>
-    <string name="lockpassword_confirm_your_pattern_details_frp" msgid="1085862410379709928">"La configuration d\'usine du téléphone a été rétablie. Pour l\'utiliser, entrez le schéma précédent."</string>
-    <string name="lockpassword_confirm_your_pin_details_frp" msgid="6849889353126558761">"La configuration d\'usine du téléphone a été rétablie. Pour l\'utiliser, entrez le NIP précédent."</string>
-    <string name="lockpassword_confirm_your_password_details_frp" msgid="3239944795659418737">"La configuration d\'usine du téléphone a été rétablie. Pour l\'utiliser, entrez le mot passe précédent."</string>
+    <string name="lockpassword_confirm_your_pattern_details_frp" msgid="1085862410379709928">"Les paramètres par défaut du téléphone ont été rétablis. Pour l\'utiliser, entrez le schéma précédent."</string>
+    <string name="lockpassword_confirm_your_pin_details_frp" msgid="6849889353126558761">"Les paramètres par défaut du téléphone ont été rétablis. Pour l\'utiliser, entrez le NIP précédent."</string>
+    <string name="lockpassword_confirm_your_password_details_frp" msgid="3239944795659418737">"Paramètres par défaut du téléphone rétablis. Pour l\'utiliser, entrez le mot de passe précédent."</string>
     <string name="lockpassword_confirm_your_pattern_header_frp" msgid="3290569334665839860">"Vérifier le schéma"</string>
     <string name="lockpassword_confirm_your_pin_header_frp" msgid="8520474869079710782">"Vérifier le NIP"</string>
     <string name="lockpassword_confirm_your_password_header_frp" msgid="7326670978891793470">"Vérifier le mot de passe"</string>
@@ -1798,7 +1798,7 @@
     <string name="install_all_warning" product="device" msgid="9141585291103603515">"Votre appareil et vos données personnelles sont plus vulnérables aux attaques provenant d\'applications inconnues. En installant des applications provenant de cette source, vous acceptez d\'être responsable de tout dommage causé à votre appareil ou de toute perte de données pouvant découler de l\'utilisation de telles applications."</string>
     <string name="advanced_settings" msgid="6282069364060968122">"Paramètres avancés"</string>
     <string name="advanced_settings_summary" msgid="5912237062506771716">"Activer d\'autres paramètres"</string>
-    <string name="application_info_label" msgid="3886253474964599105">"Infos sur les applis"</string>
+    <string name="application_info_label" msgid="3886253474964599105">"Détails de l\'application"</string>
     <string name="storage_label" msgid="1109537840103290384">"Stockage"</string>
     <string name="auto_launch_label" msgid="47089737922907379">"Ouvert par défaut"</string>
     <string name="auto_launch_label_generic" msgid="7865828543459493308">"Valeurs par défaut"</string>
@@ -1825,7 +1825,7 @@
     <string name="install_text" msgid="2798092278891807849">"Installer"</string>
     <string name="disable_text" msgid="5065834603951474397">"Désactiver"</string>
     <string name="enable_text" msgid="7179141636849225884">"Activer"</string>
-    <string name="clear_user_data_text" msgid="8894073247302821764">"Effacer le stockage"</string>
+    <string name="clear_user_data_text" msgid="8894073247302821764">"Effacer l\'espace de stockage"</string>
     <string name="app_factory_reset" msgid="8718986000278776272">"Désinstaller mises à jour"</string>
     <string name="auto_launch_enable_text" msgid="3372898942144027341">"Vous avez choisi de lancer cette application par défaut pour certaines actions."</string>
     <string name="always_allow_bind_appwidgets_text" msgid="2286211654774611037">"Vous avez choisi de permettre à cette application de créer des widgets et d\'accéder à leurs données."</string>
@@ -2619,7 +2619,7 @@
     <string name="sync_one_time_sync" msgid="6005174168405784256">"Touchez ici pour lancer la synchronisation<xliff:g id="LAST_SYNC_TIME">
 %1$s</xliff:g>"</string>
     <string name="sync_gmail" msgid="4457967084840001296">"Gmail"</string>
-    <string name="sync_calendar" msgid="6573708019827519372">"# CALENDAR:"</string>
+    <string name="sync_calendar" msgid="6573708019827519372">"Agenda"</string>
     <string name="sync_contacts" msgid="5687434785723746534">"Contacts"</string>
     <string name="sync_plug" msgid="6703804441408427257"><font fgcolor="#ffffffff">"Bienvenue sur Google Sync!"</font>\n"Une solution Google pour synchroniser vos données et vous permettre d\'accéder à vos contacts, vos rendez-vous et plus, où que vous soyez."</string>
     <string name="header_application_sync_settings" msgid="4581847153669774489">"Paramètres de synchronisation de l\'application"</string>
@@ -3238,7 +3238,7 @@
     <string name="zen_mode_settings_dnd_automatic_rule_app" msgid="5103454923160912313">"Le mode Ne pas déranger a été activé par une application (<xliff:g id="APP_NAME">%s</xliff:g>)"</string>
     <string name="zen_mode_settings_dnd_custom_settings_footer" msgid="6335108298640066560">"Le mode Ne pas déranger est activé <xliff:g id="RULE_NAMES">%s</xliff:g>, avec des paramètres personnalisés."</string>
     <string name="zen_mode_settings_dnd_custom_settings_footer_link" msgid="4007974052885089379"><annotation id="link">" Afficher les paramètres personnalisés"</annotation></string>
-    <string name="zen_interruption_level_priority" msgid="9178419297408319234">"Priorités seulement"</string>
+    <string name="zen_interruption_level_priority" msgid="9178419297408319234">"Prioritaires seulement"</string>
     <string name="zen_mode_and_condition" msgid="4123722186007123567">"<xliff:g id="ZEN_MODE">%1$s</xliff:g>. <xliff:g id="EXIT_CONDITION">%2$s</xliff:g>"</string>
     <string name="zen_mode_sound_summary_on_with_info" msgid="2539952366467518398">"Activé/<xliff:g id="ID_1">%1$s</xliff:g>"</string>
     <string name="zen_mode_sound_summary_off_with_info" msgid="3910718455243440265">"Désactivé : <xliff:g id="ID_1">%1$s</xliff:g>"</string>
@@ -4518,7 +4518,7 @@
     <string name="error_capturing_system_heap_dump_message" msgid="5431592130805893098">"Impossible de capturer l\'empreinte de mémoire du système"</string>
     <string name="automatic_system_heap_dump_title" msgid="2153897396923488317">"Capturer automatiquement les empreintes de mémoire système"</string>
     <string name="automatic_system_heap_dump_summary" msgid="4962129546638974661">"Capturer automatiquement une empreinte de mémoire pour le système Android lorsqu\'il utilise trop de mémoire"</string>
-    <string name="wifi_disconnect_button_text" msgid="787688024070426706">"Déconnexion"</string>
+    <string name="wifi_disconnect_button_text" msgid="787688024070426706">"Déconnecter"</string>
     <string name="wfc_disclaimer_emergency_limitation_title_text" msgid="26884532087670844">"Appels d\'urgence"</string>
     <string name="wfc_disclaimer_emergency_limitation_desc_text" msgid="8726152486964822599">"Votre fournisseur de services ne prend pas en charge les appels Wi‑Fi.\nL\'appareil basculera automatiquement vers le réseau cellulaire pour faire un appel urgence.\nLes appels d\'urgence sont uniquement possibles dans les régions couvertes par un réseau cellulaire."</string>
 </resources>
