@@ -360,15 +360,10 @@
     <string name="always_crashing_activity" translatable="false">Always Crash Activity</string>
     <string name="no_crash_activity" translatable="false">No Crash Activity</string>
     <string name="empty_activity" translatable="false">Empty Activity</string>
-    <string name="window_insets_test_activity" translatable="false">Window Insets Test Activity</string>
 
     <!-- ExperimentalFeatureTest -->
     <string name="experimental_ping" translatable="false">Ping Service</string>
 
     <!-- User Profile -->
     <string name="status_message_title">Status Message</string>
-
-    <!-- Fullscreen Activity Test -->
-    <string name="nav_to_full_screen" translatable="false">Navigate to Full Screen</string>
-    <string name="cancel" translatable="false">Cancel</string>
 </resources>

@@ -324,38 +324,6 @@ public class CarPowerManagementServiceTest extends AbstractExtendedMockitoTestCa
         mPowerSignalListener.waitForSleepExit(WAIT_TIMEOUT_MS);
     }
 
-    @Test
-    public void testShutdownPostponeAfterSuspend() throws Exception {
-        mPowerHal.setCurrentPowerState(new PowerState(VehicleApPowerStateReq.SHUTDOWN_PREPARE,
-                VehicleApPowerStateShutdownParam.CAN_SLEEP));
-        assertThat(mDisplayInterface.waitForDisplayStateChange(WAIT_TIMEOUT_MS)).isFalse();
-        assertStateReceivedForShutdownOrSleepWithPostpone(PowerHalService.SET_DEEP_SLEEP_ENTRY);
-        mPowerSignalListener.waitForSleepEntry(WAIT_TIMEOUT_MS);
-
-        // Send the finished signal
-        mPowerHal.setCurrentPowerState(new PowerState(VehicleApPowerStateReq.FINISHED, 0));
-        mSystemStateInterface.setWakeupCausedByTimer(true);
-        mSystemStateInterface.waitForSleepEntryAndWakeup(WAIT_TIMEOUT_MS);
-        assertStateReceived(PowerHalService.SET_DEEP_SLEEP_EXIT, 0);
-        mPowerSignalListener.waitForSleepExit(WAIT_TIMEOUT_MS);
-        mService.scheduleNextWakeupTime(WAKE_UP_DELAY);
-        // Second processing after wakeup
-        assertThat(mDisplayInterface.getDisplayState()).isFalse();
-
-        mService.setStateForTesting(/* isBooting= */ false, /* isResuming= */ true);
-
-        mPowerHal.setCurrentPowerState(new PowerState(VehicleApPowerStateReq.ON, 0));
-        assertThat(mDisplayInterface.waitForDisplayStateChange(WAIT_TIMEOUT_MS)).isTrue();
-        // Should wait until Handler has finished ON processing
-        CarServiceUtils.runOnLooperSync(mService.getHandlerThread().getLooper(), () -> { });
-
-        mPowerHal.setCurrentPowerState(new PowerState(VehicleApPowerStateReq.SHUTDOWN_PREPARE,
-                VehicleApPowerStateShutdownParam.CAN_SLEEP));
-
-        // Should suspend within timeout
-        mPowerSignalListener.waitForSleepEntry(WAIT_TIMEOUT_LONG_MS);
-    }
-
     /**
      * This test case tests the same scenario as {@link #testUserSwitchingOnResume_differentUser()},
      * but indirectly triggering {@code switchUserOnResumeIfNecessary()} through HAL events.

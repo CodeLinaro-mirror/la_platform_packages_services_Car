@@ -58,7 +58,6 @@ import com.google.android.car.kitchensink.displayinfo.DisplayInfoFragment;
 import com.google.android.car.kitchensink.experimental.ExperimentalFeatureTestFragment;
 import com.google.android.car.kitchensink.hvac.HvacTestFragment;
 import com.google.android.car.kitchensink.insets.WindowInsetsFragment;
-import com.google.android.car.kitchensink.insets.WindowInsetsFullScreenFragment;
 import com.google.android.car.kitchensink.notification.NotificationFragment;
 import com.google.android.car.kitchensink.orientation.OrientationTestFragment;
 import com.google.android.car.kitchensink.packageinfo.PackageInfoFragment;
@@ -205,9 +204,7 @@ public class KitchenSinkActivity extends FragmentActivity {
             new FragmentMenuEntry("vehicle hal", VehicleHalFragment.class),
             new FragmentMenuEntry("volume test", VolumeTestFragment.class),
             new FragmentMenuEntry("web links", WebLinksTestFragment.class),
-            new FragmentMenuEntry("window insets", WindowInsetsFragment.class),
-            new FragmentMenuEntry("window insets full screen",
-                    WindowInsetsFullScreenFragment.class));
+            new FragmentMenuEntry("window insets", WindowInsetsFragment.class));
 
     private Car mCarApi;
     private CarHvacManager mHvacManager;

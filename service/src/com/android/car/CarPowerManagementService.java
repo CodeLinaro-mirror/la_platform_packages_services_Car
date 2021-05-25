@@ -792,24 +792,15 @@ public class CarPowerManagementService extends ICarPower.Stub implements
         }
         Slog.i(TAG, "processing before shutdown expected for: "
                 + mShutdownPrepareTimeMs + " ms, adding polling:" + pollingCount);
-        boolean allAreComplete;
         synchronized (mLock) {
             mProcessingStartTime = SystemClock.elapsedRealtime();
             releaseTimerLocked();
-            allAreComplete = mListenersWeAreWaitingFor.isEmpty();
-            if (allAreComplete) {
-                Slog.i(TAG, "Listener queue is empty, don't start polling");
-            } else {
-                mTimer = new Timer();
-                mTimerActive = true;
-                mTimer.scheduleAtFixedRate(
-                        new ShutdownProcessingTimerTask(pollingCount),
-                        0 /*delay*/,
-                        intervalMs);
-            }
-        }
-        if (allAreComplete) {
-            signalComplete();
+            mTimer = new Timer();
+            mTimerActive = true;
+            mTimer.scheduleAtFixedRate(
+                    new ShutdownProcessingTimerTask(pollingCount),
+                    0 /*delay*/,
+                    intervalMs);
         }
         if (mSwitchGuestUserBeforeSleep) {
             switchToNewGuestIfNecessary();
