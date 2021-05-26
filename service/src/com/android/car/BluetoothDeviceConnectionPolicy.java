@@ -46,56 +46,13 @@ public class BluetoothDeviceConnectionPolicy {
     private final BluetoothAdapter mBluetoothAdapter;
     private final CarBluetoothService mCarBluetoothService;
 
-
-    private CarPowerManager mCarPowerManager;
-    private boolean mEnableBluetoothPowerManager;
-    private final CarPowerStateListenerWithCompletion mCarPowerStateListener =
-            new CarPowerStateListenerWithCompletion() {
-        @Override
-        public void onStateChanged(int state, CompletableFuture<Void> future) {
-            logd("Car power state has changed to " + state);
-
-            // ON is the state when user turned on the car (it can be either ignition or
-            // door unlock) the policy for ON is defined by OEMs and we can rely on that.
-            if (state == CarPowerManager.CarPowerStateListener.ON) {
-                logd("Car is powering on. Enable Bluetooth and auto-connect to devices");
-                if (isBluetoothPersistedOn()) {
-                    enableBluetooth();
-                }
-
-                // The above isBluetoothPersistedOn() call is always true when the adapter is on and
-                // can be true or false if the adapter is off. If we are turned the adapter back on
-                // then this connectDevices() call would fail at first here but be caught by the
-                // following adapter on broadcast below. We'll only do this if the adapter is on
-                if (mBluetoothAdapter.getState() == BluetoothAdapter.STATE_ON) {
-                    connectDevices();
-                }
-                return;
-            }
-
-            // Since we're appearing to be off after shutdown prepare, but may stay on in idle mode,
-            // we'll turn off Bluetooth to disconnect devices and better the "off" illusion
-            if (state == CarPowerManager.CarPowerStateListener.SHUTDOWN_PREPARE) {
-                logd("Car is preparing for shutdown. Disable bluetooth adapter");
-                disableBluetooth();
-
-                // Let CPMS know we're ready to shutdown. Otherwise, CPMS will get stuck for
-                // up to an hour.
-                if (future != null) {
-                    future.complete(null);
-                }
-                return;
-            }
-        }
-    };
-
     /**
      * Get the policy's CarPowerStateListenerWithCompletion object
      *
      * For testing purposes only
      */
     public CarPowerStateListenerWithCompletion getCarPowerStateListener() {
-        return mCarPowerStateListener;
+        return null;
     }
 
     /**
@@ -157,6 +114,7 @@ public class BluetoothDeviceConnectionPolicy {
         mCarBluetoothService = bluetoothService;
         mBluetoothBroadcastReceiver = new BluetoothBroadcastReceiver();
         mBluetoothAdapter = Objects.requireNonNull(BluetoothAdapter.getDefaultAdapter());
+        CarBluetoothPowerManager.createInstance(context);
     }
 
     /**
@@ -169,17 +127,6 @@ public class BluetoothDeviceConnectionPolicy {
         profileFilter.addAction(BluetoothAdapter.ACTION_STATE_CHANGED);
         mContext.registerReceiverAsUser(mBluetoothBroadcastReceiver, UserHandle.CURRENT,
                 profileFilter, null, null);
-        mEnableBluetoothPowerManager = isBluetoothPowerManagerEnabled(mContext);
-        logd("Enable Bluetooth power manager: " + mEnableBluetoothPowerManager);
-        if (mEnableBluetoothPowerManager) {
-            mCarPowerManager = CarLocalServices.createCarPowerManager(mContext);
-            // CarLocalServices can fail to return a service.
-            if (mCarPowerManager != null) {
-                mCarPowerManager.setListenerWithCompletion(mCarPowerStateListener);
-            } else {
-                logd("Failed to get car power manager");
-            }
-        }
 
         // Since we do this only on start up and on user switch, it's safe to kick off a connect on
         // init. If we have a connect in progress, this won't hurt anything. If we already have
@@ -198,10 +145,6 @@ public class BluetoothDeviceConnectionPolicy {
      */
     public void release() {
         logd("release()");
-        if (mCarPowerManager != null) {
-            mCarPowerManager.clearListener();
-            mCarPowerManager = null;
-        }
         if (mBluetoothBroadcastReceiver != null) {
             mContext.unregisterReceiver(mBluetoothBroadcastReceiver);
         }
@@ -213,58 +156,6 @@ public class BluetoothDeviceConnectionPolicy {
     public void connectDevices() {
         logd("Connect devices for each profile");
         mCarBluetoothService.connectDevices();
-    }
-
-    /**
-     * Get the persisted Bluetooth state from Settings
-     *
-     * @return True if the persisted Bluetooth state is on, false otherwise
-     */
-    private boolean isBluetoothPersistedOn() {
-        return (Settings.Global.getInt(
-                mContext.getContentResolver(), Settings.Global.BLUETOOTH_ON, -1) != 0);
-    }
-
-    /**
-     * Turn on the Bluetooth Adapter.
-     */
-    private void enableBluetooth() {
-        logd("Enable bluetooth adapter");
-        if (mBluetoothAdapter == null) {
-            Log.e(TAG, "Cannot enable Bluetooth adapter. The object is null.");
-            return;
-        }
-        mBluetoothAdapter.enable();
-    }
-
-    /**
-     * Turn off the Bluetooth Adapter.
-     *
-     * Tells BluetoothAdapter to shut down _without_ persisting the off state as the desired state
-     * of the Bluetooth adapter for next start up.
-     */
-    private void disableBluetooth() {
-        logd("Disable bluetooth, do not persist state across reboot");
-        if (mBluetoothAdapter == null) {
-            Log.e(TAG, "Cannot disable Bluetooth adapter. The object is null.");
-            return;
-        }
-        mBluetoothAdapter.disable(false);
-    }
-
-    /**
-     * Check whether Bluetooth power manager is enabled.
-     *
-     *   true:  enabled,  false: disabled
-     */
-    private boolean isBluetoothPowerManagerEnabled(Context context) {
-        boolean enableAirplaneModeService = false;
-        if (context != null) {
-            enableAirplaneModeService = context.getResources().getBoolean(R.bool.enableAirplaneModeService);
-        }
-        /* Return false if AirplaneModeService is enabled.
-           AirplaneModeService support Bluetooth power management. */
-        return !enableAirplaneModeService;
     }
 
     /**
