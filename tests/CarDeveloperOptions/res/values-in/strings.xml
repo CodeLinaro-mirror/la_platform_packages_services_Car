@@ -751,7 +751,7 @@
     <string name="bluetooth_preference_paired_dialog_internet_option" msgid="3693599743477470469">"Koneksi internet"</string>
     <string name="bluetooth_preference_paired_dialog_keyboard_option" msgid="4627309436489645755">"Keyboard"</string>
     <string name="bluetooth_preference_paired_dialog_contacts_option" msgid="5290994459307558039">"Kontak dan histori panggilan"</string>
-    <string name="bluetooth_pairing_dialog_title" msgid="7900515495932064945">"Sandingkan dengan perangkat ini?"</string>
+    <string name="bluetooth_pairing_dialog_title" msgid="7900515495932064945">"Sambungkan dengan perangkat ini?"</string>
     <string name="bluetooth_pairing_dialog_sharing_phonebook_title" msgid="7395493311980018460">"Bagikan buku telepon?"</string>
     <string name="bluetooth_pairing_dialog_contants_request" msgid="2103132762434487717">"<xliff:g id="DEVICE_NAME">%1$s</xliff:g> ingin mengakses kontak dan histori panggilan Anda."</string>
     <string name="bluetooth_pairing_dialog_paring_request" msgid="5513953935086446387">"<xliff:g id="DEVICE_NAME">%1$s</xliff:g> ingin terhubung dengan Bluetooth. Saat terhubung, perangkat dapat mengakses kontak &amp; histori panggilan."</string>
@@ -2690,7 +2690,7 @@
     <string name="data_usage_tab_3g" msgid="4262659656028408064">"2G-3G"</string>
     <string name="data_usage_list_mobile" msgid="5623011459774885900">"Ponsel"</string>
     <string name="data_usage_list_none" msgid="5948870220795490796">"Tidak ada"</string>
-    <string name="data_usage_enable_mobile" msgid="7238385042860001374">"Kuota seluler"</string>
+    <string name="data_usage_enable_mobile" msgid="7238385042860001374">"Data seluler"</string>
     <string name="data_usage_enable_3g" msgid="3725838726334043367">"Data 2G-3G"</string>
     <string name="data_usage_enable_4g" msgid="8872517106293561179">"Data 4G"</string>
     <string name="data_roaming_enable_mobile" msgid="5886394350890765947">"Roaming"</string>
@@ -4414,7 +4414,7 @@
     <string name="mobile_network_use_sim_on" msgid="1944823242539751387">"Gunakan SIM"</string>
     <string name="mobile_network_use_sim_off" msgid="2077820358051946635">"Nonaktif"</string>
     <string name="mobile_network_esim_swap_confirm_title" msgid="6077154427380613615">"Beralih ke <xliff:g id="CARRIER">%1$s</xliff:g>?"</string>
-    <string name="mobile_network_esim_swap_confirm_body" msgid="1192274915146275063">"Hanya satu SIM hasil download yang dapat diaktifkan pada satu waktu.\n\nBeralih ke <xliff:g id="CARRIER1">%1$s</xliff:g> tidak akan membatalkan layanan <xliff:g id="CARRIER2">%2$s</xliff:g> Anda."</string>
+    <string name="mobile_network_esim_swap_confirm_body" msgid="1192274915146275063">"Hanya satu SIM hasil download yang dapat diaktifkan pada satu waktu.\n\nBeralih ke <xliff:g id="CARRIER1">%1$s</xliff:g> tidak akan membatalkan layanan <xliff:g id="CARRIER2">%2$s</xliff:g>."</string>
     <string name="mobile_network_esim_swap_confirm_ok" msgid="4253442720111626242">"Beralih ke <xliff:g id="CARRIER">%1$s</xliff:g>"</string>
     <string name="mobile_network_erase_sim" msgid="7813251003613841044">"Hapus SIM"</string>
     <string name="mobile_network_erase_sim_dialog_title" msgid="3796268164204467499">"Hapus SIM yang didownload?"</string>
