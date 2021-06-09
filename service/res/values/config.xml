@@ -40,7 +40,7 @@
     <bool name="useDefaultBluetoothConnectionPolicy">true</bool>
 
     <!--  Configuration to enable or disable Bluetooth PAN Profile.  -->
-    <bool name="enableBluetoothPan">false</bool>
+    <bool name="enableBluetoothPan">true</bool>
 
     <string name="inputService" translatable="false">android.car.input.service/.DefaultInputService</string>
 
