@@ -1574,7 +1574,7 @@
     <string name="reset_network_title" msgid="8944059136930806211">"重設 Wi-Fi、流動數據和藍牙"</string>
     <string name="reset_network_desc" msgid="4982633363916261109">"此操作會重設所有網絡設定，包括：\n\n"<li>"Wi‑Fi"</li>\n<li>"流動數據"</li>\n<li>"藍牙"</li></string>
     <string name="reset_esim_title" msgid="7630781767040831893">"清除已下載的 SIM 卡"</string>
-    <string name="reset_esim_desc" msgid="433226911566802">"如要下載 SIM 替換卡，請聯絡流動網絡供應商。此動作不會取消任何流動服務計劃。"</string>
+    <string name="reset_esim_desc" msgid="433226911566802">"如要下載替換用的 SIM 卡，請聯絡流動網絡供應商。此操作不會取消任何流動服務計劃。"</string>
     <string name="reset_network_button_text" msgid="4293271046867912819">"重設設定"</string>
     <string name="reset_network_final_desc" msgid="2463817067048751373">"您要重設所有網絡設定嗎？您將無法復原這項動作。"</string>
     <string name="reset_network_final_desc_esim" msgid="4676436976372555750">"您要重設所有網絡設定並清除已下載的 SIM 卡嗎？您無法復原這個動作。"</string>
@@ -4419,7 +4419,7 @@
     <string name="mobile_network_esim_swap_confirm_ok" msgid="4253442720111626242">"切換至<xliff:g id="CARRIER">%1$s</xliff:g>"</string>
     <string name="mobile_network_erase_sim" msgid="7813251003613841044">"清除 SIM 卡"</string>
     <string name="mobile_network_erase_sim_dialog_title" msgid="3796268164204467499">"是否清除此已下載 SIM 卡？"</string>
-    <string name="mobile_network_erase_sim_dialog_body" msgid="1923189407958581450">"清除此 SIM 卡即會從此裝置中移除<xliff:g id="CARRIER_0">%1$s</xliff:g>服務。\n\n<xliff:g id="CARRIER_1">%2$s</xliff:g>的服務將不會被取消。"</string>
+    <string name="mobile_network_erase_sim_dialog_body" msgid="1923189407958581450">"清除此 SIM 卡即會從此裝置中移除<xliff:g id="CARRIER_0">%1$s</xliff:g>服務。\n\n<xliff:g id="CARRIER_1">%2$s</xliff:g>的服務將不會取消。"</string>
     <string name="mobile_network_erase_sim_dialog_ok" msgid="7133484721717815447">"清除"</string>
     <string name="mobile_network_erase_sim_dialog_progress" msgid="4881754030959536493">"正在清除 SIM 卡…"</string>
     <string name="mobile_network_erase_sim_error_dialog_title" msgid="9026625253242102706">"無法清除 SIM 卡"</string>
