@@ -309,8 +309,8 @@
     <string name="cellular_data_summary" msgid="8817717603450318646">"မိုဘိုင်းကွန်ရက်တွင် ဒေတာသုံးခွင့်ပြုပါ"</string>
     <string name="allow_data_usage_title" msgid="5381624105803294315">"ရိုမင်း လုပ်ချိန်မှာ ဒေတာ သုံးစွဲမှု ခွင့်ပြုရန်"</string>
     <string name="roaming" msgid="8860308342135146004">"ပြင်ပကွန်ရက်နှင့် ချိတ်ဆက်ခြင်း"</string>
-    <string name="roaming_enable" msgid="2108142024297441116">"ရုန်းမင်းဖြစ်နေလျှင် ဒေတာဝန်ဆောင်မှုများကို ချိတ်ဆက်ပါ"</string>
-    <string name="roaming_disable" msgid="1915440242079953809">"ရုန်းမင်းဖြစ်နေလျှင် ဒေတာဝန်ဆောင်မှုများကို ချိတ်ဆက်ပါ"</string>
+    <string name="roaming_enable" msgid="2108142024297441116">"ပြင်ပကွန်ရက်သုံးလျှင် ဒေတာဝန်ဆောင်မှုများကို ချိတ်ဆက်ပါ"</string>
+    <string name="roaming_disable" msgid="1915440242079953809">"ပြင်ပကွန်ရက်သုံးလျှင် ဒေတာဝန်ဆောင်မှုများကို ချိတ်ဆက်ပါ"</string>
     <string name="roaming_reenable_message" msgid="8388505868655113258">"ဒေတာဆက်သွယ်မှုပြတ်တောက်သွားပါသည် အဘယ်ကြောင့်ဆိုသော် သင့်အိမ်၏ကွန်ယက်မှထွက်ကာ ဒေတာရုန်းမင်းကွန်ယက်ကိုလဲပိတ်ထားသောကြောင့်ဖြစ်သည်"</string>
     <string name="roaming_turn_it_on_button" msgid="4370846458830537578">"ဖွင့်မည်"</string>
     <string name="roaming_warning" msgid="5488050911277592868">"ငွေကြေး အတော်အတန်ကုန်ကျနိုင်ပါသည်။"</string>
@@ -1572,7 +1572,7 @@
     <string name="reset_dashboard_summary" msgid="8778383341461126642">"ကွန်ရက်၊ အက်ပ် (သို့) ကိရိယာများကို ပြင်ဆင်သတ်မှတ်နိုင်ပါသည်"</string>
     <string name="reset_network_title" msgid="8944059136930806211">"Wi-Fi၊ မိုဘိုင်း၊ ဘလူးတုသ် ပြင်ဆင်သတ်မှတ်ရန်"</string>
     <string name="reset_network_desc" msgid="4982633363916261109">"၎င်းသည် အောက်ပါတို့အပါအဝင် ကွန်ရက်ဆက်တင်များအားလုံးကို ပြင်ဆင်သတ်မှတ်လိုက်ပါမည်−\n\n"<li>"Wi‑Fi"</li>\n<li>"မိုဘိုင်းဒေတာ"</li>\n<li>"ဘလူးတုသ်"</li></string>
-    <string name="reset_esim_title" msgid="7630781767040831893">"ဒေါင်းလုဒ်လုပ်ထားသောကတ် ဖျက်ပါ"</string>
+    <string name="reset_esim_title" msgid="7630781767040831893">"ဒေါင်းလုဒ်လုပ်ထားသော ဆင်းမ်ကတ်များ ဖျက်ခြင်း"</string>
     <string name="reset_esim_desc" msgid="433226911566802">"အစားထိုး ဆင်းမ်ကတ်များ ဒေါင်းလုဒ်လုပ်ရန် သင့်ဝန်ဆောင်မှုပေးသူကို ဆက်သွယ်ပါ။ ၎င်းက မိုဘိုင်းဝန်ဆောင်မှု အစီအစဉ်များကို ပယ်ဖျက်မည်မဟုတ်ပါ။"</string>
     <string name="reset_network_button_text" msgid="4293271046867912819">"ဆက်တင်များ ပြင်ဆင်သတ်မှတ်ရန်"</string>
     <string name="reset_network_final_desc" msgid="2463817067048751373">"ကွန်ရက်ဆက်တင်များ အားလုံးကို ပြင်ဆင်သတ်မှတ်လိုပါသလား။ ဤလုပ်ဆောင်ချက်ကို ပြန်ပြင်၍ မရပါ။"</string>
@@ -4018,7 +4018,7 @@
     <string name="notification_log_details_key" msgid="5246636581068083931">"ကီး"</string>
     <string name="notification_log_details_group" msgid="5773333552680090289">"အုပ်စု"</string>
     <string name="notification_log_details_group_summary" msgid="3161461545200780773">"(အကျဉ်းချုပ်)"</string>
-    <string name="notification_log_details_visibility" msgid="7623631733460653410">"မြင်နိင်စွမ်း"</string>
+    <string name="notification_log_details_visibility" msgid="7623631733460653410">"မြင်နိုင်မှု"</string>
     <string name="notification_log_details_public_version" msgid="3828112447520697692">"အများသုံးဗားရှင်း"</string>
     <string name="notification_log_details_priority" msgid="4518553990099409699">"ဦးစားပေးမှု"</string>
     <string name="notification_log_details_importance" msgid="5002791265017246702">"အရေးပါမှု"</string>
@@ -4382,7 +4382,7 @@
     <string name="connect_later" msgid="4742215038190504328">"ဤကွန်ရက်ကို ဆက်သွယ်၍ မရပါ။ နောက်မှ ပြန်ကြိုးစားပါ။"</string>
     <string name="registration_done" msgid="8635020229073784432">"ကွန်ရက်ပေါ်တွင် မှတ်ပုံတင်ထားသည်။"</string>
     <string name="select_automatically" msgid="3421552364854534865">"ကွန်ရက်ကို အလိုအလျောက် ရွေးချယ်ရန်"</string>
-    <string name="carrier_settings_title" msgid="7989949967020825268">"ဖုန်းကုမ္ပဏီ ဆက်တင်များ"</string>
+    <string name="carrier_settings_title" msgid="7989949967020825268">"မိုဘိုင်းဖုန်းကုမ္ပဏီ ဆက်တင်များ"</string>
     <string name="cdma_lte_data_service" msgid="8996857851150069339">"ဒေတာဝန်ဆောင်မှု စတင်ရန်"</string>
     <string name="mobile_data_settings_title" msgid="3439626666647519547">"မိုဘိုင်းဒေတာ"</string>
     <string name="mobile_data_settings_summary" msgid="6492798151325636912">"မိုဘိုင်းကွန်ရက်သုံးပြီး ဒေတာကို ဝင်သုံးခွင့်ပေးပါ"</string>
