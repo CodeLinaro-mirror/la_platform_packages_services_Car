@@ -61,6 +61,7 @@ import android.util.ArraySet;
 import android.util.Log;
 import android.util.Pair;
 import android.util.SparseArray;
+import android.util.SparseIntArray;
 import android.view.Display;
 import android.view.DisplayAddress;
 
@@ -127,6 +128,9 @@ public class CarPackageManagerService extends ICarPackageManager.Stub implements
     private Map<String, Set<String>> mConfiguredBlocklistMap;
 
     private final List<String> mAllowedAppInstallSources;
+
+    @GuardedBy("mLock")
+    private final SparseArray<ComponentName> mTopActivityWithDialogPerDisplay = new SparseArray<>();
 
     /**
      * Hold policy set from policy service or client.
@@ -292,6 +296,15 @@ public class CarPackageManagerService extends ICarPackageManager.Stub implements
             if (DBG_POLICY_CHECK) {
                 Log.i(CarLog.TAG_PACKAGE, "isActivityDistractionOptimized"
                         + dumpPoliciesLocked(false));
+            }
+
+            for (int i = mTopActivityWithDialogPerDisplay.size() - 1; i >= 0; i--) {
+                ComponentName activityWithDialog = mTopActivityWithDialogPerDisplay.get(
+                        mTopActivityWithDialogPerDisplay.keyAt(i));
+                if (activityWithDialog.getClassName().equals(className)
+                        && activityWithDialog.getPackageName().equals(packageName)) {
+                    return false;
+                }
             }
 
             if (searchFromClientPolicyBlocklistsLocked(packageName)) {
@@ -1091,6 +1104,14 @@ public class CarPackageManagerService extends ICarPackageManager.Stub implements
     }
 
     private void blockTopActivityIfNecessary(TopTaskInfoContainer topTask) {
+        synchronized (mLock) {
+            if (mTopActivityWithDialogPerDisplay.contains(topTask.displayId)
+                    && !topTask.topActivity.equals(
+                            mTopActivityWithDialogPerDisplay.get(topTask.displayId))) {
+                // Clear top activity-with-dialog if the activity has changed on this display.
+                mTopActivityWithDialogPerDisplay.remove(topTask.displayId);
+            }
+        }
         if (isUxRestrictedOnDisplay(topTask.displayId)) {
             doBlockTopActivityIfNotAllowed(topTask);
         }
@@ -1101,7 +1122,7 @@ public class CarPackageManagerService extends ICarPackageManager.Stub implements
             return;
         }
 
-        boolean allowed = isActivityAllowed(topTask.topActivity);
+        boolean allowed = isActivityAllowed(topTask);
         if (DBG_POLICY_ENFORCEMENT) {
             Log.i(CarLog.TAG_PACKAGE, "new activity:" + topTask.toString() + " allowed:"
                     + allowed);
@@ -1137,9 +1158,10 @@ public class CarPackageManagerService extends ICarPackageManager.Stub implements
 
         boolean isRootDO = false;
         if (taskRootActivity != null) {
-            ComponentName componentName = ComponentName.unflattenFromString(taskRootActivity);
+            ComponentName taskRootComponentName =
+                    ComponentName.unflattenFromString(taskRootActivity);
             isRootDO = isActivityDistractionOptimized(
-                    componentName.getPackageName(), componentName.getClassName());
+                    taskRootComponentName.getPackageName(), taskRootComponentName.getClassName());
         }
 
         Intent newActivityIntent = createBlockingActivityIntent(
@@ -1156,7 +1178,8 @@ public class CarPackageManagerService extends ICarPackageManager.Stub implements
         mSystemActivityMonitoringService.blockActivity(topTask, newActivityIntent);
     }
 
-    private boolean isActivityAllowed(ComponentName activityName) {
+    private boolean isActivityAllowed(TopTaskInfoContainer topTaskInfoContainer) {
+        ComponentName activityName = topTaskInfoContainer.topActivity;
         boolean isDistractionOptimized = isActivityDistractionOptimized(
                 activityName.getPackageName(),
                 activityName.getClassName());
@@ -1165,7 +1188,7 @@ public class CarPackageManagerService extends ICarPackageManager.Stub implements
         }
         return !(mPreventTemplatedAppsFromShowingDialog
                 && isTemplateActivity(activityName)
-                && isAppShowingADialog(activityName.getPackageName()));
+                && isActivityShowingADialogOnDisplay(activityName, topTaskInfoContainer.displayId));
     }
 
     private boolean isTemplateActivity(ComponentName activityName) {
@@ -1173,29 +1196,32 @@ public class CarPackageManagerService extends ICarPackageManager.Stub implements
         return activityName.getClassName().equals(mTemplateActivityClassName);
     }
 
-    private boolean isAppShowingADialog(String activityPackageName) {
+    private boolean isActivityShowingADialogOnDisplay(ComponentName activityName, int displayId) {
         String output = dumpWindows();
         List<WindowDumpParser.Window> appWindows =
-                WindowDumpParser.getParsedAppWindows(output, activityPackageName);
+                WindowDumpParser.getParsedAppWindows(output, activityName.getPackageName());
         // TODO(b/192354699): Handle case where an activity can have multiple instances.
-        Map<String, Integer> appWindowsPerDisplay = new HashMap<>();
-        for (int i = 0; i < appWindows.size(); i++) {
+        SparseIntArray appWindowsPerDisplay = new SparseIntArray();
+        for (int i = appWindows.size() - 1; i >= 0; i--) {
             WindowDumpParser.Window window = appWindows.get(i);
             appWindowsPerDisplay.put(
                     window.getDisplayId(),
-                    appWindowsPerDisplay.getOrDefault(window.getDisplayId(), 0) + 1);
-
+                    appWindowsPerDisplay.get(window.getDisplayId(), 0) + 1);
         }
         if (DBG_POLICY_ENFORCEMENT) {
-            Log.d(CarLog.TAG_PACKAGE, "Top activity package name =  " + activityPackageName);
+            Log.d(CarLog.TAG_PACKAGE, "Top activity =  " + activityName);
         }
         Log.d(CarLog.TAG_PACKAGE, "Number of app widows per display = " + appWindowsPerDisplay);
-        for (Integer numberOfWindows : appWindowsPerDisplay.values()) {
-            if (numberOfWindows.intValue() > 1) {
-                return true;
+
+        boolean isShowingADialog = appWindowsPerDisplay.get(displayId, 0) > 1;
+        synchronized (mLock) {
+            if (isShowingADialog) {
+                mTopActivityWithDialogPerDisplay.put(displayId, activityName);
+            } else {
+                mTopActivityWithDialogPerDisplay.remove(displayId);
             }
         }
-        return false;
+        return isShowingADialog;
     }
 
     private String dumpWindows() {
@@ -1226,6 +1252,7 @@ public class CarPackageManagerService extends ICarPackageManager.Stub implements
      * @param blockedActivity  the activity being blocked
      * @param blockedTaskId    the blocked task id, which contains the blocked activity
      * @param taskRootActivity root activity of the blocked task
+     * @param isRootDo         denotes if the root activity is distraction optimised
      * @return an intent to launch the blocking activity.
      */
     private static Intent createBlockingActivityIntent(ComponentName blockingActivity,
