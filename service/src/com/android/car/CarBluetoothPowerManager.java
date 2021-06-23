@@ -59,6 +59,7 @@ public class CarBluetoothPowerManager implements CarPowerStateListenerWithComple
     private HandlerThread mThread = null;
     private BluetoothHandler mHandler = null;
     private static CarBluetoothPowerManager sBluetoothPowerManager = null;
+    private int mState = BluetoothAdapter.STATE_OFF;
     private static final boolean DBG = true;
 
     private BroadcastReceiver mBluetoothReceiver = new BroadcastReceiver() {
@@ -74,6 +75,8 @@ public class CarBluetoothPowerManager implements CarPowerStateListenerWithComple
                         + BluetoothAdapter.nameForState(newState) + ")"
                         + ", prevState: " + prevState + " ("
                         + BluetoothAdapter.nameForState(prevState) + ")");
+                mState = newState;
+
                 if (mHandler != null) {
                     mHandler.notifyStateChanged(newState, prevState);
                 }
@@ -197,7 +200,7 @@ public class CarBluetoothPowerManager implements CarPowerStateListenerWithComple
         int state = getBluetoothState();
         logd("bluetooth state: " + state + " (" +
                 BluetoothAdapter.nameForState(state) + ")");
-        if (isBluetoothOff(state)) {
+        if (isBluetoothOff(state) && isBluetoothOff(mState)) {
             // Notify the completion to CPMS, if Bluetooth is off.
             completeFuture(future);
             return;
