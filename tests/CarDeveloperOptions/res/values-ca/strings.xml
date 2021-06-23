@@ -469,7 +469,7 @@
     <string name="security_settings_fingerprint_enroll_start_message" msgid="750040530347336376">"Col·loca el dit al sensor i aixeca\'l quan notis una vibració."</string>
     <string name="security_settings_fingerprint_enroll_repeat_title" msgid="1764145704166303842">"Aixeca el dit i toca de nou"</string>
     <string name="security_settings_fingerprint_enroll_repeat_message" msgid="4434560313661204448">"Continua aixecant el dit per afegir les diferents parts de l\'empremta digital"</string>
-    <string name="security_settings_fingerprint_enroll_finish_title" msgid="2987918958909117821">"Empremta digital afegida"</string>
+    <string name="security_settings_fingerprint_enroll_finish_title" msgid="2987918958909117821">"S\'ha afegit l\'empremta digital"</string>
     <string name="security_settings_fingerprint_enroll_finish_message" msgid="5862643337893923347">"Quan vegis aquesta icona, fes servir l\'empremta digital per identificar-te o aprovar compres."</string>
     <string name="security_settings_fingerprint_enroll_enrolling_skip" msgid="1473280156532146933">"Fes-ho més tard"</string>
     <string name="setup_fingerprint_enroll_enrolling_skip_title" msgid="2816424026528101690">"Sortir de configuració d\'empremta digital?"</string>
@@ -2448,7 +2448,7 @@
     <string name="process_dex2oat_label" msgid="8249082119748556085">"Optimització de l\'aplicació"</string>
     <string name="battery_saver" msgid="3989710213758938398">"Estalvi de bateria"</string>
     <string name="battery_saver_auto_title" msgid="4158659069641849952">"Activa automàticament"</string>
-    <string name="battery_saver_auto_no_schedule" msgid="739814529432092706">"Sense programació"</string>
+    <string name="battery_saver_auto_no_schedule" msgid="739814529432092706">"Cap programació"</string>
     <string name="battery_saver_auto_routine" msgid="886514412067906980">"Segons la teva rutina"</string>
     <string name="battery_saver_auto_percentage" msgid="5791982309331921556">"Segons el percentatge"</string>
     <string name="battery_saver_auto_routine_summary" msgid="9182044424547482889">"L\'estalvi de bateria s\'activa si és probable que et quedis sense bateria abans de la càrrega habitual següent"</string>
@@ -2474,7 +2474,7 @@
     <string name="process_stats_total_duration_percentage" msgid="737215062610178960">"<xliff:g id="PERCENT">%1$s</xliff:g> de RAM utilitzada durant <xliff:g id="TIMEDURATION">%2$s</xliff:g>"</string>
     <string name="process_stats_type_background" msgid="7867552451658035199">"Fons"</string>
     <string name="process_stats_type_foreground" msgid="9185538008409818577">"Primer pla"</string>
-    <string name="process_stats_type_cached" msgid="6774816751826613732">"Memòria"</string>
+    <string name="process_stats_type_cached" msgid="6774816751826613732">"A la memòria cau"</string>
     <string name="process_stats_os_label" msgid="2866711070924260440">"SO Android"</string>
     <string name="process_stats_os_native" msgid="8971193568864959041">"Nadiu"</string>
     <string name="process_stats_os_kernel" msgid="496627624157605578">"Kernel"</string>
@@ -2498,7 +2498,7 @@
     <string name="menu_proc_stats_type" msgid="2680179749566186247">"Tipus d\'estadístiques"</string>
     <string name="menu_proc_stats_type_background" msgid="1898036847606845052">"Fons"</string>
     <string name="menu_proc_stats_type_foreground" msgid="8244384283966204023">"Primer pla"</string>
-    <string name="menu_proc_stats_type_cached" msgid="8238824117399683217">"Memòria"</string>
+    <string name="menu_proc_stats_type_cached" msgid="8238824117399683217">"A la memòria cau"</string>
     <string name="voice_input_output_settings" msgid="2180337183089517667">"Entrada i sortida de veu"</string>
     <string name="voice_input_output_settings_title" msgid="7080213653518526025">"Configuració d\'entrada i sortida de veu"</string>
     <string name="voice_search_settings_title" msgid="4999026024622014272">"Cerca per veu"</string>
@@ -2605,7 +2605,7 @@
     <string name="background_data" msgid="8275750862371471171">"Dades en segon pla"</string>
     <string name="background_data_summary" msgid="799640633948841990">"Les aplicacions poden sincronitzar, enviar i rebre dades en qualsevol moment"</string>
     <string name="background_data_dialog_title" msgid="8306650658158895976">"Desactiva dades segon pla?"</string>
-    <string name="background_data_dialog_message" msgid="8126774244911656527">"Desactivar les dades en segon pla augmenta la durada de la bateria i disminueix l\'ús de dades. És possible que algunes aplicacions continuïn utilitzant la connexió de dades en segon pla."</string>
+    <string name="background_data_dialog_message" msgid="8126774244911656527">"Desactivar les dades en segon pla allarga la durada de la bateria i disminueix l\'ús de dades. És possible que algunes aplicacions continuïn utilitzant la connexió de dades en segon pla."</string>
     <string name="sync_automatically" msgid="5746117156896468099">"Sincronitza dades aplicacions autom."</string>
     <string name="sync_enabled" msgid="535172627223336983">"Sincronització activa"</string>
     <string name="sync_disabled" msgid="713721807204805062">"Sincronització desactivada"</string>
@@ -3115,7 +3115,7 @@
     <string name="keywords_display_adaptive_sleep" msgid="1695357782432822811">"pantalla atenuada, repòs, bateria, temps d\'espera, atenció, pantalla, inactivitat"</string>
     <string name="keywords_auto_rotate" msgid="4320791369951647513">"gir, canvi, rotació, retrat, paisatge, orientació, vertical, horitzontal"</string>
     <string name="keywords_system_update_settings" msgid="4419971277998986067">"actualitzar, android"</string>
-    <string name="keywords_zen_mode_settings" msgid="4103819458182535493">"no molestis, programar, notificacions, bloqueig, silenci, vibrar, mentre dormo, mentre treballo, concentració, so, silenciar, dia, dia laborable, cap de setmana, nit entre setmana, esdeveniment"</string>
+    <string name="keywords_zen_mode_settings" msgid="4103819458182535493">"no molestis, programar, notificacions, bloqueig, silenci, vibrar, mentre dormo, mentre treballo, concentració, so, silenciar, dia, dia laborable, dia entre setmana, cap de setmana, nit entre setmana, esdeveniment"</string>
     <string name="keywords_screen_timeout" msgid="4328381362313993666">"pantalla, temps de bloqueig, temps d\'espera, pantalla de bloqueig"</string>
     <string name="keywords_storage_settings" msgid="6422454520424236476">"memòria, memòria cau, dades, suprimir, esborrar, alliberar, espai"</string>
     <string name="keywords_bluetooth_settings" msgid="1152229891590622822">"connectat, dispositiu, auriculars, auriculars amb micro, altaveu, sense fil, vincular, música, multimèdia"</string>

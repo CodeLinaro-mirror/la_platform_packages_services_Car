@@ -961,7 +961,7 @@
     <string name="wifi_dpp_connecting" msgid="4229290407210299897">"Konektatzen…"</string>
     <string name="wifi_dpp_share_hotspot" msgid="847987212473038179">"Partekatu wifi-gunea"</string>
     <string name="wifi_dpp_lockscreen_title" msgid="3910665850075275963">"Egiaztatu zeu zarela"</string>
-    <string name="wifi_dpp_wifi_password" msgid="8007558344032612455">"Wifi-sarearen pasahitza: <xliff:g id="PASSWORD">%1$s</xliff:g>"</string>
+    <string name="wifi_dpp_wifi_password" msgid="8007558344032612455">"Wifi-sareko pasahitza: <xliff:g id="PASSWORD">%1$s</xliff:g>"</string>
     <string name="wifi_dpp_hotspot_password" msgid="6172326289042241924">"Wifi-gunearen pasahitza: <xliff:g id="PASSWORD">%1$s</xliff:g>"</string>
     <string name="wifi_dpp_add_device" msgid="1347056725253936358">"Gehitu gailu bat"</string>
     <string name="wifi_dpp_connect_network_using_qr_code" msgid="115993715600532357">"Konektatu sare honetara QR kode baten bidez"</string>
@@ -972,7 +972,7 @@
     <string name="wifi_multiple_cert_added" msgid="7986200585749147204">"(Ziurtagiri batzuk gehitu dira)"</string>
     <string name="wifi_use_system_certs" msgid="4794489370929885022">"Erabili sistemaren ziurtagiriak"</string>
     <string name="wifi_do_not_provide_eap_user_cert" msgid="4044301449482425250">"Ez zehaztu"</string>
-    <string name="wifi_do_not_validate_eap_server" msgid="1892537559682474878">"Ez balidatu"</string>
+    <string name="wifi_do_not_validate_eap_server" msgid="1892537559682474878">"Ez baliozkotu"</string>
     <string name="wifi_do_not_validate_eap_server_warning" msgid="3895397996759837323">"Ez da zehaztu ziurtagiririk. Konexioa ez da izango pribatua."</string>
     <string name="wifi_ssid_too_long" msgid="34911971389775920">"Sarearen izena luzeegia da."</string>
     <string name="wifi_no_domain_warning" msgid="735859919311067606">"Domeinua zehaztu behar da."</string>
@@ -1067,7 +1067,7 @@
     <string name="wifi_hotspot_name_summary_connected" msgid="8387768642326756749">"<xliff:g id="WIFI_HOTSPOT_NAME">%1$s</xliff:g> sarera konekta daitezke beste gailuak"</string>
     <string name="wifi_hotspot_password_title" msgid="4289338152595154889">"Wifi-gunearen pasahitza"</string>
     <string name="wifi_hotspot_ap_band_title" msgid="3485744480410441949">"Sarbide-puntuaren banda"</string>
-    <string name="wifi_hotspot_footer_info_regular" msgid="3876006922622827363">"Erabili wifi-gunea beste gailuentzako wifi-sare bat sortzeko. Wifi-guneen bidez, Interneteko konexioa ematen da datu-konexioa erabilita. Baliteke datu-konexioa erabiltzeagatiko kostu gehigarriak ordaindu behar izatea."</string>
+    <string name="wifi_hotspot_footer_info_regular" msgid="3876006922622827363">"Erabili wifi-gunea beste gailuentzako wifi-sare bat sortzeko. Wifi-guneen bidez, Interneteko konexioa ematen da datu-konexioa erabilita. Baliteke zerbait ordaindu behar izatea datuak erabiltzeagatik."</string>
     <string name="wifi_hotspot_footer_info_local_only" msgid="3339582350894639261">"Aplikazioek wifi-guneak sor ditzakete edukia inguruko gailuekin partekatzeko."</string>
     <string name="wifi_hotspot_auto_off_title" msgid="7416022590415189590">"Desaktibatu automatikoki wifi-gunea"</string>
     <string name="wifi_hotspot_auto_off_summary" msgid="3866769400624802105">"Wifi-gunea desaktibatu egingo da ez badago gailurik konektatuta"</string>
@@ -1079,9 +1079,9 @@
     <string name="wifi_hotspot_configure_ap_text" msgid="1000003286253019522">"Wifi-gunearen konfigurazioa"</string>
     <string name="wifi_hotspot_configure_ap_text_summary" msgid="2303120188509955656">"AndroidAP WPA2 PSK wifi-gunea"</string>
     <string name="wifi_tether_configure_ssid_default" msgid="1722238925876152663">"AndroidSarePublikoa"</string>
-    <string name="wifi_calling_settings_title" msgid="626821542308601806">"Wi-Fi bidezko deiak"</string>
+    <string name="wifi_calling_settings_title" msgid="626821542308601806">"Wifi bidezko deiak"</string>
     <string name="wifi_calling_suggestion_title" msgid="1402265373543523970">"Zabaldu deiak egiteko aukera Wi‑Fi konexioarekin"</string>
-    <string name="wifi_calling_suggestion_summary" msgid="198402175473169630">"Aktibatu Wi‑Fi bidezko deiak estaldura zabaltzeko"</string>
+    <string name="wifi_calling_suggestion_summary" msgid="198402175473169630">"Aktibatu Wifi bidezko deiak estaldura zabaltzeko"</string>
     <string name="wifi_calling_mode_title" msgid="3350624859819920176">"Deitzeko aukera lehenetsiak"</string>
     <string name="wifi_calling_mode_dialog_title" msgid="652534533091724333">"Deitzeko aukera hobetsia"</string>
     <string name="wifi_calling_roaming_mode_title" msgid="2059151080231602753">"Ibiltaritzako hobespena"</string>
@@ -1115,9 +1115,9 @@
     <string name="emergency_address_summary" msgid="478668478569851714">"Kokapen gisa erabiliko da larrialdi-zerbitzuetara Wi-Fi bidez deituz gero"</string>
     <string name="private_dns_help_message" msgid="7633526525131196650"><annotation id="url">"Lortu informazio gehiago"</annotation>" DNS pribatuaren eginbideei buruz"</string>
     <string name="wifi_calling_pref_managed_by_carrier" msgid="5458050015417972072">"Operadoreak kudeatzen du ezarpen hau"</string>
-    <string name="wifi_calling_settings_activation_instructions" msgid="2863642668648110908">"Aktibatu Wi-Fi bidezko deiak"</string>
-    <string name="wifi_calling_turn_on" msgid="1212277809455062043">"Aktibatu Wi-Fi bidezko deiak"</string>
-    <string name="wifi_calling_not_supported" msgid="216781767605669775">"%1$s operadoreak ez ditu onartzen Wi‑Fi bidezko deiak"</string>
+    <string name="wifi_calling_settings_activation_instructions" msgid="2863642668648110908">"Aktibatu Wifi bidezko deiak"</string>
+    <string name="wifi_calling_turn_on" msgid="1212277809455062043">"Aktibatu Wifi bidezko deiak"</string>
+    <string name="wifi_calling_not_supported" msgid="216781767605669775">"%1$s operadoreak ez ditu onartzen wifi bidezko deiak"</string>
     <string name="carrier" msgid="3413463182542176886">"Operadorea"</string>
     <string name="display_settings_title" msgid="1243571562133261601">"Bistaratzea"</string>
     <string name="sound_settings" msgid="3306063041029638807">"Soinua"</string>
@@ -1466,7 +1466,7 @@
     <string name="storage_wizard_init_internal_title" msgid="8750856962785644870">"Erabili barneko memoria gisa"</string>
     <string name="storage_wizard_init_internal_summary" msgid="4510546464921608029">"Edozein gauza gailu honetan soilik gordetzeko, aplikazioak eta argazkiak barne. Erabilera hau emateko, beste gailu batzuetan funtzionatzea galarazten duen formateatze bat egin behar da memorian."</string>
     <string name="storage_wizard_format_confirm_title" msgid="7785358616068633439">"Formateatu barneko memoria gisa"</string>
-    <string name="storage_wizard_format_confirm_body" msgid="4107762933332992624">"<xliff:g id="NAME_0">^1</xliff:g> formateatu egin behar da segurua izan dadin. \n\nFormateatu ostean, <xliff:g id="NAME_1">^1</xliff:g> memoriak gailu honetan bakarrik funtzionatuko du. \n\n"<b>"Formateatzean, unean <xliff:g id="NAME_2">^1</xliff:g> memorian gordetako datu guztiak ezabatzen dira."</b>" Daturik ez galtzeko, babeskopia bat egitea gomendatzen dizugu."</string>
+    <string name="storage_wizard_format_confirm_body" msgid="4107762933332992624">"<xliff:g id="NAME_0">^1</xliff:g> formateatu egin behar da segurua izan dadin. \n\nFormateatu ostean, <xliff:g id="NAME_1">^1</xliff:g> memoriak gailu honetan bakarrik funtzionatuko du. \n\n"<b>"Formateatzean, unean-unean <xliff:g id="NAME_2">^1</xliff:g> memorian gordetako datu guztiak ezabatzen dira."</b>" Daturik ez galtzeko, babeskopia bat egitea gomendatzen dizugu."</string>
     <string name="storage_wizard_format_confirm_public_title" msgid="5866830103788091426">"Formateatu memoria eramangarri gisa"</string>
     <string name="storage_wizard_format_confirm_public_body" msgid="1451308701654703353">"Hori egiteko, <xliff:g id="NAME_0">^1</xliff:g> formateatu egin behar da. \n\n"<b>"Formateatuz gero, <xliff:g id="NAME_1">^1</xliff:g> gailuko datu guztiak ezabatuko dira."</b>" Datuak ez galtzeko, babeskopiak egitea gomendatzen dugu."</string>
     <string name="storage_wizard_format_confirm_next" msgid="236947984802247625">"Ezabatu eta formateatu"</string>
@@ -1570,10 +1570,10 @@
     <string name="restore_default_apn_completed" msgid="5671734152740058937">"APNaren ezarpen lehenetsiak berrezarri dira."</string>
     <string name="reset_dashboard_title" msgid="7084966342252178530">"Berrezartzeko aukerak"</string>
     <string name="reset_dashboard_summary" msgid="8778383341461126642">"Sarea, aplikazioak edota gailua berrezar daitezke"</string>
-    <string name="reset_network_title" msgid="8944059136930806211">"Berrezarri wifi, Bluetooth eta sare mugikorrak"</string>
+    <string name="reset_network_title" msgid="8944059136930806211">"Berrezarri wifia, Bluetooth-a eta sare mugikorrak"</string>
     <string name="reset_network_desc" msgid="4982633363916261109">"Hori eginez gero, sare guztien ezarpenak berrezarriko dira, besteak beste: \n\n"<li>"Wifia"</li>\n<li>"Datu-konexioa"</li>\n<li>"Bluetooth-a"</li></string>
-    <string name="reset_esim_title" msgid="7630781767040831893">"Ezabatu deskargatutako SIMen edukia"</string>
-    <string name="reset_esim_desc" msgid="433226911566802">"Ordezko SIM txartelak deskargatzeko, jarri operadorearekin harremanetan. Ez da utziko bertan behera mugikorraren zerbitzu-planik."</string>
+    <string name="reset_esim_title" msgid="7630781767040831893">"Ezabatu deskargatutako SIMetako edukia"</string>
+    <string name="reset_esim_desc" msgid="433226911566802">"Ordezko SIM txartelak deskargatzeko, jarri operadorearekin harremanetan. Ez da utziko bertan behera mugikorreko zerbitzu-planik."</string>
     <string name="reset_network_button_text" msgid="4293271046867912819">"Berrezarri ezarpenak"</string>
     <string name="reset_network_final_desc" msgid="2463817067048751373">"Sareko ezarpen guztiak berrezarri nahi dituzu? Ezin da desegin ekintza hori."</string>
     <string name="reset_network_final_desc_esim" msgid="4676436976372555750">"Sareko ezarpen guztiak berrezarri eta deskargatutako SIM txartelen datu guztiak ezabatu nahi dituzu? Ezin da desegin ekintza hori."</string>
@@ -1591,7 +1591,7 @@
     <string name="master_clear_other_users_present" product="default" msgid="5993259656117566767">\n\n"Badaude erabiltzaile gehiago gailu honetan.\n"</string>
     <string name="master_clear_desc_also_erases_external" msgid="3947303501615091903"><li>"Musika"</li>\n<li>"Argazkiak"</li>\n<li>"Bestelako erabiltzaile-datuak"</li></string>
     <string name="master_clear_desc_also_erases_esim" msgid="4497260499055258773"><li>"eSIM txartelak"</li></string>
-    <string name="master_clear_desc_no_cancel_mobile_plan" msgid="6072668588881679461">\n\n"Horrek ez du utziko bertan behera operadorearekin kontratatuta duzun zerbitzu-plana."</string>
+    <string name="master_clear_desc_no_cancel_mobile_plan" msgid="6072668588881679461">\n\n"Horrek ez du utziko bertan behera mugikorreko zerbitzu-plana."</string>
     <string name="master_clear_desc_erase_external_storage" product="nosdcard" msgid="2723272952715259307">\n\n"Musika, irudiak eta bestelako erabiltzaile-datuak garbitzeko, "<b>"USB bidezko memoria"</b>" ezabatu behar da."</string>
     <string name="master_clear_desc_erase_external_storage" product="default" msgid="9003555775524798797">\n\n"Musika, irudiak eta bestelako erabiltzaile-datuak garbitzeko, "<b>"SD txartela"</b>" ezabatu behar da."</string>
     <string name="erase_external_storage" product="nosdcard" msgid="8989746770347525207">"Ezabatu USB bidezko memoria"</string>
@@ -2027,7 +2027,7 @@
     <string name="widget_picker_title" msgid="5424689728810684439">"Aukeratu widgeta"</string>
     <string name="allow_bind_app_widget_activity_allow_bind_title" msgid="8168110035319637326">"Widgeta sortu eta sartzeko baimena eman?"</string>
     <string name="allow_bind_app_widget_activity_allow_bind" msgid="2782554863244412872">"Widgeta sortu ondoren, <xliff:g id="WIDGET_HOST_NAME">%1$s</xliff:g> ostalariak bistaratzen dituen datu guztiak atzitu ahal izango ditu."</string>
-    <string name="allow_bind_app_widget_activity_always_allow_bind" msgid="1185486443615658430">"Eman baimena beti widgetak sortzeko eta haietako datuak atzitzeko <xliff:g id="WIDGET_HOST_NAME">%1$s</xliff:g> ostalariari"</string>
+    <string name="allow_bind_app_widget_activity_always_allow_bind" msgid="1185486443615658430">"Eman widgetak sortzeko eta haietako datuak atzitzeko baimena beti <xliff:g id="WIDGET_HOST_NAME">%1$s</xliff:g> ostalariari"</string>
     <string name="usage_stats_label" msgid="3128999956478977035">"Erabilera-estatistikak"</string>
     <string name="testing_usage_stats" msgid="704965692323956976">"Erabilera-estatistikak"</string>
     <string name="display_order_text" msgid="2973620313510295873">"Ordenatzeko irizpidea:"</string>
@@ -2552,7 +2552,7 @@
     <string name="backup_section_title" msgid="8177209731777904656">"Babeskopiak eta leheneratzea"</string>
     <string name="personal_data_section_title" msgid="9161854418510071558">"Datu pertsonalak"</string>
     <string name="backup_data_title" msgid="4461508563849583624">"Egin nire datuen babeskopia"</string>
-    <string name="backup_data_summary" msgid="555459891017933746">"Egin datuen, wifi-sareen pasahitzen eta beste ezarpenen babeskopia Google-ren zerbitzarietan."</string>
+    <string name="backup_data_summary" msgid="555459891017933746">"Egin datuen, wifi-sareetako pasahitzen eta beste ezarpenen babeskopia Google-ren zerbitzarietan."</string>
     <string name="backup_configure_account_title" msgid="1534734650559070294">"Babesk. gordetzeko kontua"</string>
     <string name="backup_data_management_title" msgid="6299288795610243508">"Kudeatu babeskopiak gordetzeko kontua"</string>
     <string name="include_app_data_title" msgid="6117211611131913293">"Sartu aplikazioetako datuak"</string>
@@ -2561,7 +2561,7 @@
     <string name="backup_inactive_title" msgid="5513496915638307750">"Babeskopia-zerbitzua ez dago aktibo"</string>
     <string name="backup_configure_account_default_summary" msgid="5718298066335006412">"Ez dago babeskopiak gordetzen dituen aplikaziorik"</string>
     <string name="backup_erase_dialog_title" msgid="8178424339104463014"></string>
-    <string name="backup_erase_dialog_message" msgid="8767843355330070902">"Wifi-sareen pasahitzen, laster-marken, bestelako ezarpenen eta aplikazioetako datuen babeskopiak egiteari utzi eta Google-ren zerbitzarietako kopia guztiak ezabatu nahi dituzu?"</string>
+    <string name="backup_erase_dialog_message" msgid="8767843355330070902">"Wifi-sareetako pasahitzen, laster-marken, bestelako ezarpenen eta aplikazioetako datuen babeskopiak egiteari utzi eta Google-ren zerbitzarietako kopia guztiak ezabatu nahi dituzu?"</string>
     <string name="fullbackup_erase_dialog_message" msgid="2588536036471144070">"Gailuko datuen (adibidez, Wi-Fi pasahitzak eta deien historia) eta aplikazioetako datuen (besteak beste, ezarpenak eta aplikazioek gordetako fitxategiak) babeskopiak egiteari utzi nahi diozu eta urruneko zerbitzarietako kopia guztiak ezabatu nahi dituzu?"</string>
     <string name="fullbackup_data_summary" msgid="406274198094268556">"Egin babeskopiak automatikoki urrunetik, bai gailuetako datuenak (esaterako, Wi-Fi sareetako pasahitzak eta deien historia), bai aplikazioetako datuenak (esaterako, ezarpenak eta aplikazioek gordetako fitxategiak).\n\nBabeskopiak automatikoki egiteko aukera aktibatzean, gailuko eta aplikazioetako datuak urrunetik gordetzen dira aldizka. Aplikazioetako datuak aplikazioek gordetako edozein datu izan daitezke (garatzaileen ezarpenen arabera), eta kontuzkoak izan litezkeen datuak ere sar daitezke (adibidez, kontaktuak, mezuak eta argazkiak)."</string>
     <string name="device_admin_settings_title" msgid="2074319456047334589">"Gailua administratzeko aplikazioaren ezarpenak"</string>
@@ -2634,7 +2634,7 @@
     <string name="really_remove_account_message" product="device" msgid="3751798556257519916">"Kontua kentzen baduzu, bertako mezu, kontaktu eta bestelako datu guztiak ezabatuko dira gailutik!"</string>
     <string name="remove_account_failed" msgid="491458185327106966">"Administratzaileak ez du eman aldaketa egiteko baimena"</string>
     <string name="cant_sync_dialog_title" msgid="5483419398223189881">"Ezin da eskuz sinkronizatu"</string>
-    <string name="cant_sync_dialog_message" msgid="3467126947262857534">"Elementua ezin da unean desgaitu. Ezarpena aldatzeko, aktibatu atzeko planoko datuak eta sinkronizazio automatikoa aldi baterako."</string>
+    <string name="cant_sync_dialog_message" msgid="3467126947262857534">"Elementua ezin da une honetan desgaitu. Ezarpena aldatzeko, aktibatu atzeko planoko datuak eta sinkronizazio automatikoa aldi baterako."</string>
     <string name="enter_password" msgid="2963496904625715235">"Android-eko gailua abiarazteko, idatzi pasahitza"</string>
     <string name="enter_pin" msgid="7140938268709546890">"Android-eko gailua abiarazteko, idatzi PIN kodea"</string>
     <string name="enter_pattern" msgid="1653841963422825336">"Android-eko gailua abiarazteko, marraztu eredua"</string>
