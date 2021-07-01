@@ -67,6 +67,7 @@ import android.os.Binder;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.os.IBinder;
 import android.os.RemoteException;
 import android.os.Trace;
 import android.os.UserHandle;
@@ -74,9 +75,10 @@ import android.os.UserManager;
 import android.provider.Settings;
 import android.sysprop.CarProperties;
 import android.text.TextUtils;
+import android.util.ArrayMap;
 import android.util.EventLog;
 import android.util.Log;
-import android.util.SparseArray;
+import android.util.Slog;
 import android.util.TimingsTraceLog;
 
 import com.android.car.CarServiceBase;
@@ -90,6 +92,7 @@ import com.android.internal.infra.AndroidFuture;
 import com.android.internal.os.IResultReceiver;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.FunctionalUtils;
+import com.android.internal.util.IndentingPrintWriter;
 import com.android.internal.util.Preconditions;
 import com.android.internal.util.UserIcons;
 
@@ -171,16 +174,19 @@ public final class CarUserService extends ICarUserService.Stub implements CarSer
     private final Handler mHandler = new Handler(mHandlerThread.getLooper());
 
     /**
-     * List of listeners to be notified on new user activities events.
-     * This collection should be accessed and manipulated by mHandlerThread only.
+     * Internal listeners to be notified on new user activities events.
+     *
+     * <p>This collection should be accessed and manipulated by {@code mHandlerThread} only.
      */
     private final List<UserLifecycleListener> mUserLifecycleListeners = new ArrayList<>();
 
     /**
-     * List of lifecycle listeners by uid.
-     * This collection should be accessed and manipulated by mHandlerThread only.
+     * App listeners to be notified on new user activities events.
+     *
+     * <p>This collection should be accessed and manipulated by {@code mHandlerThread} only.
      */
-    private final SparseArray<IResultReceiver> mAppLifecycleListeners = new SparseArray<>();
+    private final ArrayMap<IBinder, AppLifecycleListener> mAppLifecycleListeners =
+            new ArrayMap<>();
 
     /**
      * User Id for the user switch in process, if any.
@@ -270,11 +276,17 @@ public final class CarUserService extends ICarUserService.Stub implements CarSer
     }
 
     @Override
-    public void dump(@NonNull PrintWriter writer) {
+    public void dump(PrintWriter writer) {
+        String indent = "  ";
+        try (IndentingPrintWriter pw = new IndentingPrintWriter(writer, indent)) {
+            dump(pw, indent);
+        }
+    }
+
+    private void dump(IndentingPrintWriter writer, String indent) {
         checkAtLeastOnePermission("dump()", android.Manifest.permission.DUMP);
         writer.println("*CarUserService*");
-        String indent = "  ";
-        handleDumpListeners(writer, indent);
+        handleDumpListeners(writer);
         writer.printf("User switch UI receiver %s\n", mUserSwitchUiReceiver);
         synchronized (mLockUser) {
             writer.println("User0Unlocked: " + mUser0Unlocked);
@@ -319,15 +331,17 @@ public final class CarUserService extends ICarUserService.Stub implements CarSer
         writer.printf("System UI package name=%s\n", getSystemUiPackageName());
 
         writer.println("Relevant Global settings");
-        dumpGlobalProperty(writer, indent, CarSettings.Global.LAST_ACTIVE_USER_ID);
-        dumpGlobalProperty(writer, indent, CarSettings.Global.LAST_ACTIVE_PERSISTENT_USER_ID);
+        writer.increaseIndent();
+        dumpGlobalProperty(writer, CarSettings.Global.LAST_ACTIVE_USER_ID);
+        dumpGlobalProperty(writer, CarSettings.Global.LAST_ACTIVE_PERSISTENT_USER_ID);
+        writer.decreaseIndent();
 
         dumpUserMetrics(writer);
     }
 
-    private void dumpGlobalProperty(PrintWriter writer, String indent, String property) {
+    private void dumpGlobalProperty(IndentingPrintWriter writer, String property) {
         String value = Settings.Global.getString(mContext.getContentResolver(), property);
-        writer.printf("%s%s=%s\n", indent, property, value);
+        writer.printf("%s=%s\n", property, value);
     }
 
     /**
@@ -344,11 +358,12 @@ public final class CarUserService extends ICarUserService.Stub implements CarSer
         mUserMetrics.dumpFirstUserUnlockDuration(writer);
     }
 
-    private void handleDumpListeners(@NonNull PrintWriter writer, String indent) {
+    private void handleDumpListeners(IndentingPrintWriter writer) {
+        writer.increaseIndent();
         CountDownLatch latch = new CountDownLatch(1);
         mHandler.post(() -> {
             handleDumpServiceLifecycleListeners(writer);
-            handleDumpAppLifecycleListeners(writer, indent);
+            handleDumpAppLifecycleListeners(writer);
             latch.countDown();
         });
         int timeout = 5;
@@ -361,9 +376,10 @@ public final class CarUserService extends ICarUserService.Stub implements CarSer
             Thread.currentThread().interrupt();
             writer.println("Interrupted waiting for handler thread to dump app and user listeners");
         }
+        writer.decreaseIndent();
     }
 
-    private void handleDumpServiceLifecycleListeners(@NonNull PrintWriter writer) {
+    private void handleDumpServiceLifecycleListeners(PrintWriter writer) {
         if (mUserLifecycleListeners.isEmpty()) {
             writer.println("No lifecycle listeners for internal services");
             return;
@@ -371,23 +387,24 @@ public final class CarUserService extends ICarUserService.Stub implements CarSer
         int size = mUserLifecycleListeners.size();
         writer.printf("%d lifecycle listener%s for services\n", size, size == 1 ? "" : "s");
         String indent = "  ";
-        for (UserLifecycleListener listener : mUserLifecycleListeners) {
+        for (int i = 0; i < size; i++) {
+            UserLifecycleListener listener = mUserLifecycleListeners.get(i);
             writer.printf("%s%s\n", indent, FunctionalUtils.getLambdaName(listener));
         }
     }
 
-    private void handleDumpAppLifecycleListeners(@NonNull PrintWriter writer, String indent) {
+    private void handleDumpAppLifecycleListeners(IndentingPrintWriter writer) {
         int size = mAppLifecycleListeners.size();
         if (size == 0) {
             writer.println("No lifecycle listeners for apps");
             return;
         }
-        writer.printf("%d lifecycle listener%s for apps \n", size, size == 1 ? "" : "s");
+        writer.printf("%d lifecycle listener%s for apps\n", size, size == 1 ? "" : "s");
+        writer.increaseIndent();
         for (int i = 0; i < size; i++) {
-            int uid = mAppLifecycleListeners.keyAt(i);
-            IResultReceiver listener = mAppLifecycleListeners.valueAt(i);
-            writer.printf("%suid: %d\n", indent, uid);
+            mAppLifecycleListeners.valueAt(i).dump(writer);
         }
+        writer.decreaseIndent();
     }
 
     /**
@@ -596,30 +613,53 @@ public final class CarUserService extends ICarUserService.Stub implements CarSer
     }
 
     @Override
-    public void setLifecycleListenerForUid(IResultReceiver listener) {
+    public void setLifecycleListenerForApp(String packageName, IResultReceiver receiver) {
         int uid = Binder.getCallingUid();
-        EventLog.writeEvent(EventLogTags.CAR_USER_SVC_SET_LIFECYCLE_LISTENER, uid);
-        checkInteractAcrossUsersPermission("setLifecycleListenerForUid" + uid);
+        EventLog.writeEvent(EventLogTags.CAR_USER_SVC_SET_LIFECYCLE_LISTENER, uid, packageName);
+        checkInteractAcrossUsersPermission("setLifecycleListenerForApp-" + uid + "-" + packageName);
 
+        IBinder receiverBinder = receiver.asBinder();
+        AppLifecycleListener listener = new AppLifecycleListener(uid, packageName, receiver);
         try {
-            listener.asBinder().linkToDeath(() -> onListenerDeath(uid), 0);
+            receiverBinder.linkToDeath(() -> onListenerDeath(listener), 0);
         } catch (RemoteException e) {
-            Log.wtf(TAG_USER, "Cannot listen to death of " + uid);
+            Slog.wtf(TAG, "Cannot listen to death of " + listener);
         }
-        mHandler.post(() -> mAppLifecycleListeners.append(uid, listener));
+        if (Log.isLoggable(TAG_USER, Log.DEBUG)) {
+            Log.d(TAG, "Adding " + listener + " (using binder " + receiverBinder + ")");
+        }
+
+        mHandler.post(() -> mAppLifecycleListeners.put(receiverBinder, listener));
     }
 
-    private void onListenerDeath(int uid) {
-        Log.i(TAG_USER, "Removing listeners for uid " + uid + " on binder death");
-        mHandler.post(() -> mAppLifecycleListeners.remove(uid));
+    private void onListenerDeath(AppLifecycleListener listener) {
+        Slog.i(TAG, "Removing listener " + listener + " on binder death");
+        mHandler.post(() -> mAppLifecycleListeners.remove(listener.receiver.asBinder()));
     }
 
     @Override
-    public void resetLifecycleListenerForUid() {
+    public void resetLifecycleListenerForApp(IResultReceiver receiver) {
         int uid = Binder.getCallingUid();
-        EventLog.writeEvent(EventLogTags.CAR_USER_SVC_RESET_LIFECYCLE_LISTENER, uid);
-        checkInteractAcrossUsersPermission("resetLifecycleListenerForUid-" + uid);
-        mHandler.post(() -> mAppLifecycleListeners.remove(uid));
+        checkInteractAcrossUsersPermission("resetLifecycleListenerForApp-" + uid);
+        IBinder receiverBinder = receiver.asBinder();
+        mHandler.post(() -> {
+            AppLifecycleListener listener = mAppLifecycleListeners.get(receiverBinder);
+            if (listener == null) {
+                Slog.e(TAG, "resetLifecycleListenerForApp(uid=" + uid
+                        + "): no listener for receiver");
+                return;
+            }
+            if (listener.uid != uid) {
+                Slog.e(TAG, "resetLifecycleListenerForApp(): uid mismatch (called by " + uid
+                        + ") for listener" + listener);
+            }
+            EventLog.writeEvent(EventLogTags.CAR_USER_SVC_RESET_LIFECYCLE_LISTENER, uid,
+                    listener.packageName);
+            if (Log.isLoggable(TAG_USER, Log.DEBUG)) {
+                Log.d(TAG, "Removing " + listener + " (using binder " + receiverBinder + ")");
+            }
+            mAppLifecycleListeners.remove(receiverBinder);
+        });
     }
 
     @Override
@@ -1627,9 +1667,7 @@ public final class CarUserService extends ICarUserService.Stub implements CarSer
         int eventType = event.getEventType();
         t.traceBegin("notify-app-listeners-user-" + userId + "-event-" + eventType);
         for (int i = 0; i < listenersSize; i++) {
-            int uid = mAppLifecycleListeners.keyAt(i);
-
-            IResultReceiver listener = mAppLifecycleListeners.valueAt(i);
+            AppLifecycleListener listener = mAppLifecycleListeners.valueAt(i);
             Bundle data = new Bundle();
             data.putInt(CarUserManager.BUNDLE_PARAM_ACTION, eventType);
 
@@ -1637,17 +1675,16 @@ public final class CarUserService extends ICarUserService.Stub implements CarSer
             if (fromUserId != UserHandle.USER_NULL) {
                 data.putInt(CarUserManager.BUNDLE_PARAM_PREVIOUS_USER_ID, fromUserId);
             }
-
             if (Log.isLoggable(TAG_USER, Log.DEBUG)) {
-                Log.d(TAG_USER, "Notifying listener for uid " + uid);
+                Log.d(TAG_USER, "Notifying listener for uid " + listener);
             }
             EventLog.writeEvent(EventLogTags.CAR_USER_SVC_NOTIFY_APP_LIFECYCLE_LISTENER,
-                    uid, eventType, fromUserId, userId);
+                    listener.uid, listener.packageName, eventType, fromUserId, userId);
             try {
-                t.traceBegin("notify-app-listener-uid-" + uid);
-                listener.send(userId, data);
+                t.traceBegin("notify-app-listener-" + listener.toShortString());
+                listener.receiver.send(userId, data);
             } catch (RemoteException e) {
-                Log.e(TAG_USER, "Error calling lifecycle listener", e);
+                Log.e(TAG_USER, "Error calling lifecycle listener " + listener, e);
             } finally {
                 t.traceEnd();
             }
