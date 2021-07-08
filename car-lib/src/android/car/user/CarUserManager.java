@@ -171,13 +171,20 @@ public final class CarUserManager extends CarManagerBase {
     public static final String BUNDLE_PARAM_PREVIOUS_USER_ID = "previous_user";
 
     private final Object mLock = new Object();
+
     private final ICarUserService mService;
     private final UserManager mUserManager;
 
+    /**
+     * Map of listeners registers by the app.
+     */
     @Nullable
     @GuardedBy("mLock")
     private ArrayMap<UserLifecycleListener, Executor> mListeners;
 
+    /**
+     * Receiver used to receive user-lifecycle callbacks from the service.
+     */
     @Nullable
     @GuardedBy("mLock")
     private LifecycleResultReceiver mReceiver;
@@ -196,6 +203,7 @@ public final class CarUserManager extends CarManagerBase {
     public CarUserManager(@NonNull Car car, @NonNull ICarUserService service,
             @NonNull UserManager userManager) {
         super(car);
+
         mService = service;
         mUserManager = userManager;
     }
@@ -350,20 +358,31 @@ public final class CarUserManager extends CarManagerBase {
         Objects.requireNonNull(listener, "listener cannot be null");
 
         int uid = myUid();
+        String packageName = getContext().getPackageName();
+        if (DBG) {
+            Log.d(TAG, "addListener(): uid=" + uid + ", pkg=" + packageName
+                    + ", listener=" + listener);
+        }
         synchronized (mLock) {
             Preconditions.checkState(mListeners == null || !mListeners.containsKey(listener),
                     "already called for this listener");
             if (mReceiver == null) {
                 mReceiver = new LifecycleResultReceiver();
                 try {
-                    EventLog.writeEvent(EventLogTags.CAR_USER_MGR_ADD_LISTENER, uid);
-                    if (DBG) Log.d(TAG, "Setting lifecycle receiver for uid " + uid);
-                    mService.setLifecycleListenerForUid(mReceiver);
+                    EventLog.writeEvent(EventLogTags.CAR_USER_MGR_ADD_LISTENER, uid, packageName);
+                    if (DBG) {
+                        Log.d(TAG, "Setting lifecycle receiver for uid " + uid + " and package "
+                                + packageName);
+                    }
+                    mService.setLifecycleListenerForApp(packageName, mReceiver);
                 } catch (RemoteException e) {
                     handleRemoteExceptionFromCarService(e);
                 }
             } else {
-                if (DBG) Log.d(TAG, "Already set receiver for uid " + uid);
+                if (DBG) {
+                    Log.d(TAG, "Already set receiver for uid " + uid + " and package "
+                            + packageName);
+                }
             }
 
             if (mListeners == null) {
@@ -373,7 +392,7 @@ public final class CarUserManager extends CarManagerBase {
                         + " already has " + mListeners.size() + " listeners: "
                         + mListeners.keySet().stream()
                                 .map((l) -> getLambdaName(l))
-                                .collect(Collectors.toList()), new Exception());
+                                .collect(Collectors.toList()), new Exception("caller's stack"));
             }
             if (DBG) Log.d(TAG, "Adding listener: " + listener);
             mListeners.put(listener, executor);
@@ -394,6 +413,11 @@ public final class CarUserManager extends CarManagerBase {
         Objects.requireNonNull(listener, "listener cannot be null");
 
         int uid = myUid();
+        String packageName = getContext().getPackageName();
+        if (DBG) {
+            Log.d(TAG, "removeListener(): uid=" + uid + ", pkg=" + packageName
+                    + ", listener=" + listener);
+        }
         synchronized (mLock) {
             Preconditions.checkState(mListeners != null && mListeners.containsKey(listener),
                     "not called for this listener yet");
@@ -410,10 +434,13 @@ public final class CarUserManager extends CarManagerBase {
                 return;
             }
 
-            EventLog.writeEvent(EventLogTags.CAR_USER_MGR_REMOVE_LISTENER, uid);
-            if (DBG) Log.d(TAG, "Removing lifecycle receiver for uid=" + uid);
+            EventLog.writeEvent(EventLogTags.CAR_USER_MGR_REMOVE_LISTENER, uid, packageName);
+            if (DBG) {
+                Log.d(TAG, "Removing lifecycle receiver for uid=" + uid + " and package "
+                        + packageName);
+            }
             try {
-                mService.resetLifecycleListenerForUid();
+                mService.resetLifecycleListenerForApp(mReceiver);
                 mReceiver = null;
             } catch (RemoteException e) {
                 handleRemoteExceptionFromCarService(e);
