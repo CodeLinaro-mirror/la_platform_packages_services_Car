@@ -39,7 +39,6 @@
     <bool name="profile_supported_pbap">false</bool>
     <bool name="profile_supported_map">false</bool>
     <bool name="profile_supported_hdp">false</bool>
-    <bool name="profile_supported_opp">false</bool>
     <bool name="profile_supported_sap">false</bool>
     <bool name="enable_phone_policy">false</bool>
 
@@ -52,4 +51,5 @@
     <bool name="profile_supported_pbapclient">true</bool>
     <bool name="profile_supported_pan">true</bool>
     <bool name="profile_supported_mapmce">true</bool>
+    <bool name="profile_supported_opp">true</bool>
 </resources>
