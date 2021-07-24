@@ -51,14 +51,14 @@
         <component class=".map.BluetoothMapSettings" enabled="false" />
 
         <!-- Controlled by profile_supported_opp -->
-        <component class=".opp.BluetoothOppService" enabled="false" />
-        <component class=".opp.BluetoothOppReceiver" enabled="false" />
-        <component class=".opp.BluetoothOppLauncherActivity" enabled="false" />
-        <component class=".opp.BluetoothOppBtEnableActivity" enabled="false" />
-        <component class=".opp.BluetoothOppBtEnablingActivity" enabled="false" />
-        <component class=".opp.BluetoothOppIncomingFileConfirmActivity" enabled="false" />
-        <component class=".opp.BluetoothOppTransferActivity" enabled="false" />
-        <component class=".opp.BluetoothOppTransferHistory" enabled="false" />
+        <component class=".opp.BluetoothOppService" enabled="true" />
+        <component class=".opp.BluetoothOppReceiver" enabled="true" />
+        <component class=".opp.BluetoothOppLauncherActivity" enabled="true" />
+        <component class=".opp.BluetoothOppBtEnableActivity" enabled="true" />
+        <component class=".opp.BluetoothOppBtEnablingActivity" enabled="true" />
+        <component class=".opp.BluetoothOppIncomingFileConfirmActivity" enabled="true" />
+        <component class=".opp.BluetoothOppTransferActivity" enabled="true" />
+        <component class=".opp.BluetoothOppTransferHistory" enabled="true" />
 
         <!-- Controlled by profile_supported_sap -->
         <component class=".sap.SapService" enabled="false" />
