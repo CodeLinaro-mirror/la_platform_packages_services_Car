@@ -1572,7 +1572,7 @@
     <string name="reset_dashboard_summary" msgid="8778383341461126642">"Мрежата, приложенията или устройството могат да бъдат нулирани"</string>
     <string name="reset_network_title" msgid="8944059136930806211">"Нулиране на настройките за Wi-Fi, мобилни данни и Bluetooth"</string>
     <string name="reset_network_desc" msgid="4982633363916261109">"Така ще нулирате всички мрежови настройки, включително тези за:\n\n"<li>"Wi‑Fi;"</li>\n<li>"мобилни данни;"</li>\n<li>"Bluetooth."</li></string>
-    <string name="reset_esim_title" msgid="7630781767040831893">"Изтеглени SIM карти: Изтриване"</string>
+    <string name="reset_esim_title" msgid="7630781767040831893">"Изтриване на изтеглените SIM карти"</string>
     <string name="reset_esim_desc" msgid="433226911566802">"За да изтеглите SIM карти за замяна, свържете се с оператора си. Плановете за мобилни услуги няма да бъдат анулирани."</string>
     <string name="reset_network_button_text" msgid="4293271046867912819">"Нулиране на настройките"</string>
     <string name="reset_network_final_desc" msgid="2463817067048751373">"Да се нулират ли всички настройки за мрежата? Не можете да отмените това действие."</string>
@@ -1887,7 +1887,7 @@
     <string name="force_stop_dlg_text" msgid="7435245769456493398">"Ако принудително спрете приложение, то може да не функционира правилно."</string>
     <string name="app_install_location_title" msgid="5121617802063021720">"Предпочитано място за инсталиране"</string>
     <string name="app_install_location_summary" msgid="109719780117187797">"Промяна на предпочитаното място за инсталиране на нови приложения"</string>
-    <string name="app_disable_dlg_positive" msgid="5508828271100168073">"Деактивиране на приложението"</string>
+    <string name="app_disable_dlg_positive" msgid="5508828271100168073">"Деактивиране"</string>
     <string name="app_disable_dlg_text" msgid="9221864774943530281">"Ако деактивирате това приложение, Android и други приложения може да спрат да работят както трябва. Имайте предвид, че не можете да изтриете това приложение, тъй като е предварително инсталирано на устройството ви. Като деактивирате приложението, го изключвате и скривате на устройството си."</string>
     <string name="app_disable_notifications_dlg_title" msgid="699530661413553928">"Да се изключат ли известията?"</string>
     <string name="app_install_details_group_title" msgid="2909597319422976921">"App Store"</string>

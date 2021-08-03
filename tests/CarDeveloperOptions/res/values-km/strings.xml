@@ -655,8 +655,8 @@
       <item quantity="one">ត្រូវ​តែ​មាន​យ៉ាង​ហោច​ណាស់ <xliff:g id="COUNT_0">%d</xliff:g> តួ</item>
     </plurals>
     <plurals name="lockpassword_pin_too_short" formatted="false" msgid="6805936168283187298">
-      <item quantity="other">កូដ PIN ត្រូវ​តែ​មាន​យ៉ាង​ហោច​ណាស់ <xliff:g id="COUNT_1">%d</xliff:g> ខ្ទង់</item>
-      <item quantity="one">កូដ PIN ត្រូវ​តែ​មាន​យ៉ាង​ហោច​ណាស់ <xliff:g id="COUNT_0">%d</xliff:g> ខ្ទង់</item>
+      <item quantity="other">កូដ PIN ត្រូវ​មានយ៉ាងតិច <xliff:g id="COUNT_1">%d</xliff:g> ខ្ទង់</item>
+      <item quantity="one">កូដ PIN ត្រូវ​មានយ៉ាងតិច <xliff:g id="COUNT_0">%d</xliff:g> ខ្ទង់</item>
     </plurals>
     <string name="lockpassword_continue_label" msgid="7279261861924400655">"បន្ត"</string>
     <plurals name="lockpassword_password_too_long" formatted="false" msgid="7994068708438608179">
@@ -1313,7 +1313,7 @@
     <string name="security_patch" msgid="483709031051932208">"កម្រិតបំណះសុវត្ថិភាព Android"</string>
     <string name="model_info" msgid="1729765474260797594">"ម៉ូដែល"</string>
     <string name="model_summary" msgid="8781425868254352168">"ម៉ូដែល៖ %1$s"</string>
-    <string name="hardware_info" msgid="174270144950621815">"ម៉ូដែល និង​ផ្នែករឹង"</string>
+    <string name="hardware_info" msgid="174270144950621815">"ម៉ូដែល និង​ហាតវែរ"</string>
     <string name="hardware_revision" msgid="3315744162524354246">"កំណែ​ផ្នែករឹង"</string>
     <string name="fcc_equipment_id" msgid="8681995718533066093">"លេខ​សម្គាល់​បរិក្ខារ"</string>
     <string name="baseband_version" msgid="9115560821840757786">"កំណែ​មូលដ្ឋាន"</string>
@@ -2446,7 +2446,7 @@
     <string name="process_kernel_label" msgid="4175060316414593760">"ប្រព័ន្ធ​ប្រតិបត្តិការ Android"</string>
     <string name="process_mediaserver_label" msgid="8591722404282619153">"Mediaserver"</string>
     <string name="process_dex2oat_label" msgid="8249082119748556085">"បង្កើនប្រសិទ្ធិភាពកម្មវិធី"</string>
-    <string name="battery_saver" msgid="3989710213758938398">"កម្មវិធីសន្សំថ្ម"</string>
+    <string name="battery_saver" msgid="3989710213758938398">"មុខងារ​សន្សំ​ថ្ម"</string>
     <string name="battery_saver_auto_title" msgid="4158659069641849952">"បើកដោយស្វ័យប្រវត្តិ"</string>
     <string name="battery_saver_auto_no_schedule" msgid="739814529432092706">"គ្មាន​កាលវិភាគ​ទេ"</string>
     <string name="battery_saver_auto_routine" msgid="886514412067906980">"ផ្អែកលើ​ទម្លាប់​របស់អ្នក"</string>
@@ -3422,7 +3422,7 @@
     <string name="notification_content_block_summary" msgid="2743896875255591743">"កុំ​បង្ហាញ​ការ​ជូន​ដំណឹង​នៅក្នុង​ផ្ទាំង​ទម្លាក់ ឬ​នៅលើ​ឧបករណ៍​ភ្ជាប់​ជាមួយ​កុំព្យូទ័រ"</string>
     <string name="notification_badge_title" msgid="8989086619255666442">"អនុញ្ញាតស្លាកជូនដំណឹង"</string>
     <string name="notification_channel_badge_title" msgid="8228215248332054612">"បង្ហាញស្លាកជូនដំណឹង"</string>
-    <string name="app_notification_override_dnd_title" msgid="1757042206738172601">"បដិសេធមុខងារកុំរំខាន"</string>
+    <string name="app_notification_override_dnd_title" msgid="1757042206738172601">"លុបពីលើមុខងារកុំរំខាន"</string>
     <string name="app_notification_override_dnd_summary" msgid="3152957611171210980">"អនុញ្ញាត​ឱ្យ​ការជូនដំណឹង​ទាំងនេះ​បន្ត​រំខាន នៅពេល​មុខងារកុំរំខាន​បើក"</string>
     <string name="app_notification_visibility_override_title" msgid="2349335170165637672">"នៅ​លើ​អេក្រង់​ចាក់សោ"</string>
     <string name="app_notification_row_banned" msgid="2079325338122151677">"បាន​រារាំង"</string>
@@ -4052,7 +4052,7 @@
     <string name="display_cutout_emulation_keywords" msgid="6795671536772871439">"ឆក, ក្បាលឆក"</string>
     <string name="overlay_option_device_default" msgid="165508753381657697">"លំនាំដើម​របស់ឧបករណ៍"</string>
     <string name="overlay_toast_failed_to_apply" msgid="5692251825129250040">"មិនអាចប្រើ​ការដាក់​ត្រួតគ្នា​បានទេ"</string>
-    <string name="special_access" msgid="1453926335914696206">"ការចូលប្រើប្រាស់កម្មវិធីពិសេស"</string>
+    <string name="special_access" msgid="1453926335914696206">"សិទ្ធិចូលប្រើប្រាស់កម្មវិធីពិសេស"</string>
     <plurals name="special_access_summary" formatted="false" msgid="5182092345063909346">
       <item quantity="other">កម្មវិធី <xliff:g id="COUNT">%d</xliff:g> អាច​ប្រើ​ទិន្នន័យដែលគ្មានការដាក់កំហិត</item>
       <item quantity="one">កម្មវិធី 1 អាច​ប្រើ​ទិន្នន័យដែលគ្មានការដាក់កំហិត</item>

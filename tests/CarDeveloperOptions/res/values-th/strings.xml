@@ -2631,7 +2631,7 @@
     <string name="really_remove_account_title" msgid="4166512362915154319">"นำบัญชีออกหรือไม่"</string>
     <string name="really_remove_account_message" product="tablet" msgid="7403843371045856719">"การนำบัญชีนี้ออกจะเป็นการลบข้อความ รายชื่อติดต่อ และข้อมูลอื่นๆ ทั้งหมดของบัญชีออกจากแท็บเล็ต"</string>
     <string name="really_remove_account_message" product="default" msgid="8951224626153163914">"การนำบัญชีนี้ออกจะลบข้อความ รายชื่อติดต่อ และข้อมูลอื่นๆ ทั้งหมดของบัญชีออกจากโทรศัพท์"</string>
-    <string name="really_remove_account_message" product="device" msgid="3751798556257519916">"การนำบัญชีนี้ออกจะเป็นการลบข้อความ รายชื่อติดต่อ และข้อมูลอื่นๆ ทั้งหมดออกจากอุปกรณ์!"</string>
+    <string name="really_remove_account_message" product="device" msgid="3751798556257519916">"การนำบัญชีนี้ออกจะเป็นการลบข้อความ รายชื่อติดต่อ และข้อมูลอื่นๆ ทั้งหมดออกจากอุปกรณ์"</string>
     <string name="remove_account_failed" msgid="491458185327106966">"ผู้ดูแลระบบไม่อนุญาตให้ทำการเปลี่ยนแปลงนี้"</string>
     <string name="cant_sync_dialog_title" msgid="5483419398223189881">"ซิงค์ด้วยตนเองไม่ได้"</string>
     <string name="cant_sync_dialog_message" msgid="3467126947262857534">"รายการนี้ปิดการซิงค์อยู่ หากต้องการเปลี่ยนการตั้งค่า ให้เปิดอินเทอร์เน็ตที่ใช้งานอยู่เบื้องหลังและการซิงค์อัตโนมัติชั่วคราว"</string>
@@ -2690,7 +2690,7 @@
     <string name="data_usage_tab_3g" msgid="4262659656028408064">"2G-3G"</string>
     <string name="data_usage_list_mobile" msgid="5623011459774885900">"มือถือ"</string>
     <string name="data_usage_list_none" msgid="5948870220795490796">"ไม่มี"</string>
-    <string name="data_usage_enable_mobile" msgid="7238385042860001374">"เน็ตมือถือ"</string>
+    <string name="data_usage_enable_mobile" msgid="7238385042860001374">"อินเทอร์เน็ตมือถือ"</string>
     <string name="data_usage_enable_3g" msgid="3725838726334043367">"ข้อมูล 2G-3G"</string>
     <string name="data_usage_enable_4g" msgid="8872517106293561179">"ข้อมูล 4G"</string>
     <string name="data_roaming_enable_mobile" msgid="5886394350890765947">"โรมมิ่ง"</string>

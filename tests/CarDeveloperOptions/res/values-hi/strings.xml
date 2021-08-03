@@ -729,7 +729,7 @@
     <string name="bluetooth_settings" msgid="5228032727293770389">"ब्लूटूथ"</string>
     <string name="bluetooth_settings_title" msgid="7261244857456521825">"ब्लूटूथ"</string>
     <string name="bluetooth_settings_summary" msgid="1221689092429277887">"कनेक्‍शन प्रबंधित करें, डिवाइस का नाम सेट करें और उसे खोजने लायक बनाएं"</string>
-    <string name="bluetooth_pairing_request" msgid="7221745525632573125">"<xliff:g id="DEVICE_NAME">%1$s</xliff:g> से जोड़ें?"</string>
+    <string name="bluetooth_pairing_request" msgid="7221745525632573125">"क्या आप <xliff:g id="DEVICE_NAME">%1$s</xliff:g> से जोड़ना चाहते हैं?"</string>
     <string name="bluetooth_pairing_key_msg" msgid="1139230917419961975">"ब्‍लूटूथ से जोड़ने वाला कोड"</string>
     <string name="bluetooth_enter_passkey_msg" msgid="6205151011298670207">"दूसरे डिवाइस से जोड़ना वाला कोड लिखें और फिर Return या Enter दबाएं"</string>
     <string name="bluetooth_enable_alphanumeric_pin" msgid="9138308197078115672">"पिन में अक्षर या प्रतीक शामिल होते हैं"</string>
@@ -1450,7 +1450,7 @@
     <string name="storage_internal_forget_confirm_title" msgid="331032276130605241">"<xliff:g id="NAME">^1</xliff:g> को भूल जाएं?"</string>
     <string name="storage_internal_forget_confirm" msgid="3052483375203727176">"इस <xliff:g id="NAME">^1</xliff:g> पर संग्रहित सभी ऐप्‍स, फ़ोटो और डेटा हमेशा के लिए खो जाएंगे."</string>
     <string name="storage_detail_apps" msgid="8154648512504196820">"ऐप्लिकेशन"</string>
-    <string name="storage_detail_images" msgid="6996202225684468964">"इमेज"</string>
+    <string name="storage_detail_images" msgid="6996202225684468964">"Images"</string>
     <string name="storage_detail_videos" msgid="6030983354721080849">"वीडियो"</string>
     <string name="storage_detail_audio" msgid="6011098436589663944">"ऑडियो"</string>
     <string name="storage_detail_cached" msgid="5761648455067920683">"संग्रहित डेटा"</string>
@@ -2528,7 +2528,7 @@
     <string name="credentials_install_summary" product="nosdcard" msgid="3426661965567059596">"मेमोरी से प्रमाणपत्र इंस्‍टॉल करें"</string>
     <string name="credentials_install_summary" product="default" msgid="4943897416156671633">"SD कार्ड से प्रमाणपत्र इंस्‍टॉल करें"</string>
     <string name="credentials_reset" msgid="355080737664731678">"क्रेडेंशियल मिटाएं"</string>
-    <string name="credentials_reset_summary" msgid="7622528359699428555">"सभी प्रमाणपत्र मिटाएं"</string>
+    <string name="credentials_reset_summary" msgid="7622528359699428555">"सभी सर्टिफ़िकेट मिटाएं"</string>
     <string name="trusted_credentials" msgid="6989242522455395200">"भरोसेमंद क्रेडेंशियल"</string>
     <string name="trusted_credentials_summary" msgid="7411781319056251582">"भरोसेमंद सीए प्रमाणपत्र दिखाएं"</string>
     <string name="user_credentials" msgid="8365731467650306757">"यूज़र क्रेडेंशियल"</string>
@@ -2899,7 +2899,7 @@
     <string name="user_delete_button" msgid="6747802570634772774">"मिटाएं"</string>
     <string name="user_guest" msgid="6226240869459683235">"मेहमान"</string>
     <string name="user_exit_guest_title" msgid="7279886200373071797">"अतिथि को निकालें"</string>
-    <string name="user_exit_guest_confirm_title" msgid="4767911571671099844">"अतिथि को निकालें?"</string>
+    <string name="user_exit_guest_confirm_title" msgid="4767911571671099844">"क्या आप मेहमान को हटाना चाहते हैं?"</string>
     <string name="user_exit_guest_confirm_message" msgid="6955182181145748919">"इस सत्र के सभी ऐप्लिकेशन और डेटा को हटा दिया जाएगा."</string>
     <string name="user_exit_guest_dialog_remove" msgid="1878866060881115716">"निकालें"</string>
     <string name="user_enable_calling" msgid="864760054792249503">"फ़ोन कॉल चालू करें"</string>
@@ -2946,9 +2946,9 @@
     <string name="amber_alerts_title" msgid="8274651933750533271">"AMBER अलर्ट"</string>
     <string name="amber_alerts_summary" msgid="7570943549000256418">"बाल अपहरणों के बारे में बुलेटिन पाएं"</string>
     <string name="repeat_title" msgid="507090203366188931">"दोहराएं"</string>
-    <string name="call_manager_enable_title" msgid="6345443572463650308">"कॉल प्रबंधक चालू करें"</string>
+    <string name="call_manager_enable_title" msgid="6345443572463650308">"कॉल मैनेजर चालू करें"</string>
     <string name="call_manager_enable_summary" msgid="6998536841827752058">"इस सेवा को कॉल करने का आपका तरीका प्रबंधित करने दें."</string>
-    <string name="call_manager_title" msgid="1118074011469650421">"कॉल प्रबंधक"</string>
+    <string name="call_manager_title" msgid="1118074011469650421">"कॉल मैनेजर"</string>
     <!-- no translation found for call_manager_summary (1232655174841493040) -->
     <skip />
     <string name="cell_broadcast_settings" msgid="5750066270993255966">"इमरजेंसी के समय सूचनाएं"</string>
@@ -2976,7 +2976,7 @@
     <string name="restriction_nfc_enable_summary_config" msgid="405349698260328073">"जब यह <xliff:g id="DEVICE_NAME">%1$s</xliff:g> किसी अन्य NFC डिवाइस को छुए तब डेटा का लेन-देन होने दें"</string>
     <string name="restriction_nfc_enable_summary" product="tablet" msgid="3292205836938064931">"जब टैबलेट अन्य डिवाइस को स्पर्श करे तो डेटा ट्रांसफर करने दें"</string>
     <string name="restriction_nfc_enable_summary" product="default" msgid="226439584043333608">"जब फ़ोन दूसरे डिवाइस को टच करे तो डेटा ट्रांसफर करने दें"</string>
-    <string name="restriction_location_enable_title" msgid="358506740636434856">"जगह"</string>
+    <string name="restriction_location_enable_title" msgid="358506740636434856">"जगह की जानकारी"</string>
     <string name="restriction_location_enable_summary" msgid="4159500201124004463">"ऐप को आपकी जगह की जानकारी का इस्तेमाल करने दें"</string>
     <string name="wizard_back" msgid="223654213898117594">"वापस जाएं"</string>
     <string name="wizard_next" msgid="5239664512608113542">"आगे बढ़ें"</string>
@@ -3792,7 +3792,7 @@
     <string name="zen_access_revoke_warning_dialog_title" msgid="6850994585577513299">"<xliff:g id="APP">%1$s</xliff:g> के लिए परेशान न करें की पहुंच रद्द करें?"</string>
     <string name="zen_access_revoke_warning_dialog_summary" msgid="3487422193181311403">"इस ऐप के द्वारा, परेशान न करें के लिए बनाए गए सभी नियम निकाल दिए जाएंगे."</string>
     <string name="ignore_optimizations_on" msgid="4373971641328943551">"ऑप्‍टिमाइज़ ना करें"</string>
-    <string name="ignore_optimizations_off" msgid="4372289432580282870">"ऑप्‍टिमाइज़ करें"</string>
+    <string name="ignore_optimizations_off" msgid="4372289432580282870">"ऑप्टिमाइज़ करें"</string>
     <string name="ignore_optimizations_on_desc" msgid="2904484569799521559">"इससे आपके डिवाइस की बैटरी तेज़ी से खर्च हो सकती है. यह सेटिंग चालू करने के बाद, ऐप्लिकेशन को बैकग्राउंड में बैटरी इस्तेमाल करने से नहीं रोका जाएगा."</string>
     <string name="ignore_optimizations_off_desc" msgid="5598702251817814289">"बेहतर बैटरी जीवनकाल के लिए सुझाया गया"</string>
     <string name="ignore_optimizations_title" msgid="7924345545276166305">"<xliff:g id="APP">%s</xliff:g> को बैटरी ऑप्टिमाइज़ेशन को अनदेखा करने की अनुमति दें?"</string>
@@ -4100,9 +4100,9 @@
       <item quantity="other"><xliff:g id="NUMBER">%s</xliff:g> सेकंड</item>
     </plurals>
     <string name="automatic_storage_manager_settings" msgid="2403621409625820182">"जगह प्रबंधित करें"</string>
-    <string name="automatic_storage_manager_text" msgid="4270379105066667493">"मेमोरी में जगह खाली करने में मदद करने के लिए, मेमोरी प्रबंधक आपके डिवाइस से बैकअप ली गई फ़ोटो और वीडियो निकाल देता है."</string>
+    <string name="automatic_storage_manager_text" msgid="4270379105066667493">"मेमोरी में जगह खाली करने में मदद करने के लिए, मेमोरी मैनेजर आपके डिवाइस से बैकअप ली गई फ़ोटो और वीडियो निकाल देता है."</string>
     <string name="automatic_storage_manager_days_title" msgid="1783767804707813799">"फ़ोटो और वीडियो निकालें"</string>
-    <string name="automatic_storage_manager_preference_title" msgid="4668642150512639466">"मेमोरी प्रबंधक"</string>
+    <string name="automatic_storage_manager_preference_title" msgid="4668642150512639466">"मेमोरी मैनेजर"</string>
     <string name="automatic_storage_manager_master_switch_title" msgid="1456978117739582562">"मेमोरी मैनेजर इस्तेमाल करें"</string>
     <string name="deletion_helper_automatic_title" msgid="4370975149425263205">"ऑटोमैटिक"</string>
     <string name="deletion_helper_manual_title" msgid="1011785013431162078">"मैन्युअल"</string>
@@ -4154,10 +4154,10 @@
     <string name="web_action_section_title" msgid="5563229447734734662">"झटपट ऐप्लिकेशन"</string>
     <string name="instant_apps_settings" msgid="879003203555847537">"झटपट ऐप्लिकेशन से जुड़ी पसंद की सेटिंग"</string>
     <string name="domain_url_section_title" msgid="206403507921518321">"इंस्‍टॉल किए गए ऐप्‍लिकेशन"</string>
-    <string name="automatic_storage_manager_activation_warning" msgid="2630083316417707308">"आपकी जगह का प्रबंधन अब जगह प्रबंधक द्वारा किया जा रहा है"</string>
+    <string name="automatic_storage_manager_activation_warning" msgid="2630083316417707308">"आपकी जगह का प्रबंधन अब जगह मैनेजर द्वारा किया जा रहा है"</string>
     <string name="account_for_section_header" msgid="5975241715840642563">"<xliff:g id="USER_NAME">%1$s</xliff:g> के खाते"</string>
     <string name="configure_section_header" msgid="6988981883075615136">"कॉन्फ़िगर करें"</string>
-    <string name="auto_sync_account_title" msgid="2394463123733529506">"डेटा को अपने आप सिंक करें"</string>
+    <string name="auto_sync_account_title" msgid="2394463123733529506">"डेटा को अपने-आप सिंक होने दें"</string>
     <string name="auto_sync_personal_account_title" msgid="6844465157916100655">"व्यक्तिगत डेटा अपने आप सिंक करें"</string>
     <string name="auto_sync_work_account_title" msgid="2403222633447522376">"दफ़्तर डेटा अपने आप सिंक करें"</string>
     <string name="auto_sync_account_summary" msgid="6316230976974033772">"ऐप्लिकेशन को डेटा अपने-आप रीफ्रे़श करने दें"</string>
@@ -4264,11 +4264,11 @@
     <string name="default_theme" msgid="5986996377385956138">"डिफ़ॉल्ट"</string>
     <string name="show_operator_name_title" msgid="5056163028128447308">"नेटवर्क का नाम"</string>
     <string name="show_operator_name_summary" msgid="6352180285743777497">"स्टेटस बार में नेटवर्क का नाम दिखाएं"</string>
-    <string name="storage_manager_indicator" msgid="4255140732848476875">"जगह प्रबंधक: <xliff:g id="STATUS">^1</xliff:g>"</string>
+    <string name="storage_manager_indicator" msgid="4255140732848476875">"जगह मैनेजर: <xliff:g id="STATUS">^1</xliff:g>"</string>
     <string name="storage_manager_indicator_off" msgid="6404056007102580777">"बंद"</string>
     <string name="storage_manager_indicator_on" msgid="5295306384982062320">"चालू"</string>
     <string name="install_type_instant" msgid="6248487669862821874">"झटपट ऐप"</string>
-    <string name="automatic_storage_manager_deactivation_warning" msgid="7867793739491286374">"जगह प्रबंधक को बंद करना चाहते हैं?"</string>
+    <string name="automatic_storage_manager_deactivation_warning" msgid="7867793739491286374">"जगह मैनेजर को बंद करना चाहते हैं?"</string>
     <string name="storage_movies_tv" msgid="7282484273991655296">"फ़िल्में और टीवी ऐप्लिकेशन"</string>
     <string name="carrier_provisioning" msgid="3309125279191534469">"मोबाइल और इंटरनेट सेवा देने वाली कंपनी की नेटवर्क से जुड़ी जानकारी"</string>
     <string name="trigger_carrier_provisioning" msgid="6284005970057901477">"मोबाइल और इंटरनेट सेवा देने वाली कंपनी का नेटवर्क ट्रिगर करें"</string>

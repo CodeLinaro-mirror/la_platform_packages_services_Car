@@ -1591,7 +1591,7 @@
     <string name="reset_dashboard_summary" msgid="8778383341461126642">"Var atiestatīt tīklu, lietotnes vai ierīci"</string>
     <string name="reset_network_title" msgid="8944059136930806211">"Atiestatīt Wi-Fi, mobilo datu un Bluetooth iestatījumus"</string>
     <string name="reset_network_desc" msgid="4982633363916261109">"Tādējādi tiks atiestatīti visi tīkla iestatījumi, tostarp:\n\n"<li>"Wi‑Fi;"</li>\n<li>"mobilie dati;"</li>\n<li>"Bluetooth."</li></string>
-    <string name="reset_esim_title" msgid="7630781767040831893">"Dzēst lejupielādētās SIM k."</string>
+    <string name="reset_esim_title" msgid="7630781767040831893">"Dzēst lejupielādētās SIM kartes"</string>
     <string name="reset_esim_desc" msgid="433226911566802">"Lai lejupielādētu nomaiņas SIM kartes, sazinieties ar mobilo sakaru operatoru. Ar šo darbību netiks anulēti mobilo sakaru pakalpojumu plāni."</string>
     <string name="reset_network_button_text" msgid="4293271046867912819">"Atiestatīt iestatījumus"</string>
     <string name="reset_network_final_desc" msgid="2463817067048751373">"Vai vēlaties atiestatīt visus tīkla iestatījumus? Šo darbību nevar atsaukt."</string>
@@ -4367,12 +4367,12 @@
     <string name="angle_enabled_app_set" msgid="7313088703610569320">"Lietojumprogramma, kam ANGLE ir iespējots: <xliff:g id="APP_NAME">%1$s</xliff:g>"</string>
     <string name="game_driver_dashboard_title" msgid="219443350404091201">"Game Driver preferences"</string>
     <string name="game_driver_dashboard_summary" msgid="1500674075618790528">"Mainīt Game Driver iestatījumus"</string>
-    <string name="game_driver_footer_text" msgid="1540158284161797913">"Kad lietotne Game Driver ir ieslēgta, varat izvēlēties izmantot atjaunināto grafikas dzini ierīcē instalētajām lietotnēm."</string>
+    <string name="game_driver_footer_text" msgid="1540158284161797913">"Kad lietotne Game Driver ir ieslēgta, varat izvēlēties izmantot atjaunināto grafikas draiveri ierīcē instalētajām lietotnēm."</string>
     <string name="game_driver_all_apps_preference_title" msgid="2453795714218707495">"Iespējot visām lietotnēm"</string>
-    <string name="game_driver_app_preference_title" msgid="7732401084883356004">"Grafikas dziņa atlase"</string>
+    <string name="game_driver_app_preference_title" msgid="7732401084883356004">"Grafikas draivera atlase"</string>
     <string name="game_driver_app_preference_default" msgid="7141877602592473729">"Noklusējums"</string>
     <string name="game_driver_app_preference_game_driver" msgid="879325851829463741">"Game Driver"</string>
-    <string name="game_driver_app_preference_system" msgid="2289297988130187480">"Sistēmas grafikas dzinis"</string>
+    <string name="game_driver_app_preference_system" msgid="2289297988130187480">"Sistēmas grafikas draiveris"</string>
     <!-- no translation found for game_driver_app_preference_values:0 (7987059854719029308) -->
     <!-- no translation found for game_driver_app_preference_values:1 (8222525327130471766) -->
     <!-- no translation found for game_driver_app_preference_values:2 (2739878257804927321) -->
