@@ -619,16 +619,11 @@ public final class CarUserService extends ICarUserService.Stub implements CarSer
         checkInteractAcrossUsersPermission("setLifecycleListenerForApp-" + uid + "-" + packageName);
 
         IBinder receiverBinder = receiver.asBinder();
-        AppLifecycleListener listener = new AppLifecycleListener(uid, packageName, receiver);
-        try {
-            receiverBinder.linkToDeath(() -> onListenerDeath(listener), 0);
-        } catch (RemoteException e) {
-            Slog.wtf(TAG, "Cannot listen to death of " + listener);
-        }
+        AppLifecycleListener listener = new AppLifecycleListener(uid, packageName, receiver,
+                (l) -> onListenerDeath(l));
         if (Log.isLoggable(TAG_USER, Log.DEBUG)) {
             Log.d(TAG, "Adding " + listener + " (using binder " + receiverBinder + ")");
         }
-
         mHandler.post(() -> mAppLifecycleListeners.put(receiverBinder, listener));
     }
 
@@ -659,6 +654,8 @@ public final class CarUserService extends ICarUserService.Stub implements CarSer
                 Log.d(TAG, "Removing " + listener + " (using binder " + receiverBinder + ")");
             }
             mAppLifecycleListeners.remove(receiverBinder);
+
+            listener.onDestroy();
         });
     }
 
