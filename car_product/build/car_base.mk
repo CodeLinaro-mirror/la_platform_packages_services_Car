@@ -28,9 +28,13 @@ endif
 PRODUCT_COPY_FILES += \
     packages/services/Car/car_product/build/component-overrides.xml:$(TARGET_COPY_OUT_VENDOR)/etc/sysconfig/component-overrides.xml \
 
+ifneq ($(TARGET_BOARD_AUTO),true)
+PRODUCT_PACKAGES += \
+    Home
+endif
+
 PRODUCT_PACKAGES += \
     com.android.wifi \
-    Home \
     BasicDreams \
     CaptivePortalLogin \
     CertInstaller \
