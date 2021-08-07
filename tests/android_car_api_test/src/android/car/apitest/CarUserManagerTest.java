@@ -40,6 +40,7 @@ import android.car.user.CarUserManager;
 import android.car.user.CarUserManager.UserLifecycleEvent;
 import android.car.user.UserSwitchResult;
 import android.content.pm.UserInfo;
+import android.os.Process;
 import android.os.RemoteException;
 import android.os.UserHandle;
 import android.os.UserManager;
@@ -66,6 +67,7 @@ public final class CarUserManagerTest extends CarApiTestBase {
 
     private static final int PIN = 2345;
 
+    private static final int START_TIMEOUT_MS = 20_000;
     private static final int SWITCH_TIMEOUT_MS = 70_000;
     private static final int STOP_TIMEOUT_MS = 300_000;
 
@@ -187,9 +189,9 @@ public final class CarUserManagerTest extends CarApiTestBase {
 
             // Assert user ids
             for (UserLifecycleEvent event : stopEvents) {
-                assertWithMessage("wrong userId on %s", event)
+                assertWithMessage("userId on %s", event)
                     .that(event.getUserId()).isEqualTo(newUserId);
-                assertWithMessage("wrong userHandle on %s", event)
+                assertWithMessage("userHandle on %s", event)
                     .that(event.getUserHandle().getIdentifier()).isEqualTo(newUserId);
             }
         } else {
@@ -203,6 +205,75 @@ public final class CarUserManagerTest extends CarApiTestBase {
 
         Log.d(TAG, "unregistering stop listener: " + stopListener);
         mCarUserManager.removeListener(stopListener);
+    }
+
+    @Test
+    public void testLifecycleMultipleListeners() throws Exception {
+        int newUserId = createNewUser("Test", /* isGuest= */ false).id;
+        Car car2 = Car.createCar(getContext().getApplicationContext());
+        CarUserManager mgr2 = (CarUserManager) car2.getCarManager(Car.CAR_USER_SERVICE);
+        CarUserManager mgr1 = mCarUserManager;
+        Log.d(TAG, "myUid=" + Process.myUid() + ",mgr1=" + mgr1 + ", mgr2=" + mgr2);
+        assertWithMessage("mgrs").that(mgr1).isNotSameAs(mgr2);
+
+        BlockingUserLifecycleListener listener1 = BlockingUserLifecycleListener
+                .forSpecificEvents()
+                .forUser(newUserId)
+                .setTimeout(START_TIMEOUT_MS)
+                .addExpectedEvent(USER_LIFECYCLE_EVENT_TYPE_STARTING)
+                .build();
+        BlockingUserLifecycleListener listener2 = BlockingUserLifecycleListener
+                .forSpecificEvents()
+                .forUser(newUserId)
+                .setTimeout(START_TIMEOUT_MS)
+                .addExpectedEvent(USER_LIFECYCLE_EVENT_TYPE_STARTING)
+                .build();
+
+        Log.d(TAG, "registering listener1: " + listener1);
+        mgr1.addListener(Runnable::run, listener1);
+        Log.v(TAG, "ok");
+        try {
+            Log.d(TAG, "registering listener2: " + listener2);
+            mgr2.addListener(Runnable::run, listener2);
+            Log.v(TAG, "ok");
+            try {
+                IActivityManager am = ActivityManager.getService();
+                Log.d(TAG, "Starting user " + newUserId);
+                am.startUserInBackground(newUserId);
+                Log.v(TAG, "ok");
+
+                Log.d(TAG, "Waiting for events");
+                List<UserLifecycleEvent> events1 = listener1.waitForEvents();
+                Log.d(TAG, "events1: " + events1);
+                List<UserLifecycleEvent> events2 = listener2.waitForEvents();
+                Log.d(TAG, "events2: " + events2);
+                assertStartUserEvent(events1, newUserId);
+                assertStartUserEvent(events2, newUserId);
+            } finally {
+                Log.d(TAG, "unregistering listener2: " + listener2);
+                mgr2.removeListener(listener2);
+                Log.v(TAG, "ok");
+            }
+        } finally {
+            Log.d(TAG, "unregistering listener1: " + listener1);
+            mgr1.removeListener(listener1);
+            Log.v(TAG, "ok");
+        }
+    }
+
+    private void assertStartUserEvent(List<UserLifecycleEvent> events, @UserIdInt int userId) {
+        assertWithMessage("events").that(events).hasSize(1);
+
+        UserLifecycleEvent event = events.get(0);
+        assertWithMessage("type").that(event.getEventType())
+                .isEqualTo(USER_LIFECYCLE_EVENT_TYPE_STARTING);
+        assertWithMessage("user id on %s", event).that(event.getUserId()).isEqualTo(userId);
+        assertWithMessage("user handle on %s", event).that(event.getUserHandle().getIdentifier())
+                .isEqualTo(userId);
+        assertWithMessage("previous user id on %s", event).that(event.getPreviousUserId())
+                .isEqualTo(UserHandle.USER_NULL);
+        assertWithMessage("previous user handle on %s", event).that(event.getPreviousUserHandle())
+                .isNull();
     }
 
     /**

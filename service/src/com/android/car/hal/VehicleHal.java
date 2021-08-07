@@ -37,6 +37,7 @@ import android.hardware.automotive.vehicle.V2_0.VehicleProperty;
 import android.hardware.automotive.vehicle.V2_0.VehiclePropertyAccess;
 import android.hardware.automotive.vehicle.V2_0.VehiclePropertyChangeMode;
 import android.hardware.automotive.vehicle.V2_0.VehiclePropertyType;
+import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.RemoteException;
 import android.os.ServiceSpecificException;
@@ -76,6 +77,8 @@ public class VehicleHal extends IVehicleCallback.Stub {
     private static final int NO_AREA = -1;
 
     private final HandlerThread mHandlerThread;
+    private final Handler mHandler;
+
     private final PowerHalService mPowerHal;
     private final PropertyHalService mPropertyHal;
     private final InputHalService mInputHal;
@@ -107,6 +110,7 @@ public class VehicleHal extends IVehicleCallback.Stub {
 
     public VehicleHal(Context context, IVehicle vehicle) {
         mHandlerThread = CarServiceUtils.getHandlerThread(VehicleHal.class.getSimpleName());
+        mHandler = new Handler(mHandlerThread.getLooper());
         // passing this should be safe as long as it is just kept and not used in constructor
         mPowerHal = new PowerHalService(this);
         mPropertyHal = new PropertyHalService(this);
@@ -127,8 +131,13 @@ public class VehicleHal extends IVehicleCallback.Stub {
     /** Dummy version only for testing */
     @VisibleForTesting
     public VehicleHal(PowerHalService powerHal, DiagnosticHalService diagnosticHal,
-            HalClient halClient, PropertyHalService propertyHal) {
-        mHandlerThread = null;
+            HalClient halClient, PropertyHalService propertyHal, HandlerThread handlerThread) {
+        if (handlerThread == null) {
+            mHandlerThread = CarServiceUtils.getHandlerThread(VehicleHal.class.getSimpleName());
+        } else {
+            mHandlerThread = handlerThread;
+        }
+        mHandler = new Handler(mHandlerThread.getLooper());
         mPowerHal = powerHal;
         mPropertyHal = propertyHal;
         mDiagnosticHal = diagnosticHal;
@@ -509,6 +518,7 @@ public class VehicleHal extends IVehicleCallback.Stub {
 
     private final ArraySet<HalServiceBase> mServicesToDispatch = new ArraySet<>();
 
+    // should be posted to the mHandlerThread
     @Override
     public void onPropertyEvent(ArrayList<VehiclePropValue> propValues) {
         synchronized (mLock) {
@@ -542,6 +552,7 @@ public class VehicleHal extends IVehicleCallback.Stub {
         // No need to handle on-property-set events in HAL service yet.
     }
 
+    // should be posted to the mHandlerThread
     @Override
     public void onPropertySetError(@CarPropertyManager.CarSetPropertyErrorCode int errorCode,
             int propId, int areaId) {
@@ -749,7 +760,7 @@ public class VehicleHal extends IVehicleCallback.Stub {
                 return;
         }
         v.timestamp = SystemClock.elapsedRealtimeNanos() + TimeUnit.SECONDS.toNanos(duration);
-        onPropertyEvent(Lists.newArrayList(v));
+        mHandler.post(() -> onPropertyEvent(Lists.newArrayList(v)));
     }
 
     /**
@@ -766,7 +777,7 @@ public class VehicleHal extends IVehicleCallback.Stub {
         int propId = Integer.decode(property);
         int zoneId = Integer.decode(zone);
         int errorId = Integer.decode(errorCode);
-        onPropertySetError(errorId, propId, zoneId);
+        mHandler.post(() -> onPropertySetError(errorId, propId, zoneId));
     }
 
     private static class VehiclePropertyEventInfo {
