@@ -118,7 +118,6 @@ public class ICarImpl extends ICar.Stub {
     private final CarStatsService mCarStatsService;
     private final CarExperimentalFeatureServiceController mCarExperimentalFeatureServiceController;
     private final CarWatchdogService mCarWatchdogService;
-    private final AirplaneModeService mAirplaneModeService;
 
     private final CarServiceBase[] mAllServices;
 
@@ -205,8 +204,7 @@ public class ICarImpl extends ICar.Stub {
         }
         mCarPackageManagerService = new CarPackageManagerService(serviceContext,
                 mCarUXRestrictionsService,
-                mSystemActivityMonitoringService,
-                mCarUserService);
+                mSystemActivityMonitoringService);
         mPerUserCarServiceHelper = new PerUserCarServiceHelper(serviceContext, mCarUserService);
         mCarBluetoothService = new CarBluetoothService(serviceContext, mPerUserCarServiceHelper);
         mCarInputService = new CarInputService(serviceContext, mHal.getInputHal(), mCarUserService);
@@ -257,7 +255,6 @@ public class ICarImpl extends ICar.Stub {
         } else {
             mCarWatchdogService = carWatchdogService;
         }
-        mAirplaneModeService = new AirplaneModeService(serviceContext);
 
         CarLocalServices.addService(CarPowerManagementService.class, mCarPowerManagementService);
         CarLocalServices.addService(CarPropertyService.class, mCarPropertyService);
@@ -307,7 +304,6 @@ public class ICarImpl extends ICar.Stub {
         allServices.add(mCarWatchdogService);
         // Always put mCarExperimentalFeatureServiceController in last.
         addServiceIfNonNull(allServices, mCarExperimentalFeatureServiceController);
-        allServices.add(mAirplaneModeService);
         mAllServices = allServices.toArray(new CarServiceBase[allServices.size()]);
     }
 

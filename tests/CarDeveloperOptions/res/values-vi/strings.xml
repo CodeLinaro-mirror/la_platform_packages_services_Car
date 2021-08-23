@@ -805,7 +805,7 @@
     <string name="wifi_display_status_connected" msgid="85692409327461403">"Đã kết nối"</string>
     <string name="wifi_display_status_in_use" msgid="7646114501132773174">"Đang được sử dụng"</string>
     <string name="wifi_display_status_not_available" msgid="5600448733204688205">"Không có sẵn"</string>
-    <string name="wifi_display_details" msgid="6379855523460749126">"Cài đặt hiển thị"</string>
+    <string name="wifi_display_details" msgid="6379855523460749126">"Cài đặt màn hình"</string>
     <string name="wifi_display_options_title" msgid="4587264519668872213">"Tùy chọn hiển thị không dây"</string>
     <string name="wifi_display_options_forget" msgid="7882982544626742073">"Xóa"</string>
     <string name="wifi_display_options_done" msgid="5922060890309265817">"Xong"</string>
@@ -1842,8 +1842,8 @@
     <string name="show_running_services" msgid="1895994322704667543">"Hiện dịch vụ đang chạy"</string>
     <string name="show_background_processes" msgid="88012264528093617">"Hiện quá trình lưu trong cache"</string>
     <string name="default_emergency_app" msgid="286530070173495823">"Ứng dụng khẩn cấp"</string>
-    <string name="reset_app_preferences" msgid="1426500030595212077">"Đặt lại tùy chọn ứng dụng"</string>
-    <string name="reset_app_preferences_title" msgid="792909865493673598">"Đặt lại tùy chọn ứng dụng?"</string>
+    <string name="reset_app_preferences" msgid="1426500030595212077">"Đặt lại các lựa chọn ưu tiên về ứng dụng"</string>
+    <string name="reset_app_preferences_title" msgid="792909865493673598">"Đặt lại các lựa chọn ưu tiên về ứng dụng?"</string>
     <string name="reset_app_preferences_desc" msgid="7935273005301096031">"Thao tác này sẽ đặt lại tất cả tùy chọn cho:\n\n "<li>"Ứng dụng bị tắt"</li>\n" "<li>"Thông báo ứng dụng bị tắt"</li>\n" "<li>"Ứng dụng mặc định cho các thao tác"</li>\n" "<li>"Các hạn chế về dữ liệu nền cho ứng dụng"</li>\n" "<li>"Mọi hạn chế về quyền truy cập"</li>\n\n" Bạn sẽ không mất bất kỳ dữ liệu ứng dụng nào."</string>
     <string name="reset_app_preferences_button" msgid="2041894727477934656">"Đặt lại ứng dụng"</string>
     <string name="manage_space_text" msgid="6166469422303124302">"Quản lý dung lượng"</string>
@@ -2522,7 +2522,7 @@
     <string name="tts_reset" msgid="8864073594540705579">"Đặt lại"</string>
     <string name="tts_play" msgid="9023430029380675514">"Phát"</string>
     <string name="vpn_settings_title" msgid="7008219502396889192">"VPN"</string>
-    <string name="credentials_title" msgid="7119207354982673965">"Bộ nhớ chứa thông tin xác thực"</string>
+    <string name="credentials_title" msgid="7119207354982673965">"Vùng lưu trữ thông tin xác thực"</string>
     <string name="credentials_install" product="nosdcard" msgid="8509362500537206883">"Cài đặt từ bộ nhớ"</string>
     <string name="credentials_install" product="default" msgid="8997183776710118353">"Cài đặt từ thẻ SD"</string>
     <string name="credentials_install_summary" product="nosdcard" msgid="3426661965567059596">"Cài đặt chứng chỉ từ bộ nhớ"</string>
@@ -3345,7 +3345,7 @@
     <string name="notification_importance_min_title" msgid="705872537330744154">"Thu nhỏ"</string>
     <string name="notification_importance_low_title" msgid="2956199021781786232">"Trung bình"</string>
     <string name="notification_importance_default_title" msgid="7985549807203332482">"Cao"</string>
-    <string name="notification_importance_high_title" msgid="7258373094258585858">"Hiển thị trên màn hình"</string>
+    <string name="notification_importance_high_title" msgid="7258373094258585858">"Hiện trên màn hình"</string>
     <string name="notification_block_title" msgid="2570364198866886906">"Chặn"</string>
     <string name="notification_silence_title" msgid="6959637402003838093">"Hiển thị mà không phát âm thanh"</string>
     <string name="notification_alert_title" msgid="750683027055192648">"Cảnh báo"</string>
@@ -3421,7 +3421,7 @@
     <string name="notification_content_block_title" msgid="2805138591864484587">"Hiển thị thông báo"</string>
     <string name="notification_content_block_summary" msgid="2743896875255591743">"Không bao giờ hiển thị thông báo trong ngăn thông báo hoặc trên thiết bị ngoại vi"</string>
     <string name="notification_badge_title" msgid="8989086619255666442">"Cho phép dấu chấm thông báo"</string>
-    <string name="notification_channel_badge_title" msgid="8228215248332054612">"Hiển thị dấu chấm thông báo"</string>
+    <string name="notification_channel_badge_title" msgid="8228215248332054612">"Hiện dấu chấm thông báo"</string>
     <string name="app_notification_override_dnd_title" msgid="1757042206738172601">"Vô hiệu hóa chế độ Không làm phiền"</string>
     <string name="app_notification_override_dnd_summary" msgid="3152957611171210980">"Cho phép những thông báo này tiếp tục làm gián đoạn khi chế độ Không làm phiền đang bật"</string>
     <string name="app_notification_visibility_override_title" msgid="2349335170165637672">"Trên màn hình khóa"</string>
@@ -4335,7 +4335,7 @@
     <string name="pref_title_network_details" msgid="3971074015034595956">"Chi tiết mạng"</string>
     <string name="about_phone_device_name_warning" msgid="9088572775969880106">"Tên thiết bị của bạn sẽ hiển thị với các ứng dụng trên điện thoại. Những người khác cũng có thể thấy tên thiết bị này khi bạn kết nối với thiết bị Bluetooth hoặc thiết lập điểm phát sóng Wi-Fi."</string>
     <string name="devices_title" msgid="4768432575951993648">"Thiết bị"</string>
-    <string name="homepage_all_settings" msgid="3201220879559136116">"Tất cả tùy chọn cài đặt"</string>
+    <string name="homepage_all_settings" msgid="3201220879559136116">"Tất cả chế độ cài đặt"</string>
     <string name="homepage_personal_settings" msgid="7472638597249114564">"Đề xuất"</string>
     <string name="choose_network_title" msgid="3213314359630522396">"Chọn mạng"</string>
     <string name="network_disconnected" msgid="8677203031237141594">"Đã ngắt kết nối"</string>
@@ -4417,7 +4417,7 @@
     <string name="mobile_network_esim_swap_confirm_body" msgid="1192274915146275063">"Chỉ một SIM đã tải xuống có thể hoạt động mỗi lần.\n\nKhi chuyển sang <xliff:g id="CARRIER1">%1$s</xliff:g>, dịch vụ <xliff:g id="CARRIER2">%2$s</xliff:g> của bạn sẽ không bị hủy."</string>
     <string name="mobile_network_esim_swap_confirm_ok" msgid="4253442720111626242">"Chuyển sang <xliff:g id="CARRIER">%1$s</xliff:g>"</string>
     <string name="mobile_network_erase_sim" msgid="7813251003613841044">"Xóa SIM"</string>
-    <string name="mobile_network_erase_sim_dialog_title" msgid="3796268164204467499">"Bạn muốn xóa SIM đã tải xuống này?"</string>
+    <string name="mobile_network_erase_sim_dialog_title" msgid="3796268164204467499">"Bạn muốn xóa SIM đã tải xuống?"</string>
     <string name="mobile_network_erase_sim_dialog_body" msgid="1923189407958581450">"Khi bạn xóa SIM này, dịch vụ <xliff:g id="CARRIER_0">%1$s</xliff:g> sẽ bị xóa khỏi thiết bị này.\n\nDịch vụ của <xliff:g id="CARRIER_1">%2$s</xliff:g> sẽ không bị hủy."</string>
     <string name="mobile_network_erase_sim_dialog_ok" msgid="7133484721717815447">"Xóa"</string>
     <string name="mobile_network_erase_sim_dialog_progress" msgid="4881754030959536493">"Đang xóa SIM…"</string>
@@ -4447,7 +4447,7 @@
     <string name="manual_mode_disallowed_summary" msgid="799800630000340665">"Không sử dụng được khi kết nối với <xliff:g id="CARRIER">%1$s</xliff:g>"</string>
     <string name="emergency_info_contextual_card_summary" msgid="5541444321969803486">"Thông tin y tế, người liên hệ lúc khẩn cấp"</string>
     <string name="see_more" msgid="7463940160389802632">"Xem thêm"</string>
-    <string name="see_less" msgid="3718892257002813387">"Xem bớt"</string>
+    <string name="see_less" msgid="3718892257002813387">"Ẩn bớt"</string>
     <string name="network_connection_request_dialog_title" msgid="3150489262902506588">"Thiết bị sẽ sử dụng với <xliff:g id="APPNAME">%1$s</xliff:g>"</string>
     <string name="network_connection_timeout_dialog_message" msgid="7036704569274087733">"Không tìm thấy thiết bị nào. Đảm bảo rằng các thiết bị đang bật và sẵn sàng kết nối."</string>
     <string name="network_connection_timeout_dialog_ok" msgid="5156496438627748361">"Thử lại"</string>
@@ -4480,7 +4480,7 @@
     <string name="low_storage_summary" msgid="4562224870189133400">"Sắp hết bộ nhớ. Đã sử dụng <xliff:g id="PERCENTAGE">%1$s</xliff:g> - Còn trống <xliff:g id="FREE_SPACE">%2$s</xliff:g>"</string>
     <string name="contextual_card_feedback_send" msgid="8698649023854350623">"Gửi phản hồi"</string>
     <string name="contextual_card_feedback_confirm_message" msgid="3987973028353264878">"Bạn có muốn cung cấp phản hồi về nội dung đề xuất này cho chúng tôi không?"</string>
-    <string name="copyable_slice_toast" msgid="1357518174923789947">"Đã sao chép <xliff:g id="COPY_CONTENT">%1$s</xliff:g>vào khay nhớ tạm."</string>
+    <string name="copyable_slice_toast" msgid="1357518174923789947">"Đã sao chép <xliff:g id="COPY_CONTENT">%1$s</xliff:g>vào bảng nhớ tạm."</string>
     <string name="search_bar_account_avatar_content_description" msgid="947628881535053409"></string>
     <string name="permission_bar_chart_empty_text" msgid="5893326513700540130">"0 ứng dụng đã sử dụng quyền"</string>
     <string name="permission_bar_chart_title" msgid="874145405516650073">"Mức sử dụng quyền truy cập trong 24 giờ qua"</string>
