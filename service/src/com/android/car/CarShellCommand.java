@@ -169,6 +169,10 @@ final class CarShellCommand extends ShellCommand {
                 android.Manifest.permission.MANAGE_USERS);
         USER_BUILD_COMMAND_TO_PERMISSION_MAP.put(COMMAND_SET_USER_AUTH_ASSOCIATION,
                 android.Manifest.permission.MANAGE_USERS);
+        USER_BUILD_COMMAND_TO_PERMISSION_MAP.put(COMMAND_INJECT_KEY,
+                android.Manifest.permission.INJECT_EVENTS);
+        USER_BUILD_COMMAND_TO_PERMISSION_MAP.put(COMMAND_INJECT_ROTARY,
+                android.Manifest.permission.INJECT_EVENTS);
     }
 
     private static final String DEVICE_POWER_PERMISSION = "android.permission.DEVICE_POWER";

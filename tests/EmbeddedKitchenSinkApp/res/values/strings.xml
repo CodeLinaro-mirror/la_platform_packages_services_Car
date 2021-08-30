@@ -164,6 +164,10 @@
     <string name="cluster_start_activity" translatable="false">Start Nav Activity</string>
     <string name="cluster_start_activity_failed" translatable="false">Failed to start activity in cluster</string>
     <string name="cluster_not_started" translatable="false">Missing navigation focus</string>
+    <string name="cluster_activity_state" translatable="false">Cluster activity state</string>
+    <string name="cluster_activity_state_default" translatable="false">Default</string>
+    <string name="cluster_activity_state_enabled" translatable="false">On</string>
+    <string name="cluster_activity_state_disabled" translatable="false">Off</string>
 
     <!--  input test -->
     <string name="volume_up" translatable="false">Volume +</string>
@@ -360,10 +364,15 @@
     <string name="always_crashing_activity" translatable="false">Always Crash Activity</string>
     <string name="no_crash_activity" translatable="false">No Crash Activity</string>
     <string name="empty_activity" translatable="false">Empty Activity</string>
+    <string name="window_insets_test_activity" translatable="false">Window Insets Test Activity</string>
 
     <!-- ExperimentalFeatureTest -->
     <string name="experimental_ping" translatable="false">Ping Service</string>
 
     <!-- User Profile -->
     <string name="status_message_title">Status Message</string>
+
+    <!-- Fullscreen Activity Test -->
+    <string name="nav_to_full_screen" translatable="false">Navigate to Full Screen</string>
+    <string name="cancel" translatable="false">Cancel</string>
 </resources>
