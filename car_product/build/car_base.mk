@@ -77,7 +77,9 @@ PRODUCT_PACKAGES += android.automotive.evs.manager@1.1
 
 # EVS manager overrides cameraserver on automotive implementations so
 # we need to configure Camera API to not connect to it
+ifneq ($(ENABLE_CAMERA_SERVICE), true)
 PRODUCT_PROPERTY_OVERRIDES += config.disable_cameraservice=true
+endif
 
 # Device running Android is a car
 PRODUCT_COPY_FILES += \
