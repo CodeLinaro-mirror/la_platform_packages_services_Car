@@ -166,7 +166,7 @@ public class CarBluetoothPowerManager implements CarPowerStateListenerWithComple
     private boolean disableBluetooth() {
         logd("disable Bluetooth");
         if (mBluetoothAdapter != null) {
-            return mBluetoothAdapter.disable();
+            return mBluetoothAdapter.disable(false);
         } else {
             loge("can't disable Bluetooth due to null BluetoothAdapter");
             return false;
