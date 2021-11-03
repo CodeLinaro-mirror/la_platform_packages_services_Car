@@ -278,9 +278,8 @@ public final class CarUserService extends ICarUserService.Stub implements CarSer
     @Override
     public void dump(PrintWriter writer) {
         String indent = "  ";
-        try (IndentingPrintWriter pw = new IndentingPrintWriter(writer, indent)) {
-            dump(pw, indent);
-        }
+        IndentingPrintWriter pw = new IndentingPrintWriter(writer, indent);
+        dump(pw, indent);
     }
 
     private void dump(IndentingPrintWriter writer, String indent) {
